@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test GPS – Réa</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#223b80">
+<link rel="icon" href="assets/icons/favicon.png" type="image/png">
+<style>
+@font-face { font-family: "Barlow"; font-weight: 700; font-display: swap; src: url(assets/fonts/barlow-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url(assets/fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "PT Sans"; font-weight: 400; font-display: swap; src: url(assets/fonts/pt-sans-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "PT Sans"; font-weight: 700; font-display: swap; src: url(assets/fonts/pt-sans-latin-700-normal.woff2) format("woff2"); }
+:root {
+  --fond: #f5f8fc; --surface: #fff; --surface-2: #edf2f9; --trait: #d9e1ee;
+  --texte: #1b2a52; --doux: #4c5a7a; --titre: #223b80; --action: #223b80; --lien: #1f6fa8;
+  --bon: #048e39; --moyen: #b86e00; --mauvais: #c0322a; --ombre: 0 1px 2px rgba(34,59,128,.06), 0 6px 18px rgba(34,59,128,.07);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fond: #0d1a35; --surface: #142449; --surface-2: #1b2e5a; --trait: #263c6e; --texte: #e8eefa; --doux: #a9b7d3;
+    --titre: #fff; --action: #1f6fa8; --lien: #7cc6ee; --bon: #5fd08a; --moyen: #ffb74d; --mauvais: #ff8a80; --ombre: none; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--texte); font: 400 17px/1.5 "PT Sans", system-ui, sans-serif; }
+h1, h2 { font-family: "Barlow", sans-serif; font-weight: 700; color: var(--titre); margin: 0; line-height: 1.15; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-bottom: 10px; }
+p { margin: 0; }
+.page { max-width: 560px; margin: 0 auto; padding: 16px 16px 48px; }
+.entete { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; }
+.entete img { width: 54px; height: 54px; background: #fff; border-radius: 12px; padding: 4px; }
+.carte { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: var(--ombre); margin-top: 14px; }
+.discret { color: var(--doux); font-size: .92rem; }
+.confidentiel { display: flex; gap: 10px; align-items: flex-start; background: #e7f0d1; color: #2c4a00; border-radius: 14px; padding: 12px 14px; margin-top: 12px; font-size: .95rem; }
+@media (prefers-color-scheme: dark) { .confidentiel { background: #20361a; color: #cfe8b0; } }
+details summary { cursor: pointer; font-weight: 700; color: var(--lien); }
+details ol, details ul { margin: 10px 0 0; padding-left: 20px; }
+details li { margin-bottom: 6px; }
+.bouton { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 54px; border: 0; border-radius: 999px;
+  background: var(--action); color: #fff; font: 700 1.1rem "Barlow", sans-serif; cursor: pointer; padding: 12px 20px; }
+.bouton--clair { background: transparent; color: var(--lien); border: 2px solid var(--trait); min-height: 44px; font-size: 1rem; }
+.bouton[disabled] { opacity: .5; cursor: not-allowed; }
+.rangee { display: flex; gap: 10px; margin-top: 12px; }
+.rangee .bouton { flex: 1; }
+:focus-visible { outline: 3px solid #40a8df; outline-offset: 2px; }
+
+/* Mesure en direct */
+.mesure { text-align: center; }
+.mesure__valeur { font: 700 clamp(4rem, 22vw, 6rem)/1 "Barlow", sans-serif; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--doux); }
+.mesure__unite { font-size: .4em; letter-spacing: 0; }
+.mesure__verdict { font: 700 1.15rem "Barlow", sans-serif; margin-top: 6px; }
+.mesure__detail { color: var(--doux); font-size: .92rem; margin-top: 4px; }
+.bon { color: var(--bon) !important; } .moyen { color: var(--moyen) !important; } .mauvais { color: var(--mauvais) !important; }
+.indicateurs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.indic { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; }
+.indic b { display: block; font: 700 1.5rem "Barlow", sans-serif; font-variant-numeric: tabular-nums; color: var(--titre); }
+.indic span { font-size: .85rem; color: var(--doux); }
+canvas { width: 100%; aspect-ratio: 1; display: block; margin-top: 14px; border-radius: 14px; background: var(--surface-2); }
+.legende { display: flex; justify-content: space-between; font-size: .82rem; color: var(--doux); margin-top: 6px; }
+.alerte { background: #fde8e6; color: #7a1c15; border-radius: 14px; padding: 12px 14px; margin-top: 12px; }
+@media (prefers-color-scheme: dark) { .alerte { background: #4a1d1a; color: #ffd6d2; } }
+
+/* Noter un endroit */
+label { font-weight: 700; display: block; margin-bottom: 6px; }
+input[type=text] { width: 100%; padding: 12px 14px; border: 2px solid var(--trait); border-radius: 14px; background: var(--surface-2); color: var(--texte); font: inherit; }
+input[type=text]:focus { outline: none; border-color: #40a8df; background: var(--surface); }
+.resultats { list-style: none; margin: 0; padding: 0; }
+.resultats li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--trait); }
+.resultats li:first-child { border-top: 0; }
+.resultats .nom { font-weight: 700; }
+.resultats .chiffre { font: 700 1.2rem "Barlow", sans-serif; text-align: right; font-variant-numeric: tabular-nums; }
+.resultats .info { grid-column: 1 / -1; font-size: .85rem; color: var(--doux); }
+.bilan { margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--surface-2); }
+.bilan b { font-family: "Barlow", sans-serif; }
+textarea { width: 100%; min-height: 140px; margin-top: 10px; border-radius: 12px; border: 2px solid var(--trait); background: var(--surface-2); color: var(--texte); font: .85rem/1.4 ui-monospace, monospace; padding: 10px; }
+.cache { display: none !important; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="entete">
+    <img src="assets/logos/reanimation-symbole.png" alt="" width="54" height="54">
+    <div>
+      <h1>Test GPS</h1>
+      <p class="discret">Précision de la localisation dans le service</p>
+    </div>
+  </header>
+
+  <section class="carte">
+    <p>Ce test mesure si le GPS de votre téléphone est assez précis à l'intérieur du nouveau bâtiment pour situer quelqu'un sur le plan.</p>
+    <div class="confidentiel">
+      <span aria-hidden="true">🔒</span>
+      <span>Rien n'est envoyé. Les mesures restent sur ce téléphone et ne sont visibles par personne d'autre.</span>
+    </div>
+    <details style="margin-top:14px">
+      <summary>Comment faire le test (2 minutes à lire)</summary>
+      <ol>
+        <li><b>Réglez le téléphone</b> :
+          <ul>
+            <li>iPhone : Réglages, Confidentialité, Service de localisation, votre navigateur, cocher <i>Lorsque l'app est active</i> et activer <i>Position exacte</i>.</li>
+            <li>Android : Localisation activée, <i>Précision de la localisation Google</i> activée, Wi‑Fi allumé (même sans être connecté).</li>
+          </ul>
+        </li>
+        <li>Appuyez sur <b>Démarrer la mesure</b> et acceptez la demande de localisation.</li>
+        <li>À chaque endroit testé, <b>restez immobile 30 secondes</b>, puis appuyez sur <b>Noter cet endroit</b>.</li>
+        <li>Testez 6 à 10 endroits variés : chambre côté façade, couloir central, poste de soins, près d'un patio, ascenseurs, Mahogany…</li>
+        <li>À la fin, appuyez sur <b>Copier les résultats</b> et collez‑les dans la conversation avec Claude.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="carte mesure" aria-live="polite">
+    <div class="mesure__valeur" id="valeur">–<span class="mesure__unite"> m</span></div>
+    <p class="mesure__verdict" id="verdict">Mesure à l'arrêt</p>
+    <p class="mesure__detail" id="detail">Précision annoncée par le téléphone : rayon dans lequel vous vous trouvez probablement.</p>
+
+    <div class="indicateurs">
+      <div class="indic"><b id="bougeotte">–</b><span>Le point bouge de… (sur 30 s, à l'arrêt)</span></div>
+      <div class="indic"><b id="nb">0</b><span>Mesures reçues</span></div>
+    </div>
+
+    <canvas id="nuage" width="600" height="600" aria-label="Nuage des positions mesurées autour de votre position moyenne"></canvas>
+    <div class="legende"><span>Cercles : 5, 10, 20 et 40 m</span><span>Carré central : 1 chambre (4 m)</span></div>
+
+    <div id="erreur" class="alerte cache" role="alert"></div>
+
+    <div class="rangee">
+      <button class="bouton" id="demarrer" type="button">Démarrer la mesure</button>
+    </div>
+  </section>
+
+  <section class="carte">
+    <h2>Noter cet endroit</h2>
+    <label for="lieu">Où êtes‑vous ?</label>
+    <input type="text" id="lieu" list="suggestions" placeholder="Ex. : devant la chambre 320" autocomplete="off" maxlength="60">
+    <datalist id="suggestions">
+      <option value="Chambre côté façade">
+      <option value="Couloir central">
+      <option value="Poste de soins">
+      <option value="Près d'un patio">
+      <option value="Ascenseurs / monte-malades">
+      <option value="Mahogany">
+      <option value="Salle de détente">
+      <option value="Vestiaires">
+    </datalist>
+    <div class="rangee">
+      <button class="bouton" id="noter" type="button" disabled>Noter cet endroit</button>
+    </div>
+    <p class="discret" id="aide-noter" style="margin-top:8px">Démarrez la mesure et restez immobile au moins 15 secondes.</p>
+  </section>
+
+  <section class="carte">
+    <h2>Résultats</h2>
+    <ul class="resultats" id="resultats"></ul>
+    <p class="discret" id="vide">Aucun endroit noté pour l'instant.</p>
+    <div class="bilan cache" id="bilan"></div>
+    <div class="rangee">
+      <button class="bouton bouton--clair" id="copier" type="button" disabled>Copier les résultats</button>
+      <button class="bouton bouton--clair" id="effacer" type="button" disabled>Tout effacer</button>
+    </div>
+    <textarea id="export" class="cache" readonly aria-label="Résultats à copier"></textarea>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var FENETRE_MS = 30000;          // calculs sur les 30 dernières secondes
+  var CLE = 'rea.test-gps';
+  var mesures = [];                // {t, lat, lon, acc}
+  var veille = null, verrou = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var stock = {
+    lire: function () { try { return JSON.parse(localStorage.getItem(CLE)) || []; } catch (e) { return []; } },
+    ecrire: function (v) { try { localStorage.setItem(CLE, JSON.stringify(v)); } catch (e) { /* ignoré */ } }
+  };
+  var notes = stock.lire();
+
+  /* ---------- Calculs ---------- */
+  function mediane(t) { if (!t.length) return NaN; var s = t.slice().sort(function (a, b) { return a - b; }); var m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+  function centile(t, p) { if (!t.length) return NaN; var s = t.slice().sort(function (a, b) { return a - b; }); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; }
+  function enMetres(ref, m) { // projection locale, suffisante à l'échelle d'un bâtiment
+    return { x: (m.lon - ref.lon) * 111320 * Math.cos(ref.lat * Math.PI / 180), y: (m.lat - ref.lat) * 110540 };
+  }
+  function recentes() { var lim = Date.now() - FENETRE_MS; return mesures.filter(function (m) { return m.t >= lim; }); }
+  function statistiques(liste) {
+    if (!liste.length) return null;
+    var c = { lat: mediane(liste.map(function (m) { return m.lat; })), lon: mediane(liste.map(function (m) { return m.lon; })) };
+    var dist = liste.map(function (m) { var p = enMetres(c, m); return Math.hypot(p.x, p.y); });
+    return { centre: c, precision: mediane(liste.map(function (m) { return m.acc; })), bougeotte: centile(dist, 0.9), n: liste.length };
+  }
+  // L'erreur réelle est au moins la plus grande des deux : précision annoncée ou dispersion du point
+  function erreurReelle(s) { return Math.max(s.precision, s.bougeotte); }
+  function classe(m) { return m <= 8 ? 'bon' : m <= 20 ? 'moyen' : 'mauvais'; }
+  function libelle(m) {
+    if (m <= 8) return 'Bon : on situerait à 2 chambres près';
+    if (m <= 20) return 'Moyen : on saurait seulement dans quelle zone';
+    return 'Insuffisant pour se situer sur le plan';
+  }
+  function arrondi(m) { var v = m >= 10 ? Math.round(m) : Math.round(m * 10) / 10; return String(v).replace('.', ','); } // virgule décimale
+
+  /* ---------- Affichage en direct ---------- */
+  function rafraichir() {
+    var s = statistiques(recentes());
+    $('nb').textContent = String(mesures.length);
+    if (!s) return dessiner(null);
+    var e = erreurReelle(s);
+    var val = $('valeur');
+    val.className = 'mesure__valeur ' + classe(s.precision);
+    val.firstChild.nodeValue = '± ' + arrondi(s.precision);
+    $('verdict').className = 'mesure__verdict ' + classe(e);
+    $('verdict').textContent = libelle(e);
+    var age = Math.round((Date.now() - mesures[mesures.length - 1].t) / 1000);
+    $('detail').textContent = 'Dernière mesure il y a ' + age + ' s. ' + s.n + ' mesure' + (s.n > 1 ? 's' : '') + ' sur les 30 dernières secondes.';
+    $('bougeotte').textContent = s.n >= 3 ? arrondi(s.bougeotte) + ' m' : '–';
+    $('bougeotte').className = s.n >= 3 ? classe(s.bougeotte) : '';
+    var pret = s.n >= 3 && (Date.now() - recentes()[0].t) >= 15000;
+    $('noter').disabled = !pret;
+    $('aide-noter').textContent = pret ? 'Le relevé utilisera les mesures des 30 dernières secondes.' : 'Restez immobile encore quelques secondes…';
+    dessiner(s);
+  }
+
+  function dessiner(s) {
+    var cv = $('nuage'), ctx = cv.getContext('2d'), W = cv.width, c = W / 2;
+    var css = getComputedStyle(document.documentElement);
+    ctx.clearRect(0, 0, W, W);
+    var echelle = (W / 2 - 16) / 40; // 40 m au bord
+    ctx.lineWidth = 2; ctx.font = '600 22px Barlow, sans-serif'; ctx.textAlign = 'left';
+    [5, 10, 20, 40].forEach(function (r) {
+      ctx.strokeStyle = css.getPropertyValue('--trait'); ctx.beginPath(); ctx.arc(c, c, r * echelle, 0, 2 * Math.PI); ctx.stroke();
+      if (r > 5) { ctx.fillStyle = css.getPropertyValue('--doux'); ctx.fillText(r + ' m', c + r * echelle * .707 + 4, c - r * echelle * .707 - 4); }
+    });
+    // une chambre de 4 m
+    ctx.strokeStyle = css.getPropertyValue('--titre'); ctx.lineWidth = 3;
+    ctx.strokeRect(c - 2 * echelle, c - 2 * echelle, 4 * echelle, 4 * echelle);
+    if (!s) return;
+    recentes().forEach(function (m, i, t) {
+      var p = enMetres(s.centre, m);
+      var x = c + Math.max(-40, Math.min(40, p.x)) * echelle, y = c - Math.max(-40, Math.min(40, p.y)) * echelle;
+      ctx.globalAlpha = 0.25 + 0.75 * (i + 1) / t.length;
+      ctx.fillStyle = i === t.length - 1 ? '#f5508f' : '#40a8df';
+      ctx.beginPath(); ctx.arc(x, y, i === t.length - 1 ? 11 : 7, 0, 2 * Math.PI); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- Localisation ---------- */
+  function erreur(msg) { var e = $('erreur'); e.textContent = msg; e.classList.remove('cache'); }
+  function demarrer() {
+    $('erreur').classList.add('cache');
+    if (!window.isSecureContext) return erreur('Cette page doit être ouverte depuis son adresse https (et non comme un fichier) pour accéder à la localisation.');
+    if (!('geolocation' in navigator)) return erreur('Ce navigateur ne donne pas accès à la localisation.');
+    if (veille !== null) { // arrêt
+      navigator.geolocation.clearWatch(veille); veille = null;
+      $('demarrer').textContent = 'Reprendre la mesure';
+      if (verrou) { verrou.release().catch(function () {}); verrou = null; }
+      return;
+    }
+    mesures = [];
+    $('demarrer').textContent = 'Arrêter la mesure';
+    $('verdict').textContent = 'Recherche de la position…';
+    veille = navigator.geolocation.watchPosition(function (pos) {
+      var c = pos.coords;
+      mesures.push({ t: Date.now(), lat: c.latitude, lon: c.longitude, acc: c.accuracy });
+      $('erreur').classList.add('cache'); // une position est revenue : on retire l'alerte passagère
+      if (mesures.length > 2000) mesures.shift();
+      rafraichir();
+    }, function (err) {
+      var msg = {
+        1: 'Localisation refusée. Autorisez‑la pour ce site dans les réglages du navigateur (voir « Comment faire le test »), puis rechargez la page.',
+        2: 'Position introuvable pour le moment. Vérifiez que la localisation et le Wi‑Fi sont activés.',
+        3: 'Le téléphone met trop de temps à répondre. Restez immobile, la mesure continue.'
+      }[err.code] || 'Erreur de localisation.';
+      erreur(msg);
+      if (err.code === 1) { navigator.geolocation.clearWatch(veille); veille = null; $('demarrer').textContent = 'Démarrer la mesure'; }
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    // Garder l'écran allumé pendant le test, si le téléphone le permet
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (v) { verrou = v; }).catch(function () {});
+  }
+
+  /* ---------- Relevés ---------- */
+  function noter() {
+    var s = statistiques(recentes()); if (!s) return;
+    var nom = $('lieu').value.trim() || ('Endroit ' + (notes.length + 1));
+    notes.push({ nom: nom.slice(0, 60), heure: new Date().toISOString(), precision: s.precision, bougeotte: s.bougeotte, n: s.n,
+                 lat: +s.centre.lat.toFixed(6), lon: +s.centre.lon.toFixed(6) });
+    stock.ecrire(notes);
+    $('lieu').value = '';
+    afficherNotes();
+  }
+
+  function afficherNotes() {
+    var ul = $('resultats'); ul.replaceChildren();
+    notes.forEach(function (r) {
+      var e = Math.max(r.precision, r.bougeotte);
+      var li = document.createElement('li');
+      var a = document.createElement('span'); a.className = 'nom'; a.textContent = r.nom;
+      var b = document.createElement('span'); b.className = 'chiffre ' + classe(e); b.textContent = '± ' + arrondi(e) + ' m';
+      var i = document.createElement('span'); i.className = 'info';
+      i.textContent = 'Précision annoncée ' + arrondi(r.precision) + ' m, le point bouge de ' + arrondi(r.bougeotte) + ' m (' + r.n + ' mesures)';
+      li.append(a, b, i); ul.appendChild(li);
+    });
+    $('vide').classList.toggle('cache', notes.length > 0);
+    $('copier').disabled = $('effacer').disabled = notes.length === 0;
+    var bilan = $('bilan');
+    if (!notes.length) { bilan.classList.add('cache'); return; }
+    var errs = notes.map(function (r) { return Math.max(r.precision, r.bougeotte); });
+    var med = mediane(errs), pire = Math.max.apply(null, errs);
+    var bons = errs.filter(function (x) { return x <= 8; }).length;
+    bilan.replaceChildren();
+    var t = document.createElement('b'); t.className = classe(med); t.textContent = 'Bilan : ' + libelle(med) + '.';
+    var p = document.createElement('p'); p.className = 'discret'; p.style.marginTop = '4px';
+    p.textContent = 'Erreur médiane ' + arrondi(med) + ' m, pire endroit ' + arrondi(pire) + ' m. ' + bons + ' endroit' + (bons > 1 ? 's' : '') + ' sur ' + notes.length + ' sous 8 m.';
+    bilan.append(t, p); bilan.classList.remove('cache');
+  }
+
+  function texteExport() {
+    var ua = navigator.userAgent;
+    var appareil = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : 'Autre';
+    var lignes = ['Test GPS – Réa niveau 3 – ' + new Date().toLocaleString('fr-FR') + ' – ' + appareil,
+      'Endroit ; erreur retenue (m) ; précision annoncée (m) ; le point bouge de (m) ; mesures ; latitude ; longitude'];
+    notes.forEach(function (r) {
+      lignes.push([r.nom, arrondi(Math.max(r.precision, r.bougeotte)), arrondi(r.precision), arrondi(r.bougeotte), r.n, r.lat, r.lon].join(' ; '));
+    });
+    return lignes.join('\n');
+  }
+
+  function copier() {
+    var t = texteExport(), zone = $('export');
+    var repli = function () { zone.value = t; zone.classList.remove('cache'); zone.focus(); zone.select(); $('copier').textContent = 'Sélectionnez et copiez le texte'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { $('copier').textContent = 'Copié !'; setTimeout(function () { $('copier').textContent = 'Copier les résultats'; }, 2500); }, repli);
+    } else repli();
+  }
+
+  function effacer() {
+    if (!confirm('Effacer tous les endroits notés sur ce téléphone ?')) return;
+    notes = []; stock.ecrire(notes); $('export').classList.add('cache'); afficherNotes();
+  }
+
+  $('demarrer').addEventListener('click', demarrer);
+  $('noter').addEventListener('click', noter);
+  $('copier').addEventListener('click', copier);
+  $('effacer').addEventListener('click', effacer);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && veille !== null && navigator.wakeLock && !verrou) navigator.wakeLock.request('screen').then(function (v) { verrou = v; }).catch(function () {});
+  });
+  setInterval(function () { if (veille !== null) rafraichir(); }, 1000);
+  afficherNotes(); dessiner(null);
+})();
+</script>
+</body>
+</html>

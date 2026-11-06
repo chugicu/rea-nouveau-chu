@@ -1,0 +1,199 @@
+# Guide de déploiement – Réa · Nouveau CHU (étapes 1 et 2)
+
+Durée : environ 45 minutes, une seule fois. Aucune compétence en programmation n'est nécessaire : il s'agit de copier-coller et de cliquer.
+
+Vous aurez besoin :
+- du **Gmail de service** (c'est lui qui « possède » la base et le moteur) ;
+- d'un **compte GitHub** (gratuit) ; idéalement créé avec ce même Gmail de service ;
+- du dossier `reanimation-demenagement` (fichier ZIP fourni).
+
+---
+
+## Partie A – La base de données et le moteur (Google)
+
+### A1. Créer le Google Sheets « Base »
+1. Connectez-vous au **Gmail de service**, puis ouvrez Google Drive.
+2. Créez un dossier **Réa – Déménagement**.
+3. Dans ce dossier : **Nouveau > Google Sheets**. Nommez-le **Réa – Base**.
+
+### A2. Coller le moteur
+1. Dans le Sheets : **Extensions > Apps Script**. Un éditeur s'ouvre.
+2. Nommez le projet **Réa – Moteur** (en haut à gauche).
+3. Supprimez tout le contenu du fichier `Code.gs`, puis collez-y le contenu du fichier `apps-script/Code.gs` du ZIP.
+4. Cliquez sur l'engrenage **Paramètres du projet** (à gauche) et cochez **Afficher le fichier manifeste « appsscript.json » dans l'éditeur**.
+5. Revenez à l'éditeur (icône `< >`), ouvrez `appsscript.json`, remplacez son contenu par celui du fichier `apps-script/appsscript.json` du ZIP.
+6. Cliquez sur **Enregistrer** (icône disquette).
+
+### A3. Installer la base
+1. Revenez sur l'onglet du Sheets et **rechargez la page**. Un menu **Réa – Administration** apparaît après quelques secondes.
+2. **Réa – Administration > 1. Installer / réparer la base**.
+3. Google demande une autorisation :
+   - **Continuer**, choisissez le Gmail de service ;
+   - écran « Google n'a pas validé cette application » : **Paramètres avancés > Accéder à Réa – Moteur (non sécurisé)**. C'est normal : c'est votre propre script ;
+   - **Autoriser**.
+4. Relancez **1. Installer / réparer la base** si le menu ne s'est pas exécuté après l'autorisation.
+
+Résultat : cinq onglets sont créés.
+
+| Onglet | Rôle | Qui le modifie |
+|---|---|---|
+| Paramètres | Date J, nom du service, message d'accueil | Administrateur |
+| Effectifs | Effectif par fonction (sert à la jauge) | Administrateur |
+| Actualités | Actualités affichées sur l'accueil | Référents |
+| Je suis prêt | Déclarations anonymes (rempli par l'application) | Personne |
+| Référents | Liste des référents (sans les codes) | Menu uniquement |
+
+### A4. Définir les codes d'accès
+Dans **Réa – Administration** :
+1. **Définir le code SERVICE (agents)** : le code commun à tout le service. Au moins 6 lettres ou chiffres.
+2. **Définir le code ADMINISTRATEUR** : votre code personnel.
+3. **Ajouter ou modifier un référent** : à faire 10 fois, une fois par référent (nom affiché + code personnel).
+
+Astuce : **Générer un code aléatoire (aide)** propose un code facile à lire (sans 0/O ni 1/I/L).
+
+Important : les codes sont stockés **uniquement sous forme chiffrée**. Notez-les dans un endroit sûr : ils ne peuvent pas être relus, seulement redéfinis.
+
+### A5. Publier le moteur
+1. Dans l'éditeur Apps Script : **Déployer > Nouveau déploiement**.
+2. Engrenage à côté de « Sélectionner le type » : **Application Web**.
+3. Description : `Étape 1`.
+4. **Exécuter en tant que : Moi** (le Gmail de service).
+5. **Qui a accès : Tout le monde**.
+6. **Déployer**, puis copiez l'**URL de l'application Web** (elle se termine par `/exec`).
+
+Vérification : collez cette URL dans un navigateur. Vous devez voir un court texte commençant par `{"ok":true`.
+
+---
+
+## Partie B – L'application (GitHub Pages)
+
+### B1. Créer le dépôt
+1. Connectez-vous sur **github.com** (créez le compte si besoin, avec le Gmail de service).
+2. **New repository**. Nom : `rea-nouveau-chu`. Visibilité : **Public** (obligatoire pour l'hébergement gratuit). Cochez **Add a README file**. **Create repository**.
+
+Le dépôt est public : il ne contient que le code et les logos. **Ne jamais y déposer** de plans, de codes, de numéros internes ou de procédures : ils iront dans le Drive (étapes suivantes).
+
+### B2. Déposer les fichiers
+1. Dans le dépôt : **Add file > Upload files**.
+2. Glissez **le contenu** du dossier `reanimation-demenagement` du ZIP (les dossiers `docs`, `apps-script` et les fichiers `.md`).
+3. **Commit changes**.
+
+Note : le dossier `apps-script` est une copie de référence du moteur, pour garder l'historique des versions. L'application n'en a pas besoin pour fonctionner.
+
+### B3. Brancher l'application sur le moteur
+1. Dans le dépôt, ouvrez `docs/js/config.js`, puis l'icône crayon **Edit**.
+2. Collez l'URL `/exec` entre les apostrophes :
+   ```js
+   API_URL: 'https://script.google.com/macros/s/XXXXXXXX/exec',
+   ```
+3. **Commit changes**.
+
+Tant que `API_URL` est vide, l'application fonctionne en **mode démonstration** (données fictives, codes `DEMO`, `REFDEMO`, `ADMDEMO`). Pratique pour la montrer avant la mise en service.
+
+### B4. Activer l'hébergement
+1. **Settings > Pages**.
+2. Source : **Deploy from a branch**. Branch : **main**, dossier **/docs**. **Save**.
+3. Après 1 à 2 minutes, l'adresse apparaît : `https://<votre-compte>.github.io/rea-nouveau-chu/`.
+
+---
+
+## Partie C – Tester puis diffuser
+
+### C1. Test complet (10 minutes)
+- [ ] L'adresse s'ouvre sur l'écran de connexion, sans bandeau « Mode démonstration ».
+- [ ] Un faux code affiche « Ce code n'est pas reconnu ».
+- [ ] Le code SERVICE ouvre l'accueil avec « Équipe réa » en haut à droite.
+- [ ] Un code référent affiche « Référent : <nom> ».
+- [ ] Le code ADMINISTRATEUR affiche « Administrateur ».
+- [ ] Saisissez une **Date J** dans l'onglet Paramètres (format date), cliquez **Actualiser** dans l'application : le compte à rebours apparaît.
+- [ ] Ajoutez une actualité, cochez **Publiée** : elle apparaît après **Actualiser**.
+- [ ] Mode avion sur le téléphone, rouvrez l'application : l'accueil s'affiche avec « Hors ligne. Données du … ».
+
+### C2. Installer sur le téléphone
+- **Android (Chrome)** : menu ⋮ > **Installer l'application** (ou « Ajouter à l'écran d'accueil »).
+- **iPhone (Safari)** : bouton Partager > **Sur l'écran d'accueil**.
+
+L'icône « Réanimation Guadeloupe » apparaît comme une application normale.
+
+### C3. Diffuser
+Communiquez l'adresse et le code SERVICE par vos canaux internes habituels (relève, affichage en salle de pause avec QR code, réunion de service). Évitez de les publier ensemble sur un support accessible hors du service.
+
+### C4. Validation par le service communication
+La charte du CHU (page 33) impose une validation avant diffusion de tout support portant le logo. Présentez l'application au service communication et demandez le **fichier officiel du logo CHU** (PNG fond transparent, 400 px de large environ). Déposez-le dans le dépôt sous le nom exact `docs/assets/logos/chu-guadeloupe.png` : il remplacera automatiquement le texte « CHU de la Guadeloupe » en bas de l'accueil.
+
+---
+
+## Partie D – Au quotidien
+
+| Je veux… | Où | Comment |
+|---|---|---|
+| Fixer ou changer la date J | Sheets > Paramètres | Cellule B2, format date |
+| Publier une actualité | Sheets > Actualités | Date, Titre, Texte, cocher **Publiée** (et **Épinglée** pour la garder en tête) |
+| Retirer une actualité | Sheets > Actualités | Décocher **Publiée** |
+| Corriger un effectif | Sheets > Effectifs | Effectif 0 = fonction masquée de la jauge |
+| Ajouter un référent | Menu Réa – Administration | Ajouter ou modifier un référent |
+| Retirer un référent | Menu Réa – Administration | Désactiver un référent (sa session est coupée immédiatement) |
+| Changer le code SERVICE | Menu Réa – Administration | Définir le code SERVICE, puis **Déconnecter tout le monde** si l'ancien code a fuité |
+
+Les modifications du Sheets sont visibles dans l'application dès que l'utilisateur clique sur **Actualiser** ou rouvre l'application.
+
+---
+
+## Partie E – Installer les étapes suivantes
+
+À chaque nouvelle étape livrée (plan, visites, quiz…), deux gestes :
+
+1. **Moteur** : remplacez le contenu de `Code.gs` dans l'éditeur, enregistrez, puis
+   **Déployer > Gérer les déploiements > crayon (Modifier) > Version : Nouvelle version > Déployer**.
+   Ne créez **pas** un « Nouveau déploiement » : l'URL changerait et l'application ne trouverait plus le moteur.
+   Relancez ensuite **Réa – Administration > 1. Installer / réparer la base** : les nouveaux onglets sont ajoutés, rien n'est effacé.
+2. **Application** : dans GitHub, **Add file > Upload files**, déposez les fichiers modifiés du dossier `docs` (sauf `config.js`, pour garder votre URL). Les téléphones afficheront « Une nouvelle version est disponible – Mettre à jour ».
+
+---
+
+## Partie F – Étape 2 : le plan du service
+
+Le plan n'est **jamais déposé sur GitHub** (dépôt public). Il est rangé dans le Drive du Gmail de service et lu par le moteur, uniquement pour les personnes connectées.
+
+### F1. Mettre à jour le moteur
+1. Remplacez le contenu de `Code.gs` et de `appsscript.json` dans l'éditeur Apps Script (fichiers du dossier `apps-script`), puis **Enregistrer**.
+2. Dans le Sheets : **Réa – Administration > 1. Installer / réparer la base**. Google redemande une autorisation : elle permet au moteur de **lire** le fichier du plan dans le Drive (lecture seule). Acceptez.
+   Deux onglets apparaissent : **Pièces** (désignations des référents) et **Catégories** (couleurs), ainsi qu'une ligne **Fichier du plan (ID Drive)** dans Paramètres.
+3. **Déployer > Gérer les déploiements > crayon > Version : Nouvelle version > Déployer** (l'adresse `/exec` ne change pas).
+
+### F2. Déposer le plan dans le Drive
+1. Déposez le fichier **plan-donnees.json.gz** (fourni à part, hors du ZIP ; version compressée) dans le dossier **Réa – Déménagement** du Drive.
+   *Déjà fait pour vous dans le Drive de chugicu@gmail.com, ainsi que l'étape 3.*
+2. Clic droit sur le fichier > **Partager > Copier le lien**. L'identifiant est la partie entre `/d/` et `/view` (ex. `1AbC…xYz`).
+   Ne changez pas le partage : le fichier reste privé, seul le moteur le lit.
+3. Collez cet identifiant dans l'onglet **Paramètres**, ligne **Fichier du plan (ID Drive)**.
+
+### F3. Mettre l'application à jour
+Dans GitHub, déposez les fichiers modifiés du dossier `docs` (sauf `config.js`) : `index.html`, `sw.js`, `css/app.css`, `js/app.js`, `js/api.js`, `js/plan.js`. Les téléphones proposeront « Mettre à jour ».
+
+### F4. Au quotidien
+| Je veux… | Comment |
+|---|---|
+| Nommer une pièce « à désigner » | Dans l'appli, en référent : Plan > filtre **À désigner** > toucher la pièce > **Désigner cette pièce** (nom, catégorie, icône, couleur) |
+| Changer la couleur de toute une catégorie | Même formulaire, cocher **Appliquer cette couleur à toute la catégorie** |
+| Annuler une désignation | Fiche de la pièce > **Modifier** > **Revenir au plan d'origine** (ou supprimer la ligne dans l'onglet Pièces) |
+| Remplacer le plan (nouvelle version) | Remplacer le fichier dans le Drive (même ID : *Gérer les versions*), puis **Réa – Administration > Relire le plan depuis le Drive** |
+
+Les désignations sont rattachées à un identifiant de pièce (P001, P002…) : elles restent valables tant que le fichier du plan n'est pas régénéré.
+
+---
+
+## Dépannage
+
+| Symptôme | Cause probable | Solution |
+|---|---|---|
+| « Pas de connexion au serveur » alors que le réseau fonctionne | URL `/exec` erronée dans `config.js`, ou accès du déploiement différent de « Tout le monde » | Vérifier A5 et B3 |
+| « L'application n'est pas encore installée » | Le menu Installer n'a pas été lancé | A3 |
+| Tout le monde est déconnecté d'un coup | Quelqu'un a utilisé « Déconnecter tout le monde » | Ressaisir le code |
+| « Trop d'essais incorrects » | Plus de 30 codes faux en 10 minutes (protection) | Attendre 5 minutes |
+| La page GitHub affiche une erreur 404 | Pages pas encore activé, ou dossier différent de `/docs` | B4, attendre 2 minutes |
+| Modification du Sheets invisible | Pas d'actualisation côté téléphone | Bouton **Actualiser** |
+| Le menu Réa – Administration n'apparaît pas | Page non rechargée après collage du code | Recharger le Sheets |
+| « Le plan n'est pas encore installé » | ID du fichier absent ou erroné dans Paramètres, ou autorisation Drive non donnée | F1 étape 2, puis F2 |
+
+Les quotas gratuits de Google (dont 30 exécutions simultanées du moteur) suffisent largement pour 213 personnes : chaque ouverture de l'accueil ne prend qu'une fraction de seconde.

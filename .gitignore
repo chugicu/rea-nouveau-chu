@@ -1,0 +1,4 @@
+# Le vrai plan ne doit jamais être publié (dépôt public)
+plan-donnees.json
+plan-donnees.json.gz
+*.zip
