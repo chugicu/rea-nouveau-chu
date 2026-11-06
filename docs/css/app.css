@@ -350,3 +350,56 @@ details.detail-jauge[open] summary::after { content: "–"; }
 .entete__titre { font-size: 1.4rem; flex: 1; }
 .retour { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 0; background: var(--surface); color: var(--titre); font: 700 1.6rem/1 Barlow, sans-serif; box-shadow: var(--ombre); cursor: pointer; }
 .plan-note { color: var(--texte-doux); font-size: .88rem; margin-top: 10px; }
+
+/* ---------- Visites ---------- */
+.flash { margin: 4px 0 8px; padding: 12px 16px; border-radius: var(--r-m); background: var(--chu-vert-pastel); color: #23400a; font-weight: 700; }
+:root[data-theme="dark"] .flash { background: #20361a; color: #cfe8b0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .flash { background: #20361a; color: #cfe8b0; } }
+.cartes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.jour + .jour { margin-top: 18px; }
+.jour__titre { font-size: 1rem; color: var(--texte-doux); font-weight: 600; margin: 0 0 8px; text-transform: none; }
+.jour__titre::first-letter { text-transform: uppercase; }
+.carte-visite { background: var(--surface); border-radius: var(--r-m); box-shadow: var(--ombre); padding: 14px 16px; display: grid; gap: 6px; }
+.carte-visite--mienne { border-left: 5px solid var(--chu-bleu-clair); }
+.carte-visite--annulee { opacity: .6; }
+.carte-visite__tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.carte-visite__date { color: var(--texte-doux); font-size: .92rem; }
+.carte-visite__date::first-letter { text-transform: uppercase; }
+.carte-visite__heure { font: 700 1.35rem Barlow, sans-serif; color: var(--titre); font-variant-numeric: tabular-nums; }
+.carte-visite__info { color: var(--texte-doux); font-size: .95rem; }
+.carte-visite__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.carte-visite__actions .bouton { width: auto; flex: 1 1 160px; min-height: 46px; }
+.etiquette { flex: none; font-size: .8rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--texte-doux); }
+.etiquette--bleu { background: var(--chu-bleu-pastel); color: #10406a; }
+.etiquette--ok { background: var(--chu-vert-pastel); color: #23400a; }
+.code-resa { font-size: .95rem; color: var(--texte-doux); }
+.code-resa b { font: 700 1.2rem Barlow, sans-serif; letter-spacing: .14em; color: var(--titre); margin-left: 6px; }
+.remplissage { height: 8px; border-radius: 99px; background: var(--arc-fond); overflow: hidden; }
+.remplissage > div { height: 100%; background: var(--chu-bleu-clair); border-radius: 99px; }
+.inscrits summary { cursor: pointer; font-weight: 700; color: var(--action); padding: 4px 0; }
+.inscrits ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.inscrits label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.inscrits input { width: 22px; height: 22px; }
+.inscrits__fonction { margin-left: auto; color: var(--texte-doux); font-size: .88rem; }
+.form-carte { display: grid; gap: 4px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--trait); }
+.form-carte h3 { font-size: 1.1rem; margin-bottom: 4px; }
+.form-carte .champ { margin-bottom: 8px; gap: 4px; }
+.form-carte .champ input, .form-carte .champ select { width: 100%; padding: 10px 12px; border: 2px solid var(--trait); border-radius: 12px; background: var(--surface-2);
+  color: var(--texte); font: inherit; letter-spacing: normal; text-transform: none; }
+.form-carte .champ input.champ-court { max-width: 7em; }
+.form-carte .champ input[id="in-init"] { text-transform: uppercase; font-weight: 700; text-align: center; }
+.grille-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.bouton--danger { color: var(--urgence); }
+
+/* ---------- Découverte du plan ---------- */
+.decouverte { background: var(--surface); border-radius: var(--r-m); box-shadow: var(--ombre); padding: 14px 16px; margin-top: 12px; }
+.decouverte__tete { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.decouverte__tete h2 { font-size: 1.1rem; }
+.decouverte__compte { font: 700 1.1rem Barlow, sans-serif; color: var(--titre); }
+.decouverte ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.decouverte li button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; border: 2px solid var(--trait); background: var(--surface);
+  color: var(--texte); border-radius: 12px; padding: 8px 10px; font: inherit; font-size: .92rem; cursor: pointer; }
+.decouverte li button[aria-pressed="true"] { border-color: var(--succes); background: var(--chu-vert-pastel); color: #23400a; font-weight: 700; }
+.decouverte li button span { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--trait); display: grid; place-items: center; font-size: .75rem; }
+.decouverte li button[aria-pressed="true"] span { background: var(--succes); border-color: var(--succes); color: #fff; }
+.decouverte__bravo { margin-top: 10px; font-weight: 700; color: var(--succes); }

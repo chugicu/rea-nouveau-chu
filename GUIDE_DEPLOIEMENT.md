@@ -1,4 +1,4 @@
-# Guide de déploiement – Réa · Nouveau CHU (étapes 1 et 2)
+# Guide de déploiement – Réa · Nouveau CHU (étapes 1 à 3)
 
 Durée : environ 45 minutes, une seule fois. Aucune compétence en programmation n'est nécessaire : il s'agit de copier-coller et de cliquer.
 
@@ -180,6 +180,28 @@ Dans GitHub, déposez les fichiers modifiés du dossier `docs` (sauf `config.js`
 | Remplacer le plan (nouvelle version) | Remplacer le fichier dans le Drive (même ID : *Gérer les versions*), puis **Réa – Administration > Relire le plan depuis le Drive** |
 
 Les désignations sont rattachées à un identifiant de pièce (P001, P002…) : elles restent valables tant que le fichier du plan n'est pas régénéré.
+
+---
+
+## Partie G – Étape 3 : visites des locaux et badges
+
+### G1. Mettre à jour le moteur (5 minutes)
+1. Copiez le nouveau `apps-script/Code.gs` (sur GitHub : dépôt rea-nouveau-chu > apps-script > Code.gs > bouton « Copy raw file ») et collez-le à la place de l'ancien dans l'éditeur Apps Script. Faites de même pour `appsscript.json`. **Enregistrer**.
+2. Dans le Sheets : **Réa – Administration > 1. Installer / réparer la base**. Google demande une nouvelle autorisation (programmer l'effacement automatique des inscriptions) : acceptez.
+   Deux onglets apparaissent : **Créneaux** et **Inscriptions**.
+3. **Déployer > Gérer les déploiements > crayon > Version : Nouvelle version > Déployer** (l'adresse `/exec` ne change pas).
+
+### G2. Utilisation
+| Qui | Quoi | Où |
+|---|---|---|
+| Référent | Créer, modifier ou annuler un créneau (date, heure, durée, places, lieu de rendez-vous, guide) | Appli > Visites des locaux > **Créer un créneau** / **Modifier** |
+| Référent | Cocher les présents à la fin de la visite | Appli > carte du créneau > **Inscrits** |
+| Agent | S'inscrire (prénom, initiale du nom, fonction), noter son code de réservation, annuler | Appli > Visites des locaux |
+
+- **Badge « Visite faite »** : attribué quand un référent coche la présence, ou quand l'agent touche « J'ai fait la visite » après l'heure du créneau.
+- **Badge « Plan exploré »** : attribué quand les 8 lieux du **Parcours de découverte** (sous le plan) ont été trouvés.
+- Les badges restent sur le téléphone de chacun : aucun suivi individuel.
+- **Protection des données** : prénom, initiale et fonction sont effacés automatiquement chaque nuit après **J+30** (si la Date J est renseignée). Effacement manuel possible : **Réa – Administration > Effacer les inscriptions aux visites**.
 
 ---
 

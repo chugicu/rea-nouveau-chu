@@ -5,7 +5,7 @@
   var Api = window.ReaApi;
   var cfg = window.REA_CONFIG || {};
   var FUSEAU = 'America/Guadeloupe';
-  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode' };
+  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites' };
   var app = document.getElementById('app');
   var zoneBandeaux = document.getElementById('bandeaux');
 
@@ -55,7 +55,7 @@
 
   var MODULES = [
     { id: 'plan', nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
-    { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3 },
+    { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'quiz', nom: 'Quiz', desc: 'Vérifier ce que l\'on sait du nouveau service', etape: 4 },
     { id: 'simulations', nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
@@ -82,6 +82,11 @@
     plan_absent: 'Le plan n\'est pas encore installé. Prévenez l\'administrateur.',
     non_autorise: 'Seuls les référents peuvent modifier le plan.',
     requete_invalide: 'Certaines informations ne sont pas valides. Vérifiez la saisie.',
+    creneau_complet: 'Ce créneau est complet. Choisissez-en un autre.',
+    creneau_passe: 'Ce créneau est déjà passé.',
+    creneau_introuvable: 'Ce créneau n\'existe plus (il a peut-être été annulé).',
+    reservation_introuvable: 'Réservation introuvable : elle a peut-être déjà été annulée.',
+    places_insuffisantes: 'Il y a déjà plus d\'inscrits que ce nombre de places.',
     erreur_serveur: 'Le serveur a rencontré un problème. Réessayez dans un instant.'
   };
   function message(code) { return MESSAGES[code] || MESSAGES.erreur_serveur; }
@@ -193,6 +198,7 @@
       stock.ecrire(CLE.accueil, { donnees: d, le: new Date().toISOString() });
       majBandeaux({ horsLigne: false, depuis: null });
       dessinerAccueil(session, d);
+      verifierReservations().then(function (nouveau) { if (nouveau && ecranCourant === ecranAccueil) dessinerAccueil(session, d); });
     }).catch(function (e) {
       if (ERREURS_SESSION.indexOf(e.code) >= 0) {
         stock.effacer(CLE.session); stock.effacer(CLE.accueil);
@@ -334,6 +340,227 @@
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: deconnexion, text: 'Se déconnecter' })));
   }
 
+  /* ---------- Visites des locaux ---------- */
+  function mesReservations() { return stock.lire(CLE.visites) || []; }
+  function heureFin(heure, duree) {
+    var m = (+heure.slice(0, 2)) * 60 + (+heure.slice(3, 5)) + (Number(duree) || 0);
+    return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  }
+  function maintenantLocal() {
+    var p = {}; new Intl.DateTimeFormat('fr-CA', { timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+    return p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute;
+  }
+  /* Met à jour les réservations gardées sur ce téléphone ; renvoie true si le badge « Visite faite » vient d'être obtenu. */
+  function verifierReservations() {
+    var session = stock.lire(CLE.session), res = mesReservations();
+    if (!session || !res.length) return Promise.resolve(false);
+    var avant = !!(stock.lire(CLE.badges) || {}).visite;
+    return Api.appeler('visite_statut', { jeton: session.jeton, reservations: res.map(function (r) { return { id: r.id, code: r.code }; }) }).then(function (r) {
+      var maj = [];
+      r.reservations.forEach(function (x) {
+        var loc = res.filter(function (y) { return y.id === x.id; })[0];
+        if (!x.existe) return; // annulée ou effacée : on l'oublie
+        maj.push(Object.assign({}, loc, { creneau: x.creneau || loc.creneau, present: x.present }));
+        if (x.present) window.ReaBadges.attribuer('visite');
+      });
+      stock.ecrire(CLE.visites, maj);
+      return !avant && !!(stock.lire(CLE.badges) || {}).visite;
+    }).catch(function () { return false; });
+  }
+
+  function ecranVisites(messageFlash) {
+    ecranCourant = ecranVisites;
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var zone = h('div', { class: 'visites' }, h('div', { class: 'squelette', style: 'height:180px' }), h('div', { class: 'squelette', style: 'height:260px;margin-top:16px' }));
+    afficher(h('div', { class: 'page' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour à l\'accueil', onclick: ecranAccueil, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: 'Visites des locaux' }),
+        h('span', { class: 'entete__role', text: session.role === 'agent' ? 'Nouveau CHU' : 'Mode référent' })),
+      messageFlash ? h('p', { class: 'flash', role: 'status', text: messageFlash }) : null,
+      zone));
+    window.scrollTo(0, 0);
+    Promise.all([Api.appeler('visites', { jeton: session.jeton }), verifierReservations()]).then(function (t) {
+      dessinerVisites(zone, session, t[0]);
+    }).catch(function (e) {
+      if (ERREURS_SESSION.indexOf(e.code) >= 0) { stock.effacer(CLE.session); return ecranConnexion(message(e.code)); }
+      zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }), h('button', { class: 'bouton', type: 'button', onclick: function () { ecranVisites(); }, text: 'Réessayer' }));
+    });
+  }
+
+  function dessinerVisites(zone, session, d) {
+    var maintenant = d.maintenant || maintenantLocal(), res = mesReservations(), badgeVisite = !!(stock.lire(CLE.badges) || {}).visite;
+    var mesIds = {}; res.forEach(function (r) { if (r.creneau) mesIds[r.creneau.id] = r; });
+    var blocs = [];
+
+    // Mes réservations
+    if (res.length) {
+      blocs.push(h('section', { class: 'section', 'aria-labelledby': 't-mesres' },
+        h('div', { class: 'section__tete' }, h('h2', { id: 't-mesres', text: 'Mes réservations' }), h('span', { class: 'section__note', text: 'Gardées sur ce téléphone' })),
+        h('ul', { class: 'cartes' }, res.map(function (r) {
+          var c = r.creneau || {}, debut = c.date + 'T' + c.heure, commencee = debut <= maintenant;
+          var etat = r.present ? h('span', { class: 'etiquette etiquette--ok', text: 'Présence validée' })
+            : commencee ? h('span', { class: 'etiquette', text: 'Visite passée' }) : h('span', { class: 'etiquette etiquette--bleu', text: 'À venir' });
+          return h('li', { class: 'carte-visite carte-visite--mienne' },
+            h('div', { class: 'carte-visite__tete' }, h('div', null, h('p', { class: 'carte-visite__date', text: dateLongue(c.date) }),
+              h('p', { class: 'carte-visite__heure', text: c.heure + ' – ' + heureFin(c.heure, c.duree) })), etat),
+            c.lieu ? h('p', { class: 'carte-visite__info', text: 'Rendez-vous : ' + c.lieu }) : null,
+            c.guide ? h('p', { class: 'carte-visite__info', text: 'Guide : ' + c.guide }) : null,
+            h('p', { class: 'carte-visite__info' }, 'Inscrit(e) : ' + r.prenom + ' ' + r.initiale + '., ' + r.fonction),
+            h('p', { class: 'code-resa' }, 'Code de réservation ', h('b', { text: r.code })),
+            h('div', { class: 'carte-visite__actions' },
+              commencee && !badgeVisite ? h('button', { class: 'bouton', type: 'button', onclick: function () { window.ReaBadges.attribuer('visite'); ecranVisites('Bravo ! Badge « Visite faite » obtenu.'); }, text: 'J\'ai fait la visite' }) : null,
+              !commencee ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) { annulerReservation(r, ev.currentTarget); }, text: 'Annuler ma réservation' }) : null));
+        }))));
+    }
+
+    // Créneaux
+    var aVenir = d.creneaux.filter(function (c) { return c.date + 'T' + c.heure >= maintenant; });
+    var passes = d.creneaux.filter(function (c) { return c.date + 'T' + c.heure < maintenant; }).reverse();
+    var outils = d.peutModifier ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) { formulaireCreneau(ev.currentTarget.parentNode.parentNode, session, null); }, text: '+ Créer un créneau' }) : null;
+    blocs.push(h('section', { class: 'section', 'aria-labelledby': 't-creneaux' },
+      h('div', { class: 'section__tete' }, h('h2', { id: 't-creneaux', text: 'Créneaux de visite' }), outils),
+      aVenir.length ? listeCreneaux(aVenir, d, session, mesIds, false)
+        : h('p', { class: 'vide', text: d.peutModifier ? 'Aucun créneau à venir. Créez le premier avec « Créer un créneau ».' : 'Aucun créneau ouvert pour l\'instant. Les référents en ajouteront bientôt.' })));
+    if (d.peutModifier && passes.length) {
+      blocs.push(h('section', { class: 'section' }, h('details', { class: 'detail-jauge' }, h('summary', { text: 'Créneaux passés (' + passes.length + ')' }),
+        h('div', { style: 'padding:0 14px 14px' }, listeCreneaux(passes, d, session, mesIds, true)))));
+    }
+    blocs.push(h('p', { class: 'plan-note', text: 'Seuls votre prénom, l\'initiale de votre nom et votre fonction sont enregistrés. Ils sont effacés 30 jours après le déménagement.' }));
+    zone.replaceChildren.apply(zone, blocs);
+  }
+
+  function listeCreneaux(liste, d, session, mesIds, passes) {
+    var parJour = [], dernier = null;
+    liste.forEach(function (c) { if (c.date !== dernier) { parJour.push({ date: c.date, l: [] }); dernier = c.date; } parJour[parJour.length - 1].l.push(c); });
+    return h('div', null, parJour.map(function (j) {
+      return h('div', { class: 'jour' }, h('h3', { class: 'jour__titre', text: dateLongue(j.date) }), h('ul', { class: 'cartes' }, j.l.map(function (c) {
+        var annule = c.statut === 'annulé', complet = c.restantes <= 0, mien = mesIds[c.id];
+        var pct = c.places ? Math.round(100 * c.inscrits / c.places) : 0;
+        var carte = h('li', { class: 'carte-visite' + (annule ? ' carte-visite--annulee' : '') },
+          h('div', { class: 'carte-visite__tete' }, h('p', { class: 'carte-visite__heure', text: c.heure + ' – ' + heureFin(c.heure, c.duree) }),
+            annule ? h('span', { class: 'etiquette', text: 'Annulé' }) : mien ? h('span', { class: 'etiquette etiquette--ok', text: 'Vous êtes inscrit(e)' })
+              : h('span', { class: 'etiquette' + (complet ? '' : ' etiquette--bleu'), text: complet ? 'Complet' : c.restantes + ' place' + (c.restantes > 1 ? 's' : '') + ' libre' + (c.restantes > 1 ? 's' : '') })),
+          c.lieu ? h('p', { class: 'carte-visite__info', text: 'Rendez-vous : ' + c.lieu }) : null,
+          c.guide ? h('p', { class: 'carte-visite__info', text: 'Guide : ' + c.guide }) : null,
+          h('div', { class: 'remplissage', role: 'progressbar', 'aria-label': 'Places prises', 'aria-valuemin': '0', 'aria-valuemax': String(c.places), 'aria-valuenow': String(c.inscrits) },
+            h('div', { style: 'width:' + pct + '%' })),
+          h('p', { class: 'carte-visite__info', text: c.inscrits + ' inscrit' + (c.inscrits > 1 ? 's' : '') + ' sur ' + c.places + ' places, ' + c.duree + ' min' }));
+        var actions = h('div', { class: 'carte-visite__actions' });
+        if (!passes && !annule && !complet && !mien) actions.appendChild(h('button', { class: 'bouton', type: 'button', onclick: function () { formulaireInscription(carte, session, c, d.fonctions); }, text: 'M\'inscrire' }));
+        if (d.peutModifier) {
+          actions.appendChild(h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { formulaireCreneau(carte, session, c); }, text: 'Modifier' }));
+          if (c.liste) carte.appendChild(listeInscrits(c, session));
+        }
+        carte.appendChild(actions);
+        return carte;
+      })));
+    }));
+  }
+
+  function listeInscrits(c, session) {
+    if (!c.liste.length) return h('p', { class: 'carte-visite__info', text: 'Aucun inscrit pour l\'instant.' });
+    return h('details', { class: 'inscrits' }, h('summary', { text: 'Inscrits (' + c.liste.length + '), cocher les présents' }),
+      h('ul', null, c.liste.map(function (x) {
+        var caseP = h('input', { type: 'checkbox', id: 'pr-' + x.id });
+        caseP.checked = !!x.present;
+        caseP.addEventListener('change', function () {
+          caseP.disabled = true;
+          Api.appeler('visite_presence', { jeton: session.jeton, id: x.id, present: caseP.checked })
+            .catch(function (e) { caseP.checked = !caseP.checked; alerteDouce(caseP.parentNode, message(e.code)); })
+            .then(function () { caseP.disabled = false; });
+        });
+        return h('li', null, h('label', { for: 'pr-' + x.id }, caseP, ' ' + x.prenom + ' ' + x.initiale + '.', h('span', { class: 'inscrits__fonction', text: x.fonction })));
+      })));
+  }
+  function alerteDouce(parent, texte) { var p = h('p', { class: 'message-erreur', role: 'alert', text: texte }); parent.appendChild(p); setTimeout(function () { p.remove(); }, 5000); }
+
+  function formulaireInscription(carte, session, c, fonctions) {
+    var ancien = carte.querySelector('.form-carte'); if (ancien) { ancien.remove(); return; }
+    var prenom = h('input', { type: 'text', id: 'in-prenom', maxlength: '20', autocomplete: 'given-name', required: true });
+    var initiale = h('input', { type: 'text', id: 'in-init', maxlength: '1', autocomplete: 'off', required: true, class: 'champ-court', 'aria-describedby': 'in-init-aide' });
+    var fonction = h('select', { id: 'in-fonction', required: true }, h('option', { value: '', text: 'Choisir…' }), fonctions.map(function (f) { return h('option', { value: f, text: f }); }));
+    var erreur = h('p', { class: 'message-erreur', role: 'alert' }), bouton = h('button', { class: 'bouton', type: 'submit', text: 'Confirmer mon inscription' });
+    var form = h('form', { class: 'form-carte', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); erreur.textContent = '';
+      if (!prenom.value.trim()) { erreur.textContent = 'Indiquez votre prénom.'; return prenom.focus(); }
+      if (!/^[A-Za-zÀ-ÿ]$/.test(initiale.value.trim())) { erreur.textContent = 'Indiquez la première lettre de votre nom.'; return initiale.focus(); }
+      if (!fonction.value) { erreur.textContent = 'Choisissez votre fonction.'; return fonction.focus(); }
+      bouton.disabled = true; bouton.textContent = 'Inscription…';
+      var donnees = { prenom: prenom.value.trim(), initiale: initiale.value.trim().toUpperCase(), fonction: fonction.value };
+      Api.appeler('visite_inscrire', { jeton: session.jeton, creneau: c.id, donnees: donnees }).then(function (r) {
+        var l = mesReservations(); l.push(Object.assign({ id: r.id, code: r.code, creneau: c, present: false }, donnees)); stock.ecrire(CLE.visites, l);
+        ecranVisites('Inscription confirmée pour le ' + dateLongue(c.date) + ' à ' + c.heure + '. Votre code de réservation : ' + r.code + '.');
+      }).catch(function (e) { erreur.textContent = message(e.code); bouton.disabled = false; bouton.textContent = 'Confirmer mon inscription'; });
+    } },
+      h('div', { class: 'champ' }, h('label', { for: 'in-prenom', text: 'Prénom' }), prenom),
+      h('div', { class: 'champ' }, h('label', { for: 'in-init', text: 'Initiale du nom' }), initiale, h('p', { id: 'in-init-aide', class: 'champ__aide', text: 'Une seule lettre, par exemple D pour Dupont.' })),
+      h('div', { class: 'champ' }, h('label', { for: 'in-fonction', text: 'Fonction' }), fonction),
+      bouton, erreur);
+    carte.appendChild(form); prenom.focus();
+  }
+
+  function annulerReservation(r, bouton) {
+    var session = stock.lire(CLE.session);
+    if (bouton.dataset.confirme !== '1') { bouton.dataset.confirme = '1'; bouton.textContent = 'Confirmer l\'annulation'; return; }
+    bouton.disabled = true;
+    Api.appeler('visite_annuler', { jeton: session.jeton, id: r.id, code: r.code }).then(function () { return true; }, function (e) {
+      if (e.code === 'reservation_introuvable') return true; throw e;
+    }).then(function () {
+      stock.ecrire(CLE.visites, mesReservations().filter(function (x) { return x.id !== r.id; }));
+      ecranVisites('Réservation annulée. La place est libérée.');
+    }).catch(function (e) { bouton.disabled = false; alerteDouce(bouton.parentNode, message(e.code)); });
+  }
+
+  function formulaireCreneau(conteneur, session, c) {
+    var ancien = conteneur.querySelector('.form-carte'); if (ancien) { ancien.remove(); return; }
+    var demain = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    var date = h('input', { type: 'date', id: 'cr-date', required: true, value: c ? c.date : demain });
+    var heure = h('input', { type: 'time', id: 'cr-heure', required: true, value: c ? c.heure : '14:00', step: '300' });
+    var duree = h('select', { id: 'cr-duree' }, [30, 45, 60, 90, 120].map(function (m) { var o = h('option', { value: String(m), text: m + ' min' }); if ((c ? c.duree : 60) === m) o.selected = true; return o; }));
+    var places = h('input', { type: 'number', id: 'cr-places', min: '1', max: '50', value: String(c ? c.places : 8), required: true, class: 'champ-court' });
+    var lieu = h('input', { type: 'text', id: 'cr-lieu', maxlength: '80', value: c ? c.lieu : '', placeholder: 'Ex. : hall du bâtiment 50, niveau 3' });
+    var guide = h('input', { type: 'text', id: 'cr-guide', maxlength: '40', value: c ? c.guide : (session.libelle || '') });
+    var erreur = h('p', { class: 'message-erreur', role: 'alert' }), bouton = h('button', { class: 'bouton', type: 'submit', text: c ? 'Enregistrer' : 'Créer le créneau' });
+    function envoyer(statut) {
+      erreur.textContent = ''; bouton.disabled = true;
+      var donnees = { id: c && c.id, date: date.value, heure: heure.value, duree: Number(duree.value), places: Number(places.value), lieu: lieu.value.trim(), guide: guide.value.trim(), statut: statut };
+      Api.appeler('visite_creneau', { jeton: session.jeton, donnees: donnees })
+        .then(function () { ecranVisites(statut === 'annulé' ? 'Créneau annulé.' : c ? 'Créneau modifié.' : 'Créneau créé.'); })
+        .catch(function (e) { erreur.textContent = message(e.code); bouton.disabled = false; });
+    }
+    var form = h('form', { class: 'form-carte', novalidate: true, onsubmit: function (ev) { ev.preventDefault(); envoyer(c && c.statut === 'annulé' ? 'ouvert' : 'ouvert'); } },
+      h('h3', { text: c ? 'Modifier le créneau' : 'Nouveau créneau' }),
+      h('div', { class: 'grille-2' },
+        h('div', { class: 'champ' }, h('label', { for: 'cr-date', text: 'Date' }), date),
+        h('div', { class: 'champ' }, h('label', { for: 'cr-heure', text: 'Heure' }), heure),
+        h('div', { class: 'champ' }, h('label', { for: 'cr-duree', text: 'Durée' }), duree),
+        h('div', { class: 'champ' }, h('label', { for: 'cr-places', text: 'Places' }), places)),
+      h('div', { class: 'champ' }, h('label', { for: 'cr-lieu', text: 'Lieu de rendez-vous' }), lieu),
+      h('div', { class: 'champ' }, h('label', { for: 'cr-guide', text: 'Guide' }), guide),
+      bouton,
+      c && c.statut !== 'annulé' ? h('button', { class: 'bouton bouton--discret bouton--danger', type: 'button', onclick: function (ev) {
+        var b = ev.currentTarget; if (b.dataset.confirme !== '1') { b.dataset.confirme = '1'; b.textContent = 'Confirmer : annuler le créneau'; return; } envoyer('annulé');
+      }, text: 'Annuler ce créneau' }) : null,
+      erreur);
+    conteneur.appendChild(form); date.focus();
+  }
+
+  /* ---------- Parcours de découverte du plan (badge « Plan exploré ») ---------- */
+  var LIEUX_CLES = [
+    { id: 'poste', nom: 'Un poste de soins', test: /^poste de soins/i },
+    { id: 'soins', nom: 'La salle de soins', test: /^salle de soins/i },
+    { id: 'pharmacie', nom: 'La pharmacie', test: /pharmacie/i },
+    { id: 'linge', nom: 'Le linge propre', test: /^linge propre/i },
+    { id: 'garde', nom: 'Une chambre de garde', test: /^garde/i },
+    { id: 'vestiaire', nom: 'Les vestiaires', test: /^vestiaire (h|f)\b|^vestiaire$/i },
+    { id: 'detente', nom: 'La salle de détente', test: /^détente/i },
+    { id: 'familles', nom: 'L\'attente des familles', test: /^attente familles/i }
+  ];
+  function lieuDe(nom) { for (var i = 0; i < LIEUX_CLES.length; i++) if (nom && LIEUX_CLES[i].test.test(nom)) return LIEUX_CLES[i].id; return null; }
+
   /* ---------- Écran Plan du service ---------- */
   var CACHE_DONNEES = 'rea-donnees'; // effacé à la déconnexion
   function planEnCache() {
@@ -356,19 +583,37 @@
         h('h1', { class: 'entete__titre', text: 'Plan du service' }),
         h('span', { class: 'entete__role', text: session.role === 'agent' ? 'Niveau 3' : 'Mode référent' })),
       zone,
+      h('section', { class: 'decouverte', 'aria-labelledby': 't-decouverte', hidden: true }),
       h('p', { class: 'plan-note', text: 'Touchez une pièce pour voir son nom. Le plan reste consultable sans réseau sur ce téléphone, jusqu\'à la déconnexion.' })));
+    var zoneDecouverte = document.querySelector('.decouverte');
     window.scrollTo(0, 0);
     var monte = false;
     function monter(r, depuisCache) {
       monte = true;
-      var vus = stock.lire(CLE.planVu) || {};
-      var plan = window.ReaPlan.creer(zone, {
+      var vus = stock.lire(CLE.planVu) || {}; // lieux clés déjà découverts : { poste: true, … }
+      var plan;
+      function majDecouverte() {
+        var n = LIEUX_CLES.filter(function (l) { return vus[l.id]; }).length, fini = n === LIEUX_CLES.length;
+        if (fini && window.ReaBadges && !(stock.lire(CLE.badges) || {}).plan) window.ReaBadges.attribuer('plan');
+        zoneDecouverte.hidden = false;
+        zoneDecouverte.replaceChildren(
+          h('div', { class: 'decouverte__tete' }, h('h2', { id: 't-decouverte', text: 'Parcours de découverte' }), h('span', { class: 'decouverte__compte', text: n + ' / ' + LIEUX_CLES.length })),
+          h('p', { class: 'section__note', text: 'Trouvez ces lieux sur le plan pour obtenir le badge « Plan exploré ». Touchez un lieu pour qu\'il vous soit montré.' }),
+          h('ul', null, LIEUX_CLES.map(function (l) {
+            return h('li', null, h('button', { type: 'button', 'aria-pressed': String(!!vus[l.id]), onclick: function () {
+              var cible = plan.pieces().filter(function (p) { return lieuDe(p.nom) === l.id; })[0];
+              if (cible) { plan.choisir(cible.id, true); document.querySelector('.plan__cadre').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            } }, h('span', { 'aria-hidden': 'true', text: vus[l.id] ? '✓' : '' }), l.nom));
+          })),
+          fini ? h('p', { class: 'decouverte__bravo', text: 'Bravo, vous connaissez les lieux essentiels du service ! Badge « Plan exploré » obtenu.' }) : null);
+      }
+      plan = window.ReaPlan.creer(zone, {
         donnees: r.donnees, reglages: r.reglages, peutModifier: !!r.peutModifier && !depuisCache,
         mode: stock.lire(CLE.planMode) || 'texte',
         surMode: function (m) { stock.ecrire(CLE.planMode, m); },
         surChoix: function (id) {
-          vus[id] = 1; stock.ecrire(CLE.planVu, vus);
-          if (Object.keys(vus).length >= 8 && window.ReaBadges) window.ReaBadges.attribuer('plan');
+          var p = plan.pieces().filter(function (x) { return x.id === id; })[0], lieu = p && lieuDe(p.nom);
+          if (lieu && !vus[lieu]) { vus[lieu] = true; stock.ecrire(CLE.planVu, vus); majDecouverte(); }
         },
         enregistrerPiece: function (id, d) {
           return Api.appeler('plan_piece', { jeton: session.jeton, id: id, donnees: d })
@@ -380,6 +625,7 @@
         }
       });
       function majCache() { mettrePlanEnCache({ donnees: r.donnees, reglages: plan.reglages, peutModifier: r.peutModifier }); }
+      majDecouverte();
     }
     planEnCache().then(function (c) {
       if (c) monter(c, true);
@@ -399,6 +645,7 @@
     stock.effacer(CLE.session); stock.effacer(CLE.accueil);
     // Supprime aussi les données mises en cache hors ligne (le plan) et l'historique de consultation
     stock.effacer(CLE.planVu);
+    // Les réservations de visite (identifiant + code) restent : elles servent à annuler et au badge.
     if (window.caches) caches.keys().then(function (cles) { cles.filter(function (c) { return c.indexOf('rea-donnees') === 0; }).forEach(function (c) { caches.delete(c); }); });
     majBandeaux({ horsLigne: false, depuis: null });
     ecranConnexion();

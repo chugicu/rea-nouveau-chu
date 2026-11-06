@@ -27,7 +27,7 @@ GUIDE_DEPLOIEMENT.md
 |---|---|---|
 | 1 | Socle, connexion, accueil (compte à rebours, jauge, badges, actualités) | Livrée |
 | 2 | Plan du service : texte ou icônes, vue par catégorie, recherche, hors ligne, désignation des pièces et couleurs par les référents | Livrée |
-| 3 | Visites des locaux | À venir |
+| 3 | Visites des locaux : créneaux, inscription, code de réservation, présence, badges « Visite faite » et « Plan exploré » | Livrée |
 | 4 | Quiz | À venir |
 | 5 | Simulations in situ | À venir |
 | 6 | Documents, FAQ, « Je suis prêt(e) » | À venir |

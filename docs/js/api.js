@@ -72,10 +72,55 @@
         if (action === 'plan_piece' || action === 'plan_categorie') {
           return d.jeton === 'demo.agent' ? ko(new ErreurApi('non_autorise')) : ok({ ok: true });
         }
+        if (action.indexOf('visite') === 0) return demoVisites(action, d, ok, ko);
         if (action === 'ping') return ok({ ok: true });
         ko(new ErreurApi('action_inconnue'));
       }, 350);
     });
+  }
+
+  /* Visites fictives du mode démonstration (en mémoire, perdues au rechargement) */
+  var DV = null;
+  function demoVisites(action, d, ok, ko) {
+    var ref = d.jeton !== 'demo.agent';
+    if (!DV) {
+      var j = function (n) { var x = new Date(Date.now() + n * 864e5); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+      DV = { creneaux: [
+        { id: 'C1', date: j(2), heure: '14:00', duree: 60, lieu: 'Hall du bâtiment 50, niveau 3', guide: 'Référent démo', places: 8, statut: 'ouvert' },
+        { id: 'C2', date: j(2), heure: '16:00', duree: 60, lieu: 'Hall du bâtiment 50, niveau 3', guide: 'Référent démo', places: 2, statut: 'ouvert' },
+        { id: 'C3', date: j(5), heure: '09:30', duree: 90, lieu: 'Entrée Mahogany', guide: 'Cadre de nuit', places: 10, statut: 'ouvert' }],
+        ins: [{ id: 'I0', creneau: 'C2', prenom: 'Léa', initiale: 'M', fonction: 'AS', code: 'ABCDEF', present: false }, { id: 'I00', creneau: 'C2', prenom: 'Tom', initiale: 'R', fonction: 'IDE', code: 'GHJKLM', present: false }] };
+    }
+    var pub = function (c, liste) { var l = DV.ins.filter(function (x) { return x.creneau === c.id; });
+      var o = Object.assign({}, c, { inscrits: l.length, restantes: Math.max(0, c.places - l.length) });
+      if (liste) o.liste = l.map(function (x) { return { id: x.id, prenom: x.prenom, initiale: x.initiale, fonction: x.fonction, present: x.present }; });
+      return o; };
+    if (action === 'visites') return ok({ ok: true, creneaux: DV.creneaux.filter(function (c) { return ref || c.statut !== 'annulé'; }).map(function (c) { return pub(c, ref); }),
+      fonctions: ['Médecin', 'Interne', 'IDE', 'AS', 'Cadre', 'Secrétaire', 'Kinésithérapeute'], peutModifier: ref });
+    if (action === 'visite_inscrire') {
+      var c = DV.creneaux.filter(function (x) { return x.id === d.creneau; })[0];
+      if (!c) return ko(new ErreurApi('creneau_introuvable'));
+      if (pub(c).restantes <= 0) return ko(new ErreurApi('creneau_complet'));
+      var id = 'I' + Math.random().toString(36).slice(2, 8), code = Math.random().toString(36).slice(2, 8).toUpperCase();
+      DV.ins.push(Object.assign({ id: id, creneau: c.id, code: code, present: false }, d.donnees));
+      return ok({ ok: true, id: id, code: code, creneau: pub(c) });
+    }
+    if (action === 'visite_statut') return ok({ ok: true, reservations: (d.reservations || []).map(function (r) {
+      var x = DV.ins.filter(function (i) { return i.id === r.id && i.code === r.code; })[0];
+      if (!x) return { id: r.id, existe: true }; // en démo, on garde les réservations d'un rechargement précédent
+      return { id: x.id, existe: true, present: x.present, creneau: pub(DV.creneaux.filter(function (c) { return c.id === x.creneau; })[0]) };
+    }) });
+    if (action === 'visite_annuler') { DV.ins = DV.ins.filter(function (x) { return !(x.id === d.id && x.code === d.code); }); return ok({ ok: true }); }
+    if (!ref) return ko(new ErreurApi('non_autorise'));
+    if (action === 'visite_creneau') {
+      var dn = d.donnees;
+      if (dn.id) { var e = DV.creneaux.filter(function (x) { return x.id === dn.id; })[0]; Object.assign(e, dn); }
+      else DV.creneaux.push(Object.assign({}, dn, { id: 'C' + Math.random().toString(36).slice(2, 7), statut: 'ouvert' }));
+      DV.creneaux.sort(function (a, b) { return (a.date + a.heure) < (b.date + b.heure) ? -1 : 1; });
+      return ok({ ok: true });
+    }
+    if (action === 'visite_presence') { DV.ins.forEach(function (x) { if (x.id === d.id) x.present = d.present; }); return ok({ ok: true }); }
+    ko(new ErreurApi('action_inconnue'));
   }
 
   /* Plan fictif du mode démonstration : le vrai plan n'est jamais publié sur GitHub */
@@ -95,13 +140,18 @@
     ajoute('piece', 570, 330, 690, 410, { nom: 'Linge propre', categorie: 'logistique', source: 'plan' });
     ajoute('piece', 570, 415, 690, 490);
     ajoute('piece', 700, 330, 880, 490);
+    ajoute('piece', 100, 760, 280, 840, { nom: 'Pharmacie', categorie: 'soins' });
+    ajoute('piece', 290, 760, 470, 840, { nom: 'Salle de soins', categorie: 'soins' });
+    ajoute('piece', 480, 760, 600, 840, { nom: 'Vestiaire H', categorie: 'personnel' });
+    ajoute('piece', 610, 760, 730, 840, { nom: 'Vestiaire F', categorie: 'personnel' });
+    ajoute('piece', 740, 760, 880, 840, { nom: 'Détente', categorie: 'personnel' });
     var unites = {
       flamboyant: { nom: 'Unité A', info: 'Démo · 3 lits', fond: '#ffdcbc', trait: '#e0670f', pastille: '#d9600b' },
       hibiscus: { nom: 'Unité B', info: 'Démo · 3 lits', fond: '#fcd6e5', trait: '#d1356f', pastille: '#d1356f' },
       bougainvillier: { nom: 'Unité C', info: 'Démo · 3 lits', fond: '#e9dcfa', trait: '#7b3fc4', pastille: '#7b3fc4' },
       atoumo: { nom: 'Unité D', info: 'Démo · 3 lits', fond: '#fff2a6', trait: '#c99a00', pastille: '#f5c400' }
     };
-    return { viewBox: [-20, -130, 960, 940], batiment: [80, 80, 900, 740], patios: [], pieces: pieces, unites: unites,
+    return { viewBox: [-20, -130, 960, 1010], batiment: [80, 80, 900, 860], patios: [], pieces: pieces, unites: unites,
       titres: [{ unite: 'flamboyant', x: 290, y: -60, ancre: 'm', cible: [290, 110, 290, -10] }, { unite: 'hibiscus', x: 680, y: -60, ancre: 'm', cible: [680, 110, 680, -10] }],
       acces: [{ cat: 'ascenseur', nom: 'Monte-malades', X: 820, Y: 290 }, { cat: 'escalier', nom: 'Escalier', X: 820, Y: 530 }] };
   }

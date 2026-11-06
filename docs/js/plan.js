@@ -462,7 +462,9 @@
 
     dessiner();
     if (window.ResizeObserver) new ResizeObserver(function () { appliquerVB(); }).observe(svg);
-    return { redessiner: dessiner, reglages: R, choisir: choisir };
+    return { redessiner: dessiner, reglages: R, choisir: choisir,
+      // Liste des pièces avec leur nom effectif (pour le parcours de découverte)
+      pieces: function () { return D.pieces.map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
   }
 
   window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE };

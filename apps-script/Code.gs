@@ -4,6 +4,7 @@
  *
  * Étape 1 : installation, connexion par codes, accueil.
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
+ * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
  *
  * Principes :
  *  - Aucune donnée de santé. Aucun compte Google demandé aux agents.
@@ -18,7 +19,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.1.0',
+  version: '1.2.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -34,7 +35,9 @@ var ONGLETS = {
   prets: 'Je suis prêt',
   referents: 'Référents',
   pieces: 'Pièces',
-  categories: 'Catégories'
+  categories: 'Catégories',
+  creneaux: 'Créneaux',
+  inscriptions: 'Inscriptions'
 };
 
 // Valeurs autorisées pour la désignation des pièces (identiques à docs/js/plan.js)
@@ -72,7 +75,13 @@ function doPost(e) {
       home: function () { return home_(verifierJeton_(req.jeton)); },
       plan: function () { return plan_(verifierJeton_(req.jeton)); },
       plan_piece: function () { return planPiece_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
-      plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); }
+      plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); },
+      visites: function () { return visites_(verifierJeton_(req.jeton)); },
+      visite_inscrire: function () { return visiteInscrire_(verifierJeton_(req.jeton), req.creneau, req.donnees); },
+      visite_statut: function () { verifierJeton_(req.jeton); return visiteStatut_(req.reservations); },
+      visite_annuler: function () { verifierJeton_(req.jeton); return visiteAnnuler_(req.id, req.code); },
+      visite_creneau: function () { return visiteCreneau_(exigerReferent_(verifierJeton_(req.jeton)), req.donnees); },
+      visite_presence: function () { exigerReferent_(verifierJeton_(req.jeton)); return visitePresence_(req.id, req.present); }
     };
     if (!routes[action]) return json_({ ok: false, erreur: 'action_inconnue' });
     return json_(routes[action]());
@@ -306,6 +315,150 @@ function viderCachePlan() {
 }
 
 // ============================================================================
+// Visites des locaux
+// ============================================================================
+var VISITE = { joursPasses: 30, maxPlaces: 50, maxReservations: 10 };
+
+function maintenantLocal_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm"); }
+function texteDate_(v) { return v instanceof Date ? formaterDate_(v) : String(v || '').trim(); }
+function texteHeure_(v) { return v instanceof Date ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm') : String(v || '').trim(); }
+function decalerJours_(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+function lireCreneaux_(ss) {
+  var v = ss.getSheetByName(ONGLETS.creneaux).getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id) continue;
+    l.push({ ligne: i + 1, id: id, date: texteDate_(v[i][1]), heure: texteHeure_(v[i][2]), duree: Number(v[i][3]) || 60,
+             lieu: String(v[i][4] || ''), guide: String(v[i][5] || ''), places: Number(v[i][6]) || 0, statut: String(v[i][7] || 'ouvert') });
+  }
+  return l;
+}
+function lireInscriptions_(ss) {
+  var v = ss.getSheetByName(ONGLETS.inscriptions).getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id) continue;
+    l.push({ ligne: i + 1, id: id, creneau: String(v[i][1]), prenom: String(v[i][2] || ''), initiale: String(v[i][3] || ''),
+             fonction: String(v[i][4] || ''), empreinte: String(v[i][5] || ''), present: v[i][7] === true });
+  }
+  return l;
+}
+function fonctionsService_(ss) {
+  var v = ss.getSheetByName(ONGLETS.effectifs).getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) if (String(v[i][0] || '').trim() && Number(v[i][1]) > 0) l.push(String(v[i][0]).trim());
+  return l;
+}
+function publierCreneau_(c, inscrits, avecListe) {
+  var o = { id: c.id, date: c.date, heure: c.heure, duree: c.duree, lieu: c.lieu, guide: c.guide, places: c.places,
+            inscrits: inscrits.length, restantes: Math.max(0, c.places - inscrits.length), statut: c.statut };
+  if (avecListe) o.liste = inscrits.map(function (x) { return { id: x.id, prenom: x.prenom, initiale: x.initiale, fonction: x.fonction, present: x.present }; });
+  return o;
+}
+
+/** Créneaux à venir (et, pour les référents, ceux des 30 derniers jours avec la liste des inscrits). */
+function visites_(session) {
+  var ss = classeur_(), ref = session.r !== 'agent', maintenant = maintenantLocal_(), jour = maintenant.slice(0, 10);
+  var limite = ref ? decalerJours_(jour, -VISITE.joursPasses) : jour;
+  var ins = lireInscriptions_(ss), parCreneau = {};
+  ins.forEach(function (x) { (parCreneau[x.creneau] = parCreneau[x.creneau] || []).push(x); });
+  var liste = lireCreneaux_(ss).filter(function (c) { return c.date >= limite && (ref || c.statut !== 'annulé'); })
+    .sort(function (a, b) { return (a.date + a.heure) < (b.date + b.heure) ? -1 : 1; })
+    .map(function (c) { return publierCreneau_(c, parCreneau[c.id] || [], ref); });
+  return { ok: true, creneaux: liste, fonctions: fonctionsService_(ss), maintenant: maintenant, peutModifier: ref };
+}
+
+function visiteInscrire_(session, idCreneau, d) {
+  d = d || {};
+  var prenom = nettoyerTexte_(d.prenom, 20), initiale = nettoyerTexte_(d.initiale, 1).toUpperCase(), fonction = String(d.fonction || '');
+  if (!prenom || !/^[A-ZÀ-Ý]$/.test(initiale)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_();
+    if (fonctionsService_(ss).indexOf(fonction) < 0) throw erreurApp_('requete_invalide');
+    var c = lireCreneaux_(ss).filter(function (x) { return x.id === String(idCreneau); })[0];
+    if (!c || c.statut === 'annulé') throw erreurApp_('creneau_introuvable');
+    if (c.date + 'T' + c.heure < maintenantLocal_()) throw erreurApp_('creneau_passe');
+    var pris = lireInscriptions_(ss).filter(function (x) { return x.creneau === c.id; }).length;
+    if (pris >= c.places) throw erreurApp_('creneau_complet');
+    var id = 'I' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), code = genererCode_(6);
+    ss.getSheetByName(ONGLETS.inscriptions).appendRow([id, c.id, prenom, initiale, fonction, empreinte_(code), new Date(), false]);
+    return { ok: true, id: id, code: code, creneau: publierCreneau_(c, new Array(pris + 1), false) };
+  } finally { verrou.releaseLock(); }
+}
+
+/** Statut des réservations gardées sur le téléphone (identifiant + code). Sert au badge « Visite faite ». */
+function visiteStatut_(reservations) {
+  reservations = (Array.isArray(reservations) ? reservations : []).slice(0, VISITE.maxReservations);
+  var ss = classeur_(), ins = lireInscriptions_(ss), cr = {}, parCreneau = {};
+  lireCreneaux_(ss).forEach(function (c) { cr[c.id] = c; });
+  ins.forEach(function (x) { (parCreneau[x.creneau] = parCreneau[x.creneau] || []).push(x); });
+  return { ok: true, maintenant: maintenantLocal_(), reservations: reservations.map(function (r) {
+    var x = ins.filter(function (i) { return i.id === String(r && r.id); })[0];
+    if (!x || x.empreinte !== empreinte_(normaliserCode_(r.code))) return { id: String(r && r.id), existe: false };
+    var c = cr[x.creneau];
+    return { id: x.id, existe: true, present: x.present, prenom: x.prenom, initiale: x.initiale, fonction: x.fonction,
+             creneau: c ? publierCreneau_(c, parCreneau[c.id] || [], false) : null };
+  }) };
+}
+
+function visiteAnnuler_(id, code) {
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), x = lireInscriptions_(ss).filter(function (i) { return i.id === String(id); })[0];
+    if (!x || x.empreinte !== empreinte_(normaliserCode_(code))) throw erreurApp_('reservation_introuvable');
+    ss.getSheetByName(ONGLETS.inscriptions).deleteRow(x.ligne);
+    return { ok: true };
+  } finally { verrou.releaseLock(); }
+}
+
+/** Création, modification ou annulation d'un créneau (référents). */
+function visiteCreneau_(session, d) {
+  d = d || {};
+  var date = String(d.date || ''), heure = String(d.heure || ''), duree = Math.round(Number(d.duree)), places = Math.round(Number(d.places));
+  var lieu = nettoyerTexte_(d.lieu, 80), guide = nettoyerTexte_(d.guide, 40), statut = d.statut === 'annulé' ? 'annulé' : 'ouvert';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(heure) || !(duree >= 15 && duree <= 240) ||
+      !(places >= 1 && places <= VISITE.maxPlaces)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.creneaux), auteur = session.n || 'Administrateur';
+    var ligne = [date, heure, duree, lieu, guide, places, statut, auteur, new Date()];
+    if (d.id) {
+      var c = lireCreneaux_(ss).filter(function (x) { return x.id === String(d.id); })[0];
+      if (!c) throw erreurApp_('creneau_introuvable');
+      var pris = lireInscriptions_(ss).filter(function (x) { return x.creneau === c.id; }).length;
+      if (statut === 'ouvert' && places < pris) throw erreurApp_('places_insuffisantes');
+      sh.getRange(c.ligne, 2, 1, 9).setValues([ligne]);
+      return { ok: true, id: c.id };
+    }
+    var id = 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    sh.appendRow([id].concat(ligne));
+    return { ok: true, id: id };
+  } finally { verrou.releaseLock(); }
+}
+
+function visitePresence_(id, present) {
+  var ss = classeur_(), x = lireInscriptions_(ss).filter(function (i) { return i.id === String(id); })[0];
+  if (!x) throw erreurApp_('reservation_introuvable');
+  ss.getSheetByName(ONGLETS.inscriptions).getRange(x.ligne, 8).setValue(present === true);
+  return { ok: true };
+}
+
+/** Données personnelles des visites (prénom, initiale, fonction) effacées à J+30. Lancée chaque nuit. */
+function purgerVisites() {
+  var ss = classeur_(), j = lireParametres_(ss)['Date J'];
+  if (!(j instanceof Date) || isNaN(j)) return 'Date J non fixée : rien à purger.';
+  if (formaterDate_(new Date()) <= decalerJours_(formaterDate_(j), 30)) return 'Purge prévue après le ' + decalerJours_(formaterDate_(j), 30) + '.';
+  var sh = ss.getSheetByName(ONGLETS.inscriptions), n = sh.getLastRow() - 1;
+  if (n > 0) sh.deleteRows(2, n);
+  return n > 0 ? n + ' inscription(s) effacée(s).' : 'Aucune inscription à effacer.';
+}
+function menuPurgerVisites() { alerte_(purgerVisites()); }
+
+function installerPurgeQuotidienne_() {
+  var existe = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'purgerVisites'; });
+  if (!existe) ScriptApp.newTrigger('purgerVisites').timeBased().everyDays(1).atHour(3).create();
+}
+
+// ============================================================================
 // Jetons signés (HMAC-SHA256)
 // ============================================================================
 function signerJeton_(charge) {
@@ -399,6 +552,7 @@ function onOpen() {
     .addItem('Générer un code aléatoire (aide)', 'menuGenererCode')
     .addSeparator()
     .addItem('Relire le plan depuis le Drive', 'viderCachePlan')
+    .addItem('Effacer les inscriptions aux visites (après J+30)', 'menuPurgerVisites')
     .addToUi();
 }
 
@@ -426,6 +580,12 @@ function installer() {
   creerOnglet_(ss, ONGLETS.referents, ['Référent', 'Statut', 'Dernière modification'], []);
   creerOnglet_(ss, ONGLETS.pieces, ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
+  creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
+  creerOnglet_(ss, ONGLETS.inscriptions, ['ID', 'ID créneau', 'Prénom', 'Initiale', 'Fonction', 'Code (chiffré)', 'Inscrit le', 'Présent'], []);
+  ss.getSheetByName(ONGLETS.inscriptions).getRange('H2:H1000').insertCheckboxes();
+  ss.getSheetByName(ONGLETS.creneaux).getRange('B2:B1000').setNumberFormat('@'); // dates gardées en texte AAAA-MM-JJ
+  ss.getSheetByName(ONGLETS.creneaux).getRange('C2:C1000').setNumberFormat('@');
+  installerPurgeQuotidienne_();
 
   // Mise en forme utile
   var act = ss.getSheetByName(ONGLETS.actualites);
