@@ -231,6 +231,24 @@ Les désignations sont rattachées à un identifiant de pièce (P001, P002…) :
 
 ---
 
+## Partie I – Version 1.4 : newsletters
+
+### I1. Mettre à jour le moteur (5 minutes)
+1. Collez le nouveau `apps-script/Code.gs` **et** `appsscript.json` (comme en G1). **Enregistrer**. Cette version comprend les parties G et H.
+2. Dans le Sheets : **Réa – Administration > 1. Installer / réparer la base**. Google demande une autorisation élargie au **Drive** (le moteur doit pouvoir y ranger les pages des newsletters) : acceptez. L'onglet **Newsletters** apparaît.
+3. **Déployer > Gérer les déploiements > crayon > Version : Nouvelle version > Déployer**.
+
+### I2. Publier une newsletter (administrateur)
+1. Appli > **Newsletter** > **+ Ajouter une newsletter**.
+2. Choisissez le PDF (16 pages au plus). Il est converti **sur votre appareil** en images haute définition (≈ 200 ppp) ; un aperçu s'affiche.
+3. Indiquez le titre (ex. « Actu Réa #1 ») et la parution (ex. « Septembre 2026 »), puis **Publier la newsletter**.
+- Les images sont rangées dans le dossier privé **Réa – Newsletters** du Drive (créé automatiquement, ne pas le partager) et ne sont servies qu'aux personnes connectées avec un code.
+- Une étiquette **Nouveau** apparaît sur l'accueil de chacun jusqu'à la lecture.
+- **Retirer** une newsletter : bouton *Retirer* sous sa vignette (2 temps). Les images partent à la corbeille du Drive.
+- Les newsletters lues restent consultables hors ligne sur le téléphone, jusqu'à la déconnexion.
+
+---
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

@@ -6,6 +6,7 @@
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
  * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
  * 1.3 : modification de la forme du plan (déplacer, redimensionner, supprimer, ajouter une pièce).
+ * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
  * Principes :
  *  - Aucune donnée de santé. Aucun compte Google demandé aux agents.
@@ -20,7 +21,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.3.0',
+  version: '1.4.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -38,8 +39,11 @@ var ONGLETS = {
   pieces: 'Pièces',
   categories: 'Catégories',
   creneaux: 'Créneaux',
-  inscriptions: 'Inscriptions'
+  inscriptions: 'Inscriptions',
+  newsletters: 'Newsletters'
 };
+
+var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
 
 // Valeurs autorisées pour la désignation des pièces (identiques à docs/js/plan.js)
 var PLAN = {
@@ -82,7 +86,13 @@ function doPost(e) {
       visite_statut: function () { verifierJeton_(req.jeton); return visiteStatut_(req.reservations); },
       visite_annuler: function () { verifierJeton_(req.jeton); return visiteAnnuler_(req.id, req.code); },
       visite_creneau: function () { return visiteCreneau_(exigerReferent_(verifierJeton_(req.jeton)), req.donnees); },
-      visite_presence: function () { exigerReferent_(verifierJeton_(req.jeton)); return visitePresence_(req.id, req.present); }
+      visite_presence: function () { exigerReferent_(verifierJeton_(req.jeton)); return visitePresence_(req.id, req.present); },
+      nl_liste: function () { return nlListe_(verifierJeton_(req.jeton)); },
+      nl_page: function () { return nlPage_(verifierJeton_(req.jeton), req.id, req.page); },
+      nl_ajouter: function () { return nlAjouter_(exigerAdmin_(verifierJeton_(req.jeton)), req.donnees); },
+      nl_envoyer_page: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlEnvoyerPage_(req.id, req.page, req.data); },
+      nl_publier: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlPublier_(req.id); },
+      nl_retirer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlRetirer_(req.id); }
     };
     if (!routes[action]) return json_({ ok: false, erreur: 'action_inconnue' });
     return json_(routes[action]());
@@ -158,6 +168,7 @@ function home_(session) {
     messageAccueil: params["Message d'accueil"] || '',
     dateJ: dateJIso,
     actualites: lireActualites_(ss),
+    newsletter: derniereNewsletter_(ss),
     jauge: calculerJauge_(ss),
     misAJour: new Date().toISOString()
   };
@@ -275,6 +286,11 @@ function reglagesPlan_() {
 
 function exigerReferent_(session) {
   if (session.r !== 'referent' && session.r !== 'admin') throw erreurApp_('non_autorise');
+  return session;
+}
+
+function exigerAdmin_(session) {
+  if (session.r !== 'admin') throw erreurApp_('non_autorise');
   return session;
 }
 
@@ -479,6 +495,101 @@ function installerPurgeQuotidienne_() {
 }
 
 // ============================================================================
+// Newsletters : chaque page est une image JPEG (fabriquée depuis le PDF sur l'appareil de l'administrateur),
+// rangée dans un dossier privé du Drive et servie uniquement aux personnes connectées.
+// ============================================================================
+function lireNewsletters_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.newsletters);
+  if (!sh) return [];
+  var v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id) continue;
+    var fichiers = []; try { fichiers = JSON.parse(v[i][4] || '[]'); } catch (e) { fichiers = []; }
+    l.push({ ligne: i + 1, id: id, titre: String(v[i][1] || ''), parution: String(v[i][2] || ''), pages: Number(v[i][3]) || 0,
+      fichiers: fichiers, statut: String(v[i][5] || '').trim().toLowerCase(),
+      ajout: v[i][6] instanceof Date ? formaterDate_(v[i][6]) : String(v[i][6] || ''), ratio: Number(v[i][8]) || 1.414 });
+  }
+  return l;
+}
+function publieeNl_(n) { return n.statut === 'publiée' || n.statut === 'publiee'; }
+function derniereNewsletter_(ss) {
+  var l = lireNewsletters_(ss).filter(publieeNl_);
+  if (!l.length) return null;
+  var n = l[l.length - 1];
+  return { id: n.id, titre: n.titre };
+}
+function nlListe_(session) {
+  var l = lireNewsletters_(classeur_()).filter(publieeNl_).reverse() // la plus récente d'abord
+    .map(function (n) { return { id: n.id, titre: n.titre, parution: n.parution, pages: n.pages, ratio: n.ratio, ajout: n.ajout }; });
+  return { ok: true, newsletters: l, peutGerer: session.r === 'admin' };
+}
+function trouverNl_(id) {
+  id = String(id || '');
+  if (!/^NL[a-z0-9]{6,12}$/.test(id)) throw erreurApp_('requete_invalide');
+  var ss = classeur_(), l = lireNewsletters_(ss);
+  for (var i = 0; i < l.length; i++) if (l[i].id === id) return { ss: ss, nl: l[i] };
+  throw erreurApp_('newsletter_introuvable');
+}
+function nlPage_(session, id, page) {
+  var t = trouverNl_(id), n = t.nl, k = Number(page);
+  if (!publieeNl_(n) && session.r !== 'admin') throw erreurApp_('newsletter_introuvable');
+  if (!(k >= 0 && k < n.pages && n.fichiers[k])) throw erreurApp_('requete_invalide');
+  var octets = DriveApp.getFileById(n.fichiers[k]).getBlob().getBytes();
+  return { ok: true, page: k, type: 'image/jpeg', data: Utilities.base64Encode(octets) };
+}
+function dossierNewsletters_(ss) {
+  var nom = 'Dossier des newsletters (ID Drive)', params = lireParametres_(ss), id = String(params[nom] || '').trim();
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* dossier supprimé : on en recrée un */ } }
+  var parents = DriveApp.getFileById(ss.getId()).getParents();
+  var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  var dossier = parent.createFolder('Réa – Newsletters');
+  ajouterParametre_(ss, nom, 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');
+  var sh = ss.getSheetByName(ONGLETS.parametres), v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) if (String(v[i][0]).trim() === nom) sh.getRange(i + 1, 2).setValue(dossier.getId());
+  return dossier;
+}
+function nlAjouter_(session, d) {
+  d = d || {};
+  var titre = nettoyerTexte_(d.titre, 80), parution = nettoyerTexte_(d.parution, 40), pages = Number(d.pages), ratio = Number(d.ratio);
+  if (!titre || !(pages >= 1 && pages <= NL.maxPages && Math.floor(pages) === pages)) throw erreurApp_('requete_invalide');
+  if (!(ratio > 0.2 && ratio < 5)) ratio = 1.414;
+  var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.newsletters);
+  if (!sh) throw erreurApp_('non_installe');
+  var id = 'NL' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toLowerCase();
+  sh.appendRow([id, titre, parution, pages, '[]', 'brouillon', new Date(), session.n || 'Administrateur', Math.round(ratio * 1000) / 1000]);
+  return { ok: true, id: id };
+}
+function nlEnvoyerPage_(id, page, data) {
+  var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    var t = trouverNl_(id), n = t.nl, k = Number(page);
+    if (n.statut !== 'brouillon' || !(k >= 0 && k < n.pages && Math.floor(k) === k)) throw erreurApp_('requete_invalide');
+    var octets;
+    try { octets = Utilities.base64Decode(String(data || '')); } catch (e) { throw erreurApp_('requete_invalide'); }
+    // Seules des images JPEG sont acceptées (signature FF D8 FF), de taille raisonnable
+    if (octets.length < 1000 || octets.length > NL.maxOctetsPage || (octets[0] & 255) !== 0xFF || (octets[1] & 255) !== 0xD8 || (octets[2] & 255) !== 0xFF) throw erreurApp_('requete_invalide');
+    var dossier = dossierNewsletters_(t.ss);
+    if (n.fichiers[k]) { try { DriveApp.getFileById(n.fichiers[k]).setTrashed(true); } catch (e) { /* déjà absent */ } }
+    var f = dossier.createFile(Utilities.newBlob(octets, 'image/jpeg', n.id + '-page' + (k + 1) + '.jpg'));
+    n.fichiers[k] = f.getId();
+    t.ss.getSheetByName(ONGLETS.newsletters).getRange(n.ligne, 5).setValue(JSON.stringify(n.fichiers));
+    return { ok: true, page: k };
+  } finally { verrou.releaseLock(); }
+}
+function nlPublier_(id) {
+  var t = trouverNl_(id), n = t.nl;
+  for (var k = 0; k < n.pages; k++) if (!n.fichiers[k]) throw erreurApp_('newsletter_incomplete');
+  t.ss.getSheetByName(ONGLETS.newsletters).getRange(n.ligne, 6).setValue('publiée');
+  return { ok: true };
+}
+function nlRetirer_(id) {
+  var t = trouverNl_(id), n = t.nl;
+  n.fichiers.forEach(function (fid) { if (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) { /* déjà absent */ } } });
+  t.ss.getSheetByName(ONGLETS.newsletters).getRange(n.ligne, 5, 1, 2).setValues([['[]', 'retirée']]);
+  return { ok: true };
+}
+
+// ============================================================================
 // Jetons signés (HMAC-SHA256)
 // ============================================================================
 function signerJeton_(charge) {
@@ -602,6 +713,8 @@ function installer() {
   completerEntetes_(ss.getSheetByName(ONGLETS.pieces), ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée']);
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
+  creerOnglet_(ss, ONGLETS.newsletters, NL.entetes, []);
+  ajouterParametre_(ss, 'Dossier des newsletters (ID Drive)', 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');
   creerOnglet_(ss, ONGLETS.inscriptions, ['ID', 'ID créneau', 'Prénom', 'Initiale', 'Fonction', 'Code (chiffré)', 'Inscrit le', 'Présent'], []);
   ss.getSheetByName(ONGLETS.inscriptions).getRange('H2:H1000').insertCheckboxes();
   ss.getSheetByName(ONGLETS.creneaux).getRange('B2:B1000').setNumberFormat('@'); // dates gardées en texte AAAA-MM-JJ

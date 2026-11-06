@@ -29,6 +29,7 @@ GUIDE_DEPLOIEMENT.md
 | 2 | Plan du service : texte ou icônes, vue par catégorie, recherche, hors ligne, désignation des pièces et couleurs par les référents | Livrée |
 | 3 | Visites des locaux : créneaux, inscription, code de réservation, présence, badges « Visite faite » et « Plan exploré » | Livrée |
 | 3.1 | Exports Excel/PDF des visiteurs, émargement, modification du plan (forme, ajout, retrait), plein écran, logo CHU | Livrée |
+| 3.2 | Newsletter : PDF converti en images HD, publication par l'administrateur, lecture hors ligne | Livrée |
 | 4 | Quiz | À venir |
 | 5 | Simulations in situ | À venir |
 | 6 | Documents, FAQ, « Je suis prêt(e) » | À venir |

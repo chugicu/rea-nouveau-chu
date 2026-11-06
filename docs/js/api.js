@@ -62,6 +62,7 @@
               { date: '', titre: 'Exemple d\'actualité', texte: 'Les référents publient les actualités depuis le Google Sheets « Base ».', epinglee: false }
             ],
             jauge: { pourcent: 38, prets: 81, effectif: 213, parFonction: parF },
+            newsletter: (function () { var l = nlDemo().filter(function (n) { return n.statut === 'publiée'; }); return l.length ? { id: l[l.length - 1].id, titre: l[l.length - 1].titre } : null; })(),
             misAJour: new Date().toISOString()
           });
         }
@@ -73,10 +74,57 @@
           return d.jeton === 'demo.agent' ? ko(new ErreurApi('non_autorise')) : ok({ ok: true });
         }
         if (action.indexOf('visite') === 0) return demoVisites(action, d, ok, ko);
+        if (action.indexOf('nl_') === 0) return demoNewsletters(action, d, ok, ko);
         if (action === 'ping') return ok({ ok: true });
         ko(new ErreurApi('action_inconnue'));
       }, 350);
     });
+  }
+
+  /* Newsletters du mode démonstration (en mémoire). Une lettre fictive est dessinée à la volée. */
+  var DN = null;
+  function pageDemo(n) {
+    var c = document.createElement('canvas'); c.width = 1240; c.height = 1754;
+    var g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#223b80'; g.fillRect(0, 0, c.width, 260);
+    g.fillStyle = '#ffffff'; g.font = 'bold 84px sans-serif'; g.fillText('Lettre de démonstration', 70, 150);
+    g.font = '40px sans-serif'; g.fillText('Page ' + n + ' – contenu fictif', 70, 215);
+    g.fillStyle = '#40a8df'; g.fillRect(70, 330, 1100, 14);
+    g.fillStyle = '#1b2a52'; g.font = 'bold 54px sans-serif'; g.fillText(n === 1 ? 'Le mot de l\'équipe projet' : 'Le point travaux', 70, 450);
+    g.font = '34px sans-serif'; g.fillStyle = '#4c5a7a';
+    for (var i = 0; i < 16; i++) g.fillRect(70, 520 + i * 62, i % 4 === 3 ? 640 : 1100, 22);
+    g.fillStyle = '#e6f1fa'; g.fillRect(70, 1540, 1100, 140);
+    g.fillStyle = '#223b80'; g.font = 'bold 36px sans-serif'; g.fillText('Mode démonstration : aucune donnée réelle', 110, 1625);
+    return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  }
+  function nlDemo() {
+    if (!DN) DN = [{ id: 'NLdemo00001', titre: 'Lettre de démonstration', parution: 'Novembre 2026', pages: 2, ratio: 1.414, ajout: '2026-11-01', statut: 'publiée', images: [] }];
+    return DN;
+  }
+  function demoNewsletters(action, d, ok, ko) {
+    var admin = d.jeton === 'demo.admin', l = nlDemo();
+    if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_invalide'));
+    function trouver() { for (var i = 0; i < l.length; i++) if (l[i].id === d.id) return l[i]; return null; }
+    if (action === 'nl_liste') return ok({ ok: true, peutGerer: admin, newsletters: l.filter(function (n) { return n.statut === 'publiée'; }).slice().reverse()
+      .map(function (n) { return { id: n.id, titre: n.titre, parution: n.parution, pages: n.pages, ratio: n.ratio, ajout: n.ajout }; }) });
+    if (action === 'nl_page') {
+      var n = trouver(); if (!n) return ko(new ErreurApi('newsletter_introuvable'));
+      if (n.id === 'NLdemo00001' && !n.images[d.page]) n.images[d.page] = pageDemo(d.page + 1);
+      return n.images[d.page] ? ok({ ok: true, page: d.page, type: 'image/jpeg', data: n.images[d.page] }) : ko(new ErreurApi('requete_invalide'));
+    }
+    if (!admin) return ko(new ErreurApi('non_autorise'));
+    if (action === 'nl_ajouter') {
+      if (!d.donnees || !d.donnees.titre || !(d.donnees.pages >= 1 && d.donnees.pages <= 16)) return ko(new ErreurApi('requete_invalide'));
+      var id = 'NL' + Math.random().toString(36).slice(2, 12).padEnd(10, '0');
+      l.push({ id: id, titre: d.donnees.titre, parution: d.donnees.parution || '', pages: d.donnees.pages, ratio: d.donnees.ratio || 1.414, ajout: new Date().toISOString().slice(0, 10), statut: 'brouillon', images: [] });
+      return ok({ ok: true, id: id });
+    }
+    var x = trouver(); if (!x) return ko(new ErreurApi('newsletter_introuvable'));
+    if (action === 'nl_envoyer_page') { if (!/^\/9j\//.test(d.data || '')) return ko(new ErreurApi('requete_invalide')); x.images[d.page] = d.data; return ok({ ok: true, page: d.page }); }
+    if (action === 'nl_publier') { for (var k = 0; k < x.pages; k++) if (!x.images[k]) return ko(new ErreurApi('newsletter_incomplete')); x.statut = 'publiée'; return ok({ ok: true }); }
+    if (action === 'nl_retirer') { x.statut = 'retirée'; x.images = []; return ok({ ok: true }); }
+    ko(new ErreurApi('action_inconnue'));
   }
 
   /* Visites fictives du mode démonstration (en mémoire, perdues au rechargement) */

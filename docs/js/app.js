@@ -5,7 +5,7 @@
   var Api = window.ReaApi;
   var cfg = window.REA_CONFIG || {};
   var FUSEAU = 'America/Guadeloupe';
-  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites' };
+  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites', nlLues: 'rea.nl-lues' };
   var LOGO_CHU = 'assets/logos/chu-guadeloupe.png'; // logo officiel, jamais modifié (charte FI/COM/001, p. 10 à 18)
   var app = document.getElementById('app');
   var zoneBandeaux = document.getElementById('bandeaux');
@@ -48,6 +48,7 @@
     visites: I('<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M9 15l2 2 4-4"/>'),
     quiz: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5h.01"/>'),
     simulations: I('<path d="M3 12h4l2-5 4 10 2-5h6"/>'),
+    newsletter: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h6M7 12h10M7 16h10"/><rect x="15" y="7" width="3" height="2.5"/>'),
     docs: I('<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/>'),
     pret: I('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
     cadenas: I('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
@@ -57,6 +58,7 @@
   var MODULES = [
     { id: 'plan', nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
     { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
+    { id: 'newsletter', nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
     { id: 'quiz', nom: 'Quiz', desc: 'Vérifier ce que l\'on sait du nouveau service', etape: 4 },
     { id: 'simulations', nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
@@ -88,6 +90,8 @@
     creneau_introuvable: 'Ce créneau n\'existe plus (il a peut-être été annulé).',
     reservation_introuvable: 'Réservation introuvable : elle a peut-être déjà été annulée.',
     places_insuffisantes: 'Il y a déjà plus d\'inscrits que ce nombre de places.',
+    newsletter_introuvable: 'Cette newsletter n\'est plus disponible.',
+    newsletter_incomplete: 'Toutes les pages n\'ont pas été reçues. Réessayez.',
     erreur_serveur: 'Le serveur a rencontré un problème. Réessayez dans un instant.'
   };
   function message(code) { return MESSAGES[code] || MESSAGES.erreur_serveur; }
@@ -238,7 +242,7 @@
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
       sectionJauge(d.jauge),
       sectionBadges(),
-      sectionModules(role),
+      sectionModules(role, d),
       sectionActus(d.actualites),
       piedDePage()));
     app.focus({ preventScroll: true });
@@ -297,7 +301,8 @@
       })));
   }
 
-  function sectionModules(role) {
+  function sectionModules(role, d) {
+    var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, MODULES.map(function (m) {
@@ -306,6 +311,7 @@
           h('div', { class: 'module__texte' },
             h('div', { class: 'module__nom', text: m.nom }),
             h('div', { class: 'module__desc', text: m.desc })),
+          m.id === 'newsletter' && nlNeuve ? h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }) : null,
           m.ouvrir ? h('span', { class: 'module__fleche', 'aria-hidden': 'true', text: '›' }) : h('span', { class: 'module__etat', text: 'Bientôt' })];
         return h('li', { class: 'module' + (m.ouvrir ? ' module--actif' : '') },
           m.ouvrir ? h('button', { type: 'button', class: 'module__bouton', onclick: m.ouvrir }, contenu) : contenu);
@@ -659,6 +665,177 @@
           h('button', { class: 'bouton', type: 'button', onclick: ecranPlan, text: 'Réessayer' }));
       });
     });
+  }
+
+  /* ---------- Newsletters ---------- */
+  // Pages gardées sur le téléphone (lecture sans réseau), effacées à la déconnexion
+  function cleNl(id, k) { return 'nl/' + id + '/' + k; }
+  function nlDepuisCache(cle) {
+    if (!window.caches) return Promise.resolve(null);
+    return caches.open(CACHE_DONNEES).then(function (c) { return c.match(cle); }).catch(function () { return null; });
+  }
+  function nlEnCache(cle, reponse) {
+    if (!window.caches || !stock.lire(CLE.session)) return;
+    caches.open(CACHE_DONNEES).then(function (c) { return c.put(cle, reponse); }).catch(function () {});
+  }
+  function b64EnBlob(b64, type) {
+    var bin = atob(b64), n = bin.length, octets = new Uint8Array(n);
+    for (var i = 0; i < n; i++) octets[i] = bin.charCodeAt(i);
+    return new Blob([octets], { type: type || 'image/jpeg' });
+  }
+  function pageNl(session, id, k) { // → Blob de l'image
+    return nlDepuisCache(cleNl(id, k)).then(function (r) {
+      if (r) return r.blob();
+      return Api.appeler('nl_page', { jeton: session.jeton, id: id, page: k }).then(function (p) {
+        var b = b64EnBlob(p.data, p.type);
+        nlEnCache(cleNl(id, k), new Response(b, { headers: { 'Content-Type': 'image/jpeg' } }));
+        return b;
+      });
+    });
+  }
+  function titreNl(n) { return n.titre + (n.parution ? ' – ' + n.parution : ''); }
+
+  function ecranNewsletters(messageFlash) {
+    ecranCourant = ecranNewsletters;
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var zone = h('div', { class: 'nl' }, h('div', { class: 'squelette', style: 'height:140px' }), h('div', { class: 'squelette', style: 'height:140px;margin-top:12px' }));
+    afficher(h('div', { class: 'page' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour à l\'accueil', onclick: ecranAccueil, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: 'Newsletter' }),
+        h('span', { class: 'entete__role', text: session.role === 'admin' ? 'Administrateur' : 'Actu Réa' })),
+      messageFlash ? h('p', { class: 'flash', role: 'status', text: messageFlash }) : null,
+      zone));
+    window.scrollTo(0, 0);
+    function dessiner(d, depuisCache) {
+      if (!zone.isConnected) return;
+      var l = d.newsletters || [];
+      zone.replaceChildren.apply(zone, [
+        d.peutGerer && !depuisCache ? sectionAjoutNl(session) : null,
+        l.length ? h('ul', { class: 'nl__liste' }, l.map(function (n, i) {
+          var lu = (stock.lire(CLE.nlLues) || {})[n.id];
+          return h('li', null, h('div', { class: 'carte-nl' },
+            h('button', { type: 'button', class: 'carte-nl__ouvrir', onclick: function () { lireNewsletter(n); } },
+              h('span', { class: 'carte-nl__vignette', 'data-id': n.id, style: 'aspect-ratio:1/' + (n.ratio || 1.414) }),
+              h('span', { class: 'carte-nl__texte' },
+                !lu ? h('span', { class: 'etiquette etiquette--nouveau', text: 'Nouveau' }) : (i === 0 ? h('span', { class: 'etiquette', text: 'Dernier numéro' }) : null),
+                h('b', { class: 'carte-nl__titre', text: n.titre }),
+                h('span', { class: 'carte-nl__info', text: (n.parution ? n.parution + ' · ' : '') + n.pages + ' page' + (n.pages > 1 ? 's' : '') }),
+                h('span', { class: 'carte-nl__lire', text: 'Lire ›' }))),
+            d.peutGerer && !depuisCache ? h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger carte-nl__retirer', onclick: function (ev) {
+              var b = ev.currentTarget; if (b.dataset.confirme !== '1') { b.dataset.confirme = '1'; b.textContent = 'Confirmer : retirer de l\'appli'; return; }
+              b.disabled = true;
+              Api.appeler('nl_retirer', { jeton: session.jeton, id: n.id }).then(function () { ecranNewsletters('Newsletter retirée.'); })
+                .catch(function (e) { b.disabled = false; alerteDouce(b.parentNode, message(e.code)); });
+            }, text: 'Retirer' }) : null));
+        })) : h('p', { class: 'vide', text: 'Aucune newsletter pour le moment.' }),
+        h('p', { class: 'section__note nl__note', text: 'Les newsletters lues restent consultables sans réseau sur ce téléphone, jusqu\'à la déconnexion.' })].filter(Boolean));
+      // vignettes : première page (en cache ou téléchargée)
+      zone.querySelectorAll('.carte-nl__vignette').forEach(function (v) {
+        pageNl(session, v.getAttribute('data-id'), 0).then(function (b) {
+          var img = h('img', { alt: '', src: URL.createObjectURL(b) }); v.replaceChildren(img); v.classList.add('carte-nl__vignette--ok');
+        }).catch(function () { /* vignette absente hors ligne : sans gravité */ });
+      });
+    }
+    nlDepuisCache('nl/liste').then(function (r) { return r ? r.json() : null; }).then(function (c) {
+      if (c) dessiner(c, true);
+      return Api.appeler('nl_liste', { jeton: session.jeton }).then(function (d) {
+        nlEnCache('nl/liste', new Response(JSON.stringify({ newsletters: d.newsletters }), { headers: { 'Content-Type': 'application/json' } }));
+        majBandeaux({ horsLigne: false }); dessiner(d, false);
+      }).catch(function (e) {
+        if (ERREURS_SESSION.indexOf(e.code) >= 0) { stock.effacer(CLE.session); return ecranConnexion(message(e.code)); }
+        if (e.code === 'reseau') majBandeaux({ horsLigne: true, depuis: null });
+        if (!c) zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }), h('button', { class: 'bouton', type: 'button', onclick: function () { ecranNewsletters(); }, text: 'Réessayer' }));
+      });
+    });
+  }
+
+  function lireNewsletter(n) {
+    ecranCourant = null; // pas de rechargement automatique pendant la lecture
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var lues = stock.lire(CLE.nlLues) || {}; lues[n.id] = 1; stock.ecrire(CLE.nlLues, lues);
+    var pages = [];
+    for (var k = 0; k < n.pages; k++) pages.push(h('figure', { class: 'nl-page', style: 'aspect-ratio:1/' + (n.ratio || 1.414) },
+      h('div', { class: 'squelette nl-page__attente' }), h('figcaption', { class: 'visuellement-cache', text: 'Page ' + (k + 1) + ' sur ' + n.pages })));
+    afficher(h('div', { class: 'page page--large page--nl' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour aux newsletters', onclick: function () { ecranNewsletters(); }, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: n.titre }),
+        h('span', { class: 'entete__role', text: n.parution || '' })),
+      h('p', { class: 'section__note nl__aide', text: 'Écartez deux doigts pour zoomer sur une page.' }),
+      h('div', { class: 'nl-pages' }, pages),
+      h('button', { type: 'button', class: 'bouton bouton--discret nl__retour', onclick: function () { ecranNewsletters(); }, text: '‹ Toutes les newsletters' })));
+    window.scrollTo(0, 0);
+    // chargement page après page (la première s'affiche vite)
+    (function suivante(k) {
+      if (k >= n.pages || !pages[k].isConnected) return;
+      pageNl(session, n.id, k).then(function (b) {
+        var img = h('img', { alt: 'Page ' + (k + 1) + ' sur ' + n.pages + ' de ' + titreNl(n), src: URL.createObjectURL(b), decoding: 'async' });
+        pages[k].replaceChildren(img); pages[k].classList.add('nl-page--ok');
+        suivante(k + 1);
+      }).catch(function (e) {
+        pages[k].replaceChildren(h('div', { class: 'nl-page__erreur' }, h('p', { text: e.code === 'reseau' ? 'Page non disponible sans réseau.' : message(e.code) }),
+          h('button', { type: 'button', class: 'bouton', onclick: function () { pages[k].replaceChildren(h('div', { class: 'squelette nl-page__attente' })); suivante(k); }, text: 'Réessayer' })));
+      });
+    })(0);
+  }
+
+  function sectionAjoutNl(session) {
+    var fichier = h('input', { type: 'file', id: 'nl-fichier', accept: 'application/pdf,.pdf' });
+    var titre = h('input', { type: 'text', id: 'nl-titre', maxlength: '80', placeholder: 'Ex. : Actu Réa #2', required: true });
+    var parution = h('input', { type: 'text', id: 'nl-parution', maxlength: '40', placeholder: 'Ex. : Octobre 2026' });
+    var etat = h('p', { class: 'section__note', role: 'status' }), erreur = h('p', { class: 'message-erreur', role: 'alert' });
+    var apercu = h('div', { class: 'nl-apercu' });
+    var bouton = h('button', { class: 'bouton', type: 'submit', text: 'Publier la newsletter', disabled: true });
+    var conversion = null;
+    function majBouton() { bouton.disabled = !conversion || !titre.value.trim(); }
+    titre.addEventListener('input', majBouton);
+    fichier.addEventListener('change', function () {
+      conversion = null; majBouton(); erreur.textContent = ''; apercu.replaceChildren();
+      var f = fichier.files && fichier.files[0]; if (!f) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { erreur.textContent = 'Choisissez un fichier PDF.'; return; }
+      if (f.size > 40 * 1024 * 1024) { erreur.textContent = 'Ce PDF dépasse 40 Mo.'; return; }
+      etat.textContent = 'Préparation du convertisseur…'; fichier.disabled = true;
+      window.ReaPdf.convertir(f, function (n, t) { etat.textContent = 'Conversion en images : page ' + n + ' sur ' + t + '…'; }).then(function (r) {
+        conversion = r;
+        apercu.replaceChildren.apply(apercu, r.apercus.map(function (src, i) { return h('img', { src: src, alt: 'Aperçu page ' + (i + 1) }); }));
+        var ko = Math.round(r.pages.reduce(function (s, p) { return s + p.length * 0.75; }, 0) / 1024);
+        etat.textContent = r.pages.length + ' page' + (r.pages.length > 1 ? 's' : '') + ' converties en images haute définition (' + (ko > 1024 ? (ko / 1024).toFixed(1) + ' Mo' : ko + ' Ko') + '). Vérifiez l\'aperçu puis publiez.';
+        majBouton(); titre.focus();
+      }).catch(function (e) {
+        etat.textContent = ''; erreur.textContent = (e && e.message && !/^[a-z_]+$/.test(e.message)) ? e.message : 'Ce PDF n\'a pas pu être lu. Essayez de l\'exporter à nouveau (PDF standard).';
+      }).finally(function () { fichier.disabled = false; });
+    });
+    var form = h('form', { class: 'form-carte nl-ajout', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); if (!conversion || !titre.value.trim()) return;
+      erreur.textContent = ''; bouton.disabled = true; fichier.disabled = true;
+      var pages = conversion.pages, id = null;
+      etat.textContent = 'Création de la newsletter…';
+      Api.appeler('nl_ajouter', { jeton: session.jeton, donnees: { titre: titre.value.trim(), parution: parution.value.trim(), pages: pages.length, ratio: conversion.ratio } })
+        .then(function (r) {
+          id = r.id;
+          return pages.reduce(function (p, data, k) {
+            return p.then(function () {
+              etat.textContent = 'Envoi de la page ' + (k + 1) + ' sur ' + pages.length + '…';
+              return Api.appeler('nl_envoyer_page', { jeton: session.jeton, id: id, page: k, data: data });
+            });
+          }, Promise.resolve());
+        })
+        .then(function () { etat.textContent = 'Publication…'; return Api.appeler('nl_publier', { jeton: session.jeton, id: id }); })
+        .then(function () { ecranNewsletters('Newsletter publiée : elle est visible par toute l\'équipe.'); })
+        .catch(function (e) { etat.textContent = ''; erreur.textContent = message(e.code) + ' La newsletter n\'a pas été publiée.'; bouton.disabled = false; fichier.disabled = false; });
+    } },
+      h('h3', { text: 'Ajouter une newsletter' }),
+      h('p', { class: 'section__note', text: 'Choisissez le PDF : il est converti en images sur cet appareil, puis seules les images sont envoyées.' }),
+      h('div', { class: 'champ' }, h('label', { for: 'nl-fichier', text: 'Fichier PDF' }), fichier),
+      etat, apercu,
+      h('div', { class: 'grille-2' },
+        h('div', { class: 'champ' }, h('label', { for: 'nl-titre', text: 'Titre' }), titre),
+        h('div', { class: 'champ' }, h('label', { for: 'nl-parution', text: 'Parution' }), parution)),
+      erreur, bouton);
+    return h('details', { class: 'section nl-admin' }, h('summary', { text: '+ Ajouter une newsletter' }), form);
   }
 
   function deconnexion() {
