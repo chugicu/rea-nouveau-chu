@@ -5,6 +5,7 @@
  * Étape 1 : installation, connexion par codes, accueil.
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
  * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
+ * 1.3 : modification de la forme du plan (déplacer, redimensionner, supprimer, ajouter une pièce).
  *
  * Principes :
  *  - Aucune donnée de santé. Aucun compte Google demandé aux agents.
@@ -19,7 +20,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.2.0',
+  version: '1.3.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -253,8 +254,16 @@ function reglagesPlan_() {
   var p = ss.getSheetByName(ONGLETS.pieces).getDataRange().getValues();
   for (var i = 1; i < p.length; i++) {
     var id = String(p[i][0] || '').trim(); if (!id) continue;
-    r.pieces[id] = { nom: String(p[i][1] || ''), precision: String(p[i][2] || ''), categorie: String(p[i][3] || '') || null,
-                     icone: String(p[i][4] || '') || null, couleur: String(p[i][5] || '') || null };
+    var o = {}, nom = String(p[i][1] || '');
+    if (nom) { o.nom = nom; o.precision = String(p[i][2] || ''); }
+    if (p[i][3]) o.categorie = String(p[i][3]);
+    if (p[i][4]) o.icone = String(p[i][4]);
+    if (p[i][5]) o.couleur = String(p[i][5]);
+    var forme = String(p[i][8] || '').split(',').map(Number);
+    if (forme.length === 4 && forme.every(isFinite)) o.forme = forme;
+    if (p[i][9] === true) o.supprimee = true;
+    if (p[i][10] === true) o.ajout = true;
+    r.pieces[id] = o;
   }
   var c = ss.getSheetByName(ONGLETS.categories).getDataRange().getValues();
   for (var j = 1; j < c.length; j++) {
@@ -275,18 +284,29 @@ function couleurValide_(v) { return v == null || v === '' ? '' : (/^#[0-9a-fA-F]
 /** Désigne (ou modifie) une pièce. donnees = null : retour au plan d'origine. */
 function planPiece_(session, id, d) {
   id = String(id || '');
-  if (!/^P\d{3}$/.test(id)) throw erreurApp_('requete_invalide');
+  if (!/^(P\d{3}|N[a-z0-9]{6,12})$/.test(id)) throw erreurApp_('requete_invalide'); // P… : pièce du plan, N… : pièce ajoutée
   var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
   try {
     var sh = classeur_().getSheetByName(ONGLETS.pieces), v = sh.getDataRange().getValues(), ligne = -1;
     for (var i = 1; i < v.length; i++) if (String(v[i][0]) === id) { ligne = i + 1; break; }
     if (d == null) { if (ligne > 0) sh.deleteRow(ligne); return { ok: true }; }
-    var nom = nettoyerTexte_(d.nom, 40), precision = nettoyerTexte_(d.precision, 40);
-    var categorie = PLAN.categories.indexOf(d.categorie) >= 0 ? d.categorie : null;
+    var nom = nettoyerTexte_(d.nom, 40), precision = nom ? nettoyerTexte_(d.precision, 40) : '';
+    if (d.categorie != null && d.categorie !== '' && PLAN.categories.indexOf(d.categorie) < 0) throw erreurApp_('requete_invalide');
+    var categorie = d.categorie ? d.categorie : (nom ? 'autre' : '');
     var icone = PLAN.icones.indexOf(d.icone) >= 0 ? d.icone : null, couleur = couleurValide_(d.couleur);
-    if (!nom || !categorie || couleur === null) throw erreurApp_('requete_invalide');
-    var valeurs = [[id, nom, precision, categorie, icone || '', couleur, new Date(), session.n || 'Administrateur']];
-    if (ligne > 0) sh.getRange(ligne, 1, 1, 8).setValues(valeurs); else sh.appendRow(valeurs[0]);
+    var forme = '';
+    if (d.forme != null) {
+      var f = Array.isArray(d.forme) ? d.forme.map(Number) : [];
+      var ok = f.length === 4 && f.every(function (n) { return isFinite(n) && n > -2000 && n < 6000; }) && f[2] - f[0] >= 10 && f[3] - f[1] >= 10;
+      if (!ok) throw erreurApp_('requete_invalide');
+      forme = f.map(Math.round).join(',');
+    }
+    var supprimee = d.supprimee === true, ajout = /^N/.test(id);
+    if (ajout && !forme) throw erreurApp_('requete_invalide');            // une pièce ajoutée a forcément une forme
+    if (!nom && !forme && !supprimee && !couleur) throw erreurApp_('requete_invalide');
+    if (couleur === null) throw erreurApp_('requete_invalide');
+    var valeurs = [[id, nom, precision, categorie, icone || '', couleur, new Date(), session.n || 'Administrateur', forme, supprimee, ajout]];
+    if (ligne > 0) sh.getRange(ligne, 1, 1, 11).setValues(valeurs); else sh.appendRow(valeurs[0]);
     return { ok: true };
   } finally { verrou.releaseLock(); }
 }
@@ -578,7 +598,8 @@ function installer() {
   ]);
   creerOnglet_(ss, ONGLETS.prets, ['Horodatage', 'Fonction'], []);
   creerOnglet_(ss, ONGLETS.referents, ['Référent', 'Statut', 'Dernière modification'], []);
-  creerOnglet_(ss, ONGLETS.pieces, ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par'], []);
+  creerOnglet_(ss, ONGLETS.pieces, ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée'], []);
+  completerEntetes_(ss.getSheetByName(ONGLETS.pieces), ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée']);
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
   creerOnglet_(ss, ONGLETS.inscriptions, ['ID', 'ID créneau', 'Prénom', 'Initiale', 'Fonction', 'Code (chiffré)', 'Inscrit le', 'Présent'], []);
@@ -693,6 +714,12 @@ function classeur_() {
   if (!ss) throw new Error('Ouvrez ce script depuis le Google Sheets « Base » (Extensions > Apps Script).');
   PropertiesService.getScriptProperties().setProperty('CLASSEUR_ID', ss.getId());
   return ss;
+}
+
+function completerEntetes_(sh, entetes) { // ajoute les colonnes apparues dans une nouvelle version
+  var actuels = sh.getRange(1, 1, 1, entetes.length).getValues()[0];
+  if (actuels.join('|') === entetes.join('|')) return;
+  sh.getRange(1, 1, 1, entetes.length).setValues([entetes]).setFontWeight('bold').setBackground('#223b80').setFontColor('#ffffff');
 }
 
 function ajouterParametre_(ss, nom, aide) { // pour les bases installées avant l'ajout d'un paramètre

@@ -199,9 +199,35 @@ Les désignations sont rattachées à un identifiant de pièce (P001, P002…) :
 | Agent | S'inscrire (prénom, initiale du nom, fonction), noter son code de réservation, annuler | Appli > Visites des locaux |
 
 - **Badge « Visite faite »** : attribué quand un référent coche la présence, ou quand l'agent touche « J'ai fait la visite » après l'heure du créneau.
-- **Badge « Plan exploré »** : attribué quand les 8 lieux du **Parcours de découverte** (sous le plan) ont été trouvés.
+- **Badge « Plan exploré »** : attribué dès que **8 pièces différentes** du plan ont été touchées (n'importe lesquelles).
 - Les badges restent sur le téléphone de chacun : aucun suivi individuel.
 - **Protection des données** : prénom, initiale et fonction sont effacés automatiquement chaque nuit après **J+30** (si la Date J est renseignée). Effacement manuel possible : **Réa – Administration > Effacer les inscriptions aux visites**.
+
+---
+
+## Partie H – Version 1.3 : exports, modification du plan, plein écran
+
+### H1. Mettre à jour le moteur (5 minutes)
+1. Collez le nouveau `apps-script/Code.gs` **et** `appsscript.json` à la place des anciens (comme en G1). **Enregistrer**.
+   (Si vous n'aviez pas encore fait la partie G, cette mise à jour la comprend : faites seulement H.)
+2. Dans le Sheets : **Réa – Administration > 1. Installer / réparer la base** (acceptez l'autorisation si Google la demande). L'onglet **Pièces** reçoit trois colonnes de plus : *Forme*, *Supprimée*, *Ajoutée*.
+3. **Déployer > Gérer les déploiements > crayon > Version : Nouvelle version > Déployer**.
+4. Sur les téléphones, l'appli se met à jour seule (fermer puis rouvrir l'appli si besoin).
+
+### H2. Nouveautés
+| Qui | Quoi | Où |
+|---|---|---|
+| Référent / admin | Exporter la liste des visiteurs en **Excel** ou en **PDF** | Visites des locaux > **Exporter** |
+| Référent / admin | Imprimer la **feuille d'émargement** d'un créneau (avec colonne signature) | Carte du créneau > **Émargement (PDF)** |
+| Référent / admin | Déplacer ou redimensionner une pièce | Plan > toucher la pièce > **Modifier la forme** (faire glisser les ronds blancs) > **Enregistrer la forme** |
+| Référent / admin | Ajouter une pièce | Plan > **+ Pièce** > dessiner un rectangle du doigt > nom, catégorie, icône |
+| Référent / admin | Retirer une pièce, puis la remettre si besoin | Plan > pièce > **Supprimer la pièce** ; filtre **Pièces supprimées** > **Remettre la pièce sur le plan** |
+| Référent / admin | Annuler une modification de forme | Plan > pièce > **Rétablir la forme d'origine** |
+| Tous | Plan en **plein écran** | Bouton ⛶ en bas des boutons de zoom. Toucher une pièce : sa fiche s'affiche en bas. Toucher hors d'une pièce : le bandeau du haut (recherche, types de pièces) s'affiche ou se masque. |
+
+- Les fichiers exportés contiennent des données personnelles (prénom, initiale, fonction) : usage interne, à détruire après usage. Ils sont fabriqués sur le téléphone ou l'ordinateur : rien n'est envoyé à un service extérieur.
+- Toutes les modifications du plan sont dans l'onglet **Pièces** du Sheets : effacer une ligne rend à la pièce son état d'origine.
+- **Logo du CHU** : le logo officiel (extrait sans modification de la charte, taille ≥ 50 px, fond blanc, zone de protection respectée) figure sur l'écran de connexion, l'accueil et les PDF. Faire valider par le service communication, seul habilité à fournir les fichiers officiels.
 
 ---
 

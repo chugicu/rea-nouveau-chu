@@ -110,10 +110,30 @@
       }
       if (!p.centre) p.centre = [(p.bbox[0] + p.bbox[2]) / 2, (p.bbox[1] + p.bbox[3]) / 2];
     });
+    function rectD(r) { return 'M' + r[0] + ',' + r[1] + ' H' + r[2] + ' V' + r[3] + ' H' + r[0] + 'Z'; }
+    var ORIGINE = {}; D.pieces.forEach(function (p) { ORIGINE[p.id] = p; });
+    var LISTE = []; // pièces telles qu'affichées (plan d'origine + modifications des référents)
+    function recalculer() {
+      LISTE = [];
+      D.pieces.forEach(function (p) {
+        var r = R.pieces[p.id] || {};
+        if (r.forme) LISTE.push(Object.assign({}, p, { d: rectD(r.forme), bbox: r.forme.slice(), centre: [(r.forme[0] + r.forme[2]) / 2, (r.forme[1] + r.forme[3]) / 2], supprimee: !!r.supprimee }));
+        else LISTE.push(r.supprimee ? Object.assign({}, p, { supprimee: true }) : p);
+      });
+      Object.keys(R.pieces).forEach(function (id) {
+        var r = R.pieces[id];
+        if (ORIGINE[id] || !r.ajout || !r.forme) return;
+        LISTE.push({ id: id, type: 'piece', ajout: true, d: rectD(r.forme), bbox: r.forme.slice(), centre: [(r.forme[0] + r.forme[2]) / 2, (r.forme[1] + r.forme[3]) / 2] });
+      });
+    }
+    recalculer();
     var VB0 = D.viewBox.slice();
     // Vue de départ : l'aile réanimation (moitié nord), titres compris
     var VUE_REA = [VB0[0], VB0[1], VB0[2], Math.min(VB0[3], (D.batiment[1] + 1500) - VB0[1])];
-    var etat = { mode: opt.mode === 'icones' ? 'icones' : 'texte', filtre: 'tout', choix: null, vb: null };
+    var etat = { mode: opt.mode === 'icones' ? 'icones' : 'texte', filtre: 'tout', choix: null, vb: null,
+                 edition: null,   // { id, r: [x0,y0,x1,y1] } : forme en cours de modification
+                 ajout: false,    // mode « dessiner une nouvelle pièce »
+                 plein: false };  // mode plein écran
 
     /* Infos effectives d'une pièce (réglages des référents > données du plan) */
     function infos(p) {
@@ -146,15 +166,17 @@
     var filtres = h('div', { class: 'plan__filtres', role: 'group', 'aria-label': 'Afficher une catégorie' });
     function listeFiltres() {
       var l = [{ id: 'tout', nom: 'Tout' }, { id: 'chambres', nom: 'Chambres' }].concat(CATEGORIES.filter(function (c) { return c.id !== 'exterieur' && c.id !== 'autre'; }));
-      if (opt.peutModifier) l.push({ id: 'adesigner', nom: 'À désigner' });
+      if (opt.peutModifier) l.push({ id: 'adesigner', nom: 'À désigner' }, { id: 'supprimees', nom: 'Pièces supprimées' });
       filtres.replaceChildren.apply(filtres, l.map(function (f) {
-        var coul = f.id === 'tout' || f.id === 'chambres' || f.id === 'adesigner' ? null : couleurCat(f.id);
+        var coul = f.id === 'tout' || f.id === 'chambres' || f.id === 'adesigner' || f.id === 'supprimees' ? null : couleurCat(f.id);
         return h('button', { type: 'button', 'data-filtre': f.id, 'aria-pressed': String(etat.filtre === f.id), onclick: function () { etat.filtre = f.id; majBoutons(); dessiner(); } },
           coul ? h('i', { style: 'background:' + coul }) : null, f.nom);
       }));
     }
     function couleurCat(id) { return (R.categories[id] && R.categories[id].couleur) || (CAT[id] && CAT[id].couleur) || '#6b7586'; }
     barre.append(h('div', { class: 'plan__cherche' }, recherche, resultats), modes);
+    var boutonAjout = opt.peutModifier ? h('button', { type: 'button', class: 'plan__ajout', 'aria-pressed': 'false', onclick: function () { basculerAjout(); }, text: '+ Pièce' }) : null;
+    if (boutonAjout) barre.appendChild(boutonAjout);
 
     var cadre = h('div', { class: 'plan__cadre' });
     var svg = el('svg', { 'class': 'plan__svg', role: 'img', 'aria-label': 'Plan du niveau 3 : réanimation et USC', 'font-family': 'Barlow, PT Sans, sans-serif' });
@@ -163,11 +185,18 @@
       h('button', { type: 'button', 'aria-label': 'Zoomer', onclick: function () { zoomer(0.7); }, text: '+' }),
       h('button', { type: 'button', 'aria-label': 'Dézoomer', onclick: function () { zoomer(1 / 0.7); }, text: '–' }),
       h('button', { type: 'button', 'aria-label': 'Revenir à la vue de départ', onclick: function () { etat.vb = null; appliquerVB(); }, text: '⤢' }),
-      h('button', { type: 'button', 'aria-label': 'Voir tout l\'étage', title: 'Tout l\'étage', onclick: function () { etat.vb = VB0.slice(); appliquerVB(); }, text: '▢' }));
+      h('button', { type: 'button', 'aria-label': 'Voir tout l\'étage', title: 'Tout l\'étage', onclick: function () { etat.vb = VB0.slice(); appliquerVB(); }, text: '▢' }),
+      h('button', { type: 'button', class: 'plan__btn-plein', 'aria-label': 'Plein écran', title: 'Plein écran', onclick: function () { basculerPlein(); } }));
+    var ICONE_PLEIN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>';
+    var ICONE_QUITTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    zoom.lastChild.innerHTML = ICONE_PLEIN; // constante interne
+    var aideAjout = h('p', { class: 'plan__aide-ajout', hidden: true, text: 'Faites glisser le doigt sur le plan pour dessiner la nouvelle pièce.' });
     cadre.appendChild(zoom);
+    cadre.appendChild(aideAjout);
     var fiche = h('section', { class: 'plan__fiche', hidden: true, 'aria-live': 'polite' });
     cadre.appendChild(fiche);
-    remplir(racine, barre, filtres, cadre);
+    var entetePlein = h('div', { class: 'plan__entete' }, barre, filtres);
+    remplir(racine, entetePlein, cadre);
     listeFiltres();
 
     function majBoutons() {
@@ -181,6 +210,7 @@
       if (f === 'tout') return true;
       if (f === 'chambres') return p.type === 'chambre';
       if (f === 'adesigner') return p.type === 'piece' && !inf.nom;
+      if (f === 'supprimees') return !!p.supprimee;
       return p.type === 'piece' && inf.categorie === f;
     }
     function dessiner() {
@@ -192,7 +222,8 @@
         var t = el('text', { x: (pa[0] + pa[2]) / 2, y: (pa[1] + pa[3]) / 2 + 14, 'text-anchor': 'middle', 'font-size': 42, 'font-weight': 600, fill: '#6c8f1d', opacity: filtre ? 0.4 : 1 }, svg); t.textContent = 'Patio';
       });
       var calqueTexte = el('g', { 'class': 'plan__textes', 'pointer-events': 'none' });
-      D.pieces.forEach(function (p) {
+      LISTE.forEach(function (p) {
+        if (p.supprimee && etat.filtre !== 'supprimees') return; // pièce retirée du plan par un référent
         var inf = infos(p), vis = visible(p, inf), fond, trait, ep = 3, dash = null;
         if (p.type === 'chambre') {
           var u = p.unite && D.unites[p.unite];
@@ -207,6 +238,7 @@
           fond = c ? melange(c, 0.22) : '#e9edf3'; trait = c ? c : '#8e9ab0'; ep = c ? 5 : 3;
         }
         if (filtre && !vis && (p.type === 'piece' || p.type === 'chambre' && p.unite)) { fond = '#f1f3f6'; trait = '#d3d8e0'; ep = 2; dash = null; }
+        if (p.supprimee) { fond = '#fdecea'; trait = '#d93a2f'; ep = 5; dash = '16 10'; }
         var cible = p.type === 'piece' || p.type === 'chambre' || p.type === 'terrasse';
         el('path', { d: p.d, fill: fond, stroke: trait, 'stroke-width': etat.choix === p.id ? 12 : ep, 'stroke-dasharray': dash,
           'data-id': cible ? p.id : null, 'class': cible ? 'plan__piece' + (etat.choix === p.id ? ' plan__piece--choisie' : '') : null }, svg);
@@ -217,7 +249,70 @@
       svg.appendChild(calqueTexte);
       el('rect', { x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], rx: 10, fill: 'none', stroke: '#223b80', 'stroke-width': 10, 'pointer-events': 'none' }, svg);
       titres();
+      dessinerEdition();
       appliquerVB();
+    }
+
+    /* ----- Modification de la forme (référents) ----- */
+    var calqueEdition = null;
+    function pxEnPlan(n) { var v = vbCourant(), r = svg.getBoundingClientRect(); return r.width ? n * v[2] / r.width : n * 3; }
+    function dessinerEdition() {
+      if (calqueEdition) calqueEdition.remove();
+      calqueEdition = null;
+      if (!etat.edition) return;
+      var r = etat.edition.r, rp = pxEnPlan(16);
+      calqueEdition = el('g', { 'class': 'plan__edition' }, svg);
+      el('rect', { x: r[0], y: r[1], width: r[2] - r[0], height: r[3] - r[1], fill: 'rgba(64,168,223,.18)', stroke: '#1f6fa8', 'stroke-width': pxEnPlan(3), 'stroke-dasharray': pxEnPlan(8) + ' ' + pxEnPlan(6), 'data-poignee': 'deplacer', style: 'cursor:move' }, calqueEdition);
+      [['nw', r[0], r[1]], ['ne', r[2], r[1]], ['sw', r[0], r[3]], ['se', r[2], r[3]]].forEach(function (c) {
+        el('circle', { cx: c[1], cy: c[2], r: rp, fill: '#fff', stroke: '#1f6fa8', 'stroke-width': pxEnPlan(4), 'data-poignee': c[0], style: 'cursor:nwse-resize' }, calqueEdition);
+      });
+    }
+    function versPlan(cx, cy) { var m = svg.getScreenCTM(); if (!m) return [0, 0]; var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy; var q = pt.matrixTransform(m.inverse()); return [q.x, q.y]; }
+    function arrondi5(v) { return Math.round(v / 5) * 5; }
+    function normaliser(r) { return [Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.max(r[0], r[2]), Math.max(r[1], r[3])].map(arrondi5); }
+    function commencerEdition(p) {
+      etat.edition = { id: p.id, r: p.bbox.slice().map(Math.round) };
+      dessiner(); ficheEdition(p);
+    }
+    function ficheEdition(p) {
+      var erreur = h('p', { class: 'plan__erreur', role: 'alert' });
+      var valider = h('button', { type: 'button', class: 'bouton', text: 'Enregistrer la forme', onclick: function () {
+        var r = normaliser(etat.edition.r);
+        if (r[2] - r[0] < 20 || r[3] - r[1] < 20) { erreur.textContent = 'La pièce est trop petite.'; return; }
+        valider.disabled = true;
+        enregistrer(p.id, { forme: r }).then(function () { etat.edition = null; recalculer(); dessiner(); afficherFiche(pieceEff(p.id)); })
+          .catch(function (e) { valider.disabled = false; erreur.textContent = (e && e.message) || 'Enregistrement impossible.'; });
+      } });
+      remplir(fiche, h('div', { class: 'plan__poignee' }),
+        h('h3', { text: 'Modifier la forme' }),
+        h('p', { class: 'plan__complet', text: 'Faites glisser les ronds blancs pour agrandir ou réduire la pièce, ou son centre pour la déplacer.' }),
+        erreur,
+        h('div', { class: 'plan__actions' },
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { etat.edition = null; dessiner(); afficherFiche(p); }, text: 'Annuler' }),
+          valider));
+      fiche.hidden = false;
+    }
+    /* Enregistre en fusionnant avec les réglages existants de la pièce */
+    function enregistrer(id, changements) {
+      var nouveau = changements === null ? null : Object.assign({}, R.pieces[id] || {}, changements);
+      return Promise.resolve(opt.enregistrerPiece ? opt.enregistrerPiece(id, nouveau) : null).then(function () {
+        if (nouveau === null) delete R.pieces[id]; else R.pieces[id] = nouveau;
+        recalculer();
+      });
+    }
+    function basculerAjout(forcer) {
+      etat.ajout = forcer != null ? forcer : !etat.ajout;
+      if (boutonAjout) boutonAjout.setAttribute('aria-pressed', String(etat.ajout));
+      aideAjout.hidden = !etat.ajout;
+      cadre.classList.toggle('plan__cadre--ajout', etat.ajout);
+      if (etat.ajout) { etat.edition = null; choisir(null); }
+    }
+    function nouvellePiece(r) {
+      var id = 'N' + Math.random().toString(36).slice(2, 10);
+      var p = { id: id, type: 'piece', ajout: true, d: rectD(r), bbox: r, centre: [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2] };
+      R.pieces[id] = { ajout: true, forme: r }; recalculer(); // provisoire, confirmé à l'enregistrement du formulaire
+      etat.choix = id; dessiner();
+      formulaire(p, function annuler() { delete R.pieces[id]; recalculer(); choisir(null); });
     }
 
     function etiquette(calque, p, inf) {
@@ -292,6 +387,7 @@
     function appliquerVB() {
       var v = ajuste(etat.vb || VUE_REA);
       svg.setAttribute('viewBox', v.map(function (n) { return n.toFixed(1); }).join(' '));
+      if (etat.edition && !glisse && !trace) dessinerEdition();
     }
     function vbCourant() { return ajuste(etat.vb || VUE_REA); }
     function borner(v) {
@@ -316,49 +412,105 @@
       var a = ajuste([0, 0, w, hh]); w = a[2]; hh = a[3];
       etat.vb = borner([(bb[0] + bb[2]) / 2 - w / 2, (bb[1] + bb[3]) / 2 - hh / 2, w, hh]); appliquerVB();
     }
-    var pointeurs = {}, depart = null, pinch = null, bouge = false;
-    svg.addEventListener('pointerdown', function (e) {
-      svg.setPointerCapture(e.pointerId); pointeurs[e.pointerId] = [e.clientX, e.clientY]; bouge = false;
+    var pointeurs = {}, depart = null, pinch = null, bouge = false, glisse = null, trace = null;
+    function rearmer() { // repart de la position actuelle (évite le retour au zoom précédent quand un doigt se lève)
       var ids = Object.keys(pointeurs);
-      if (ids.length === 1) depart = { x: e.clientX, y: e.clientY, vb: vbCourant() };
-      if (ids.length === 2) { var a = pointeurs[ids[0]], b = pointeurs[ids[1]]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), vb: vbCourant() }; }
+      depart = ids.length === 1 ? { x: pointeurs[ids[0]][0], y: pointeurs[ids[0]][1], vb: vbCourant() } : null;
+    }
+    svg.addEventListener('pointerdown', function (e) {
+      try { svg.setPointerCapture(e.pointerId); } catch (x) { /* ignoré */ }
+      if (e.isPrimary) { pointeurs = {}; pinch = null; } // premier doigt posé : on oublie d'éventuels doigts « fantômes » (relâchement non signalé par Safari)
+      pointeurs[e.pointerId] = [e.clientX, e.clientY];
+      var ids = Object.keys(pointeurs);
+      var poignee = e.target && e.target.getAttribute && e.target.getAttribute('data-poignee');
+      if (ids.length === 1 && poignee && etat.edition) { glisse = { type: poignee, depart: versPlan(e.clientX, e.clientY), r0: etat.edition.r.slice() }; bouge = true; return; }
+      if (ids.length === 1 && etat.ajout) { var q = versPlan(e.clientX, e.clientY); trace = { a: q, r: [q[0], q[1], q[0], q[1]] }; bouge = true; return; }
+      glisse = null; trace = null;
+      if (ids.length === 1) { bouge = false; rearmer(); }
+      if (ids.length === 2) { var a = pointeurs[ids[0]], b = pointeurs[ids[1]]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), vb: vbCourant() }; bouge = true; }
     });
     svg.addEventListener('pointermove', function (e) {
       if (!pointeurs[e.pointerId]) return;
       pointeurs[e.pointerId] = [e.clientX, e.clientY];
       var ids = Object.keys(pointeurs), r = svg.getBoundingClientRect();
+      if (glisse) { // poignée de forme
+        var q = versPlan(e.clientX, e.clientY), dx = q[0] - glisse.depart[0], dy = q[1] - glisse.depart[1], r0 = glisse.r0, n = r0.slice();
+        if (glisse.type === 'deplacer') n = [r0[0] + dx, r0[1] + dy, r0[2] + dx, r0[3] + dy];
+        if (glisse.type.indexOf('n') >= 0) n[1] = r0[1] + dy; if (glisse.type.indexOf('s') >= 0) n[3] = r0[3] + dy;
+        if (glisse.type.indexOf('w') >= 0) n[0] = r0[0] + dx; if (glisse.type.indexOf('e') >= 0 && glisse.type !== 'deplacer') n[2] = r0[2] + dx;
+        etat.edition.r = n; dessinerEdition(); return;
+      }
+      if (trace) { var t = versPlan(e.clientX, e.clientY); trace.r = [trace.a[0], trace.a[1], t[0], t[1]]; etat.edition = { id: null, r: normaliser(trace.r) }; dessinerEdition(); return; }
       if (ids.length === 2 && pinch) {
         var a = pointeurs[ids[0]], b = pointeurs[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-        etat.vb = pinch.vb.slice(); zoomer(pinch.d / Math.max(d, 1), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); bouge = true; return;
+        etat.vb = pinch.vb.slice(); zoomer(pinch.d / Math.max(d, 1), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); return;
       }
-      if (depart) {
-        var dx = e.clientX - depart.x, dy = e.clientY - depart.y;
-        if (Math.abs(dx) + Math.abs(dy) > 6) bouge = true;
+      if (depart && ids.length === 1) {
+        var dx2 = e.clientX - depart.x, dy2 = e.clientY - depart.y;
+        if (Math.abs(dx2) + Math.abs(dy2) > 6) bouge = true;
         if (!bouge) return;
         var v = depart.vb, k = Math.min(r.width / v[2], r.height / v[3]);
-        etat.vb = borner([v[0] - dx / k, v[1] - dy / k, v[2], v[3]]); appliquerVB();
+        etat.vb = borner([v[0] - dx2 / k, v[1] - dy2 / k, v[2], v[3]]); appliquerVB();
       }
     });
     function fin(e) {
+      if (!pointeurs[e.pointerId]) return;
       var etaitSeul = Object.keys(pointeurs).length === 1;
       delete pointeurs[e.pointerId];
-      if (Object.keys(pointeurs).length < 2) pinch = null;
-      if (!Object.keys(pointeurs).length) {
-        if (etaitSeul && !bouge && e.type === 'pointerup') {
-          var cible = document.elementFromPoint(e.clientX, e.clientY);
-          var id = cible && cible.getAttribute && cible.getAttribute('data-id');
-          choisir(id || null);
-        }
-        depart = null;
+      var restants = Object.keys(pointeurs).length;
+      if (restants < 2) pinch = null;
+      if (restants === 1) { rearmer(); return; } // fin d'un pincement : on garde le zoom obtenu
+      if (restants) return;
+      if (glisse) { glisse = null; etat.edition.r = normaliser(etat.edition.r); dessinerEdition(); return; }
+      if (trace) {
+        var rr = normaliser(trace.r); trace = null; etat.edition = null;
+        if (rr[2] - rr[0] >= 20 && rr[3] - rr[1] >= 20) { basculerAjout(false); nouvellePiece(rr); } else dessiner();
+        return;
       }
+      if (etaitSeul && !bouge && e.type === 'pointerup') {
+        var cible = document.elementFromPoint(e.clientX, e.clientY);
+        var porteur = cible && cible.closest ? cible.closest('[data-id]') : null, id = porteur && porteur.getAttribute('data-id');
+        if (etat.edition) { /* pendant une modification de forme, un toucher ne change pas de pièce */ }
+        else if (id) choisir(id);
+        else if (etat.plein && fiche.hidden) basculerEntete();   // plein écran : toucher hors pièce = afficher/masquer le bandeau du haut
+        else choisir(null);
+      }
+      depart = null;
     }
-    svg.addEventListener('pointerup', fin); svg.addEventListener('pointercancel', fin);
+    svg.addEventListener('pointerup', fin); svg.addEventListener('pointercancel', fin); svg.addEventListener('lostpointercapture', function (e) { if (pointeurs[e.pointerId]) fin(e); });
+    // iPhone : empêche Safari de zoomer la page elle-même pendant le pincement sur le plan
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) { svg.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false }); });
+    svg.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
+    /* ----- Plein écran ----- */
+    function basculerEntete(visible) {
+      var v = visible != null ? visible : racine.classList.contains('plan--entete-cache');
+      racine.classList.toggle('plan--entete-cache', !v);
+    }
+    function basculerPlein(forcer) {
+      etat.plein = forcer != null ? forcer : !etat.plein;
+      racine.classList.toggle('plan--plein', etat.plein);
+      racine.classList.toggle('plan--entete-cache', etat.plein);
+      document.documentElement.classList.toggle('plan-plein-ouvert', etat.plein);
+      var b = cadre.querySelector('.plan__btn-plein');
+      b.setAttribute('aria-label', etat.plein ? 'Quitter le plein écran' : 'Plein écran');
+      b.title = etat.plein ? 'Quitter le plein écran' : 'Plein écran';
+      b.innerHTML = etat.plein ? ICONE_QUITTER : ICONE_PLEIN;
+      try {
+        if (etat.plein && racine.requestFullscreen && !document.fullscreenElement) racine.requestFullscreen().catch(function () {});
+        if (!etat.plein && document.fullscreenElement) document.exitFullscreen().catch(function () {});
+      } catch (x) { /* le mode plein écran « CSS » suffit (iPhone) */ }
+      setTimeout(appliquerVB, 60);
+    }
+    document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && etat.plein) basculerPlein(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && etat.plein && racine.isConnected) basculerPlein(false); });
     svg.addEventListener('wheel', function (e) { e.preventDefault(); zoomer(e.deltaY > 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
 
     /* ----- Recherche ----- */
     function index() {
       var l = [];
-      D.pieces.forEach(function (p) {
+      LISTE.forEach(function (p) {
+        if (p.supprimee) return;
         var inf = infos(p);
         if (p.type === 'chambre' && p.chambre && estRea(p)) l.push({ id: p.id, titre: 'Chambre ' + p.chambre, sous: p.unite ? D.unites[p.unite].nom : 'Brûlés ambu.', cle: p.chambre + ' chambre ' + (p.unite ? D.unites[p.unite].nom : ''), icone: null });
         else if (p.type === 'piece' && inf.nom) l.push({ id: p.id, titre: inf.nom, sous: inf.precision || (inf.categorie && CAT[inf.categorie] ? CAT[inf.categorie].nom : ''), cle: inf.nom + ' ' + inf.precision + ' ' + (inf.complet || ''), icone: inf.icone, couleur: inf.couleur || (inf.categorie ? couleurCat(inf.categorie) : null) });
@@ -379,14 +531,16 @@
     });
 
     /* ----- Fiche et modification ----- */
-    function piece(id) { for (var i = 0; i < D.pieces.length; i++) if (D.pieces[i].id === id) return D.pieces[i]; return null; }
+    function pieceEff(id) { for (var i = 0; i < LISTE.length; i++) if (LISTE[i].id === id) return LISTE[i]; return null; }
+    var piece = pieceEff;
     function choisir(id, centrer) {
       etat.choix = id; dessiner();
       var p = id && piece(id);
       if (!p) { fiche.hidden = true; return; }
+      if (etat.plein) basculerEntete(false);
       if (centrer) centrerSur(p.bbox);
       afficherFiche(p);
-      if (opt.surChoix && (p.type === 'chambre' || infos(p).nom)) opt.surChoix(p.id);
+      if (opt.surChoix) opt.surChoix(p.id);
     }
     function afficherFiche(p) {
       var inf = infos(p), titre, sous = '';
@@ -402,10 +556,25 @@
           h('button', { type: 'button', class: 'plan__fermer', 'aria-label': 'Fermer', onclick: function () { choisir(null); }, text: '×' })),
         p.type === 'piece' && inf.complet && inf.complet !== inf.nom ? h('p', { class: 'plan__complet', text: inf.complet }) : null,
         p.type === 'piece' && !inf.nom ? h('p', { class: 'plan__complet', text: opt.peutModifier ? 'Cette pièce n\'a pas encore de nom. Vous pouvez la désigner.' : 'Cette pièce n\'a pas encore été désignée par les référents.' }) : null,
-        opt.peutModifier && p.type === 'piece' ? h('button', { type: 'button', class: 'bouton', onclick: function () { formulaire(p); }, text: inf.nom ? 'Modifier cette pièce' : 'Désigner cette pièce' }) : null);
+        p.supprimee ? h('p', { class: 'plan__complet', text: 'Cette pièce a été retirée du plan par un référent.' }) : null,
+        opt.peutModifier && p.type === 'piece' && !p.supprimee ? h('button', { type: 'button', class: 'bouton', onclick: function () { formulaire(p); }, text: inf.nom ? 'Modifier le nom, l\'icône ou la couleur' : 'Désigner cette pièce' }) : null,
+        opt.peutModifier && !p.supprimee ? h('div', { class: 'plan__actions' },
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { commencerEdition(p); }, text: 'Modifier la forme' }),
+          p.type !== 'chambre' ? h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', onclick: function (ev) {
+            var b = ev.currentTarget;
+            if (b.dataset.confirme !== '1') { b.dataset.confirme = '1'; b.textContent = p.ajout ? 'Confirmer la suppression' : 'Confirmer : retirer du plan'; return; }
+            (p.ajout ? enregistrer(p.id, null) : enregistrer(p.id, { supprimee: true })).then(function () { choisir(null); });
+          }, text: 'Supprimer la pièce' }) : null) : null,
+        opt.peutModifier && p.supprimee ? h('button', { type: 'button', class: 'bouton', onclick: function () {
+          enregistrer(p.id, { supprimee: false }).then(function () { dessiner(); afficherFiche(pieceEff(p.id)); });
+        }, text: 'Remettre la pièce sur le plan' }) : null,
+        opt.peutModifier && !p.ajout && R.pieces[p.id] && (R.pieces[p.id].forme || R.pieces[p.id].supprimee) ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () {
+          var r = Object.assign({}, R.pieces[p.id]); delete r.forme; delete r.supprimee;
+          enregistrer(p.id, Object.keys(r).length ? r : null).then(function () { if (R.pieces[p.id]) { delete R.pieces[p.id].forme; delete R.pieces[p.id].supprimee; } recalculer(); dessiner(); afficherFiche(pieceEff(p.id)); });
+        }, text: 'Rétablir la forme d\'origine' }) : null);
       fiche.hidden = false;
     }
-    function formulaire(p) {
+    function formulaire(p, surAnnulation) {
       var inf = infos(p), sel = { icone: inf.icone || 'autre', couleur: (R.pieces[p.id] || {}).couleur || null, categorie: inf.categorie || 'autre' };
       var nom = h('input', { type: 'text', id: 'pl-nom', maxlength: '40', value: inf.nom || '', required: true });
       var prec = h('input', { type: 'text', id: 'pl-prec', maxlength: '40', value: inf.precision || '', placeholder: 'Ex. : 4 postes' });
@@ -434,12 +603,11 @@
         if (!nom.value.trim()) { erreur.textContent = 'Indiquez un nom pour la pièce.'; nom.focus(); return; }
         var donnees = { nom: nom.value.trim(), precision: prec.value.trim(), categorie: cat.value, icone: sel.icone, couleur: toute.checked ? null : sel.couleur };
         bouton.disabled = true; bouton.textContent = 'Enregistrement…';
-        Promise.resolve(opt.enregistrerPiece ? opt.enregistrerPiece(p.id, donnees) : null).then(function () {
-          R.pieces[p.id] = donnees;
+        enregistrer(p.id, donnees).then(function () {
           if (toute.checked && sel.couleur) {
             return Promise.resolve(opt.enregistrerCategorie ? opt.enregistrerCategorie(cat.value, { couleur: sel.couleur }) : null).then(function () { R.categories[cat.value] = { couleur: sel.couleur }; });
           }
-        }).then(function () { listeFiltres(); majBoutons(); dessiner(); afficherFiche(p); })
+        }).then(function () { listeFiltres(); majBoutons(); dessiner(); afficherFiche(pieceEff(p.id)); })
           .catch(function (e) { erreur.textContent = (e && e.message) || 'Enregistrement impossible. Réessayez.'; bouton.disabled = false; bouton.textContent = 'Enregistrer'; });
       } },
         h('h3', { text: inf.nom ? 'Modifier la pièce' : 'Désigner la pièce' }),
@@ -451,20 +619,22 @@
         h('label', { class: 'plan__case' }, toute, ' Appliquer cette couleur à toute la catégorie'),
         erreur,
         h('div', { class: 'plan__actions' },
-          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { afficherFiche(p); }, text: 'Annuler' }),
-          R.pieces[p.id] ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () {
-            Promise.resolve(opt.enregistrerPiece ? opt.enregistrerPiece(p.id, null) : null).then(function () { delete R.pieces[p.id]; dessiner(); afficherFiche(p); });
-          }, text: 'Revenir au plan d\'origine' }) : null,
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (surAnnulation) surAnnulation(); else afficherFiche(p); }, text: 'Annuler' }),
+          !p.ajout && R.pieces[p.id] && R.pieces[p.id].nom ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () {
+            var r = Object.assign({}, R.pieces[p.id]); ['nom', 'precision', 'categorie', 'icone', 'couleur'].forEach(function (k) { delete r[k]; });
+            enregistrer(p.id, Object.keys(r).length ? r : null).then(function () { dessiner(); afficherFiche(pieceEff(p.id)); });
+          }, text: 'Revenir au nom d\'origine' }) : null,
           bouton));
       remplir(fiche, h('div', { class: 'plan__poignee' }), form);
+      fiche.hidden = false; if (etat.plein) basculerEntete(false);
       majChoix(); nom.focus();
     }
 
     dessiner();
     if (window.ResizeObserver) new ResizeObserver(function () { appliquerVB(); }).observe(svg);
-    return { redessiner: dessiner, reglages: R, choisir: choisir,
+    return { redessiner: dessiner, reglages: R, choisir: choisir, pleinEcran: basculerPlein,
       // Liste des pièces avec leur nom effectif (pour le parcours de découverte)
-      pieces: function () { return D.pieces.map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
+      pieces: function () { return LISTE.filter(function (p) { return !p.supprimee; }).map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
   }
 
   window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE };

@@ -1,6 +1,6 @@
 /* Service worker : rend l'application utilisable hors ligne.
    Pensez à augmenter VERSION à chaque mise en ligne d'une nouvelle version. */
-var VERSION = 'rea-app-v1.2.0';
+var VERSION = 'rea-app-v1.3.0';
 var FICHIERS = [
   './',
   'index.html',
@@ -9,8 +9,10 @@ var FICHIERS = [
   'js/api.js',
   'js/app.js',
   'js/plan.js',
+  'js/export.js',
   'manifest.webmanifest',
   'assets/logos/reanimation-guadeloupe.png',
+  'assets/logos/chu-guadeloupe.png',
   'assets/icons/icon-192.png',
   'assets/icons/favicon.png',
   'assets/fonts/barlow-latin-600-normal.woff2',

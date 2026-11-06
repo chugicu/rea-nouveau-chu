@@ -6,6 +6,7 @@
   var cfg = window.REA_CONFIG || {};
   var FUSEAU = 'America/Guadeloupe';
   var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites' };
+  var LOGO_CHU = 'assets/logos/chu-guadeloupe.png'; // logo officiel, jamais modifié (charte FI/COM/001, p. 10 à 18)
   var app = document.getElementById('app');
   var zoneBandeaux = document.getElementById('bandeaux');
 
@@ -175,7 +176,9 @@
     afficher(h('section', { class: 'connexion', 'aria-labelledby': 'titre-connexion' },
       h('div', { class: 'connexion__carte' },
         h('div', { class: 'connexion__arc', 'aria-hidden': 'true' }),
-        h('img', { class: 'logo-rea', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '900', height: '577' }),
+        h('div', { class: 'logos logos--connexion' },
+          h('img', { class: 'logo-chu', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
+          h('img', { class: 'logo-rea', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
         h('h1', { id: 'titre-connexion', text: 'Préparons le nouveau service' }),
         h('p', { class: 'connexion__intro', text: 'Visites, plan, quiz et simulations pour être prêts le jour du déménagement.' }),
         form,
@@ -227,8 +230,9 @@
 
     afficher(h('div', { class: 'page' },
       h('header', { class: 'entete' },
-        h('span', { class: 'pastille-logo' },
-          h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '900', height: '577' })),
+        h('span', { class: 'pastille-logo logos' },
+          h('img', { class: 'logo-chu logo-chu--petit', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
+          h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
         h('span', { class: 'entete__role', text: libelleRole })),
       horizon(d),
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
@@ -328,13 +332,8 @@
   }
 
   function piedDePage() {
-    var logoChu = h('img', { class: 'logo-chu', src: cfg.LOGO_CHU || 'assets/logos/chu-guadeloupe.png', alt: 'CHU de la Guadeloupe' });
-    var bloc = h('span', { class: 'pastille-logo' }, logoChu);
-    logoChu.addEventListener('error', function () {
-      bloc.replaceWith(h('span', { class: 'logo-chu-texte', text: 'CHU de la Guadeloupe' }));
-    });
     return h('footer', { class: 'pied' },
-      bloc,
+      h('span', { class: 'pied__texte', text: 'CHU de la Guadeloupe · Réanimation – USC' }),
       h('div', { class: 'pied__actions' },
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: ecranAccueil, text: 'Actualiser' }),
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: deconnexion, text: 'Se déconnecter' })));
@@ -420,6 +419,18 @@
     var aVenir = d.creneaux.filter(function (c) { return c.date + 'T' + c.heure >= maintenant; });
     var passes = d.creneaux.filter(function (c) { return c.date + 'T' + c.heure < maintenant; }).reverse();
     var outils = d.peutModifier ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) { formulaireCreneau(ev.currentTarget.parentNode.parentNode, session, null); }, text: '+ Créer un créneau' }) : null;
+    if (d.peutModifier && d.creneaux.length) {
+      var exporter = function (format, bouton) {
+        var texte = bouton.textContent; bouton.disabled = true; bouton.textContent = 'Préparation…';
+        window.ReaExport[format](d.creneaux).catch(function () { alerteDouce(bouton.parentNode, 'Export impossible : vérifiez la connexion puis réessayez.'); })
+          .then(function () { bouton.disabled = false; bouton.textContent = texte; });
+      };
+      blocs.push(h('section', { class: 'export', 'aria-label': 'Exporter la liste des visiteurs' },
+        h('p', { class: 'export__titre', text: 'Liste des visiteurs (tous les créneaux affichés)' }),
+        h('div', { class: 'export__boutons' },
+          h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) { exporter('excel', ev.currentTarget); }, text: 'Exporter en Excel' }),
+          h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) { exporter('pdf', ev.currentTarget); }, text: 'Exporter en PDF' }))));
+    }
     blocs.push(h('section', { class: 'section', 'aria-labelledby': 't-creneaux' },
       h('div', { class: 'section__tete' }, h('h2', { id: 't-creneaux', text: 'Créneaux de visite' }), outils),
       aVenir.length ? listeCreneaux(aVenir, d, session, mesIds, false)
@@ -452,6 +463,10 @@
         if (!passes && !annule && !complet && !mien) actions.appendChild(h('button', { class: 'bouton', type: 'button', onclick: function () { formulaireInscription(carte, session, c, d.fonctions); }, text: 'M\'inscrire' }));
         if (d.peutModifier) {
           actions.appendChild(h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { formulaireCreneau(carte, session, c); }, text: 'Modifier' }));
+          actions.appendChild(h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function (ev) {
+            var b = ev.currentTarget; b.disabled = true;
+            window.ReaExport.pdf([c], { emargement: true }).catch(function () { alerteDouce(actions, 'Export impossible : vérifiez la connexion puis réessayez.'); }).then(function () { b.disabled = false; });
+          }, text: 'Émargement (PDF)' }));
           if (c.liste) carte.appendChild(listeInscrits(c, session));
         }
         carte.appendChild(actions);
@@ -590,30 +605,35 @@
     var monte = false;
     function monter(r, depuisCache) {
       monte = true;
-      var vus = stock.lire(CLE.planVu) || {}; // lieux clés déjà découverts : { poste: true, … }
+      var vus = stock.lire(CLE.planVu);       // { pieces: {P012: 1, …}, lieux: {poste: 1, …} }
+      if (!vus || !vus.pieces) vus = { pieces: {}, lieux: {} };
+      var OBJECTIF = 8;                         // badge « Plan exploré » : 8 pièces différentes, peu importe lesquelles
       var plan;
       function majDecouverte() {
-        var n = LIEUX_CLES.filter(function (l) { return vus[l.id]; }).length, fini = n === LIEUX_CLES.length;
+        var n = Math.min(OBJECTIF, Object.keys(vus.pieces).length), fini = n >= OBJECTIF;
         if (fini && window.ReaBadges && !(stock.lire(CLE.badges) || {}).plan) window.ReaBadges.attribuer('plan');
         zoneDecouverte.hidden = false;
         zoneDecouverte.replaceChildren(
-          h('div', { class: 'decouverte__tete' }, h('h2', { id: 't-decouverte', text: 'Parcours de découverte' }), h('span', { class: 'decouverte__compte', text: n + ' / ' + LIEUX_CLES.length })),
-          h('p', { class: 'section__note', text: 'Trouvez ces lieux sur le plan pour obtenir le badge « Plan exploré ». Touchez un lieu pour qu\'il vous soit montré.' }),
+          h('div', { class: 'decouverte__tete' }, h('h2', { id: 't-decouverte', text: 'Pièces explorées' }), h('span', { class: 'decouverte__compte', text: n + ' / ' + OBJECTIF })),
+          h('div', { class: 'remplissage', role: 'progressbar', 'aria-label': 'Pièces explorées', 'aria-valuemin': '0', 'aria-valuemax': String(OBJECTIF), 'aria-valuenow': String(n) },
+            h('div', { style: 'width:' + Math.round(100 * n / OBJECTIF) + '%;background:var(--succes)' })),
+          h('p', { class: 'section__note', style: 'margin-top:8px', text: 'Touchez ' + OBJECTIF + ' pièces différentes du plan (chambres, bureaux, locaux…) pour obtenir le badge « Plan exploré ». Quelques idées :' }),
           h('ul', null, LIEUX_CLES.map(function (l) {
-            return h('li', null, h('button', { type: 'button', 'aria-pressed': String(!!vus[l.id]), onclick: function () {
+            return h('li', null, h('button', { type: 'button', 'aria-pressed': String(!!vus.lieux[l.id]), onclick: function () {
               var cible = plan.pieces().filter(function (p) { return lieuDe(p.nom) === l.id; })[0];
               if (cible) { plan.choisir(cible.id, true); document.querySelector('.plan__cadre').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-            } }, h('span', { 'aria-hidden': 'true', text: vus[l.id] ? '✓' : '' }), l.nom));
+            } }, h('span', { 'aria-hidden': 'true', text: vus.lieux[l.id] ? '✓' : '' }), l.nom));
           })),
-          fini ? h('p', { class: 'decouverte__bravo', text: 'Bravo, vous connaissez les lieux essentiels du service ! Badge « Plan exploré » obtenu.' }) : null);
+          fini ? h('p', { class: 'decouverte__bravo', text: 'Bravo, vous avez exploré le plan ! Badge « Plan exploré » obtenu.' }) : null);
       }
       plan = window.ReaPlan.creer(zone, {
         donnees: r.donnees, reglages: r.reglages, peutModifier: !!r.peutModifier && !depuisCache,
         mode: stock.lire(CLE.planMode) || 'texte',
         surMode: function (m) { stock.ecrire(CLE.planMode, m); },
         surChoix: function (id) {
-          var p = plan.pieces().filter(function (x) { return x.id === id; })[0], lieu = p && lieuDe(p.nom);
-          if (lieu && !vus[lieu]) { vus[lieu] = true; stock.ecrire(CLE.planVu, vus); majDecouverte(); }
+          var p = plan.pieces().filter(function (x) { return x.id === id; })[0], lieu = p && lieuDe(p.nom), neuf = !vus.pieces[id];
+          vus.pieces[id] = 1; if (lieu) vus.lieux[lieu] = 1;
+          if (neuf || lieu) { stock.ecrire(CLE.planVu, vus); majDecouverte(); }
         },
         enregistrerPiece: function (id, d) {
           return Api.appeler('plan_piece', { jeton: session.jeton, id: id, donnees: d })

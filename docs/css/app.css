@@ -403,3 +403,38 @@ details.detail-jauge[open] summary::after { content: "–"; }
 .decouverte li button span { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--trait); display: grid; place-items: center; font-size: .75rem; }
 .decouverte li button[aria-pressed="true"] span { background: var(--succes); border-color: var(--succes); color: #fff; }
 .decouverte__bravo { margin-top: 10px; font-weight: 700; color: var(--succes); }
+
+/* ---------- Logos (charte CHU : logo non modifié, ≥ 50 px, zone de protection, toujours sur fond blanc) ---------- */
+.logos { display: flex; align-items: center; gap: 18px; }
+.logos--connexion { margin: 0 0 22px; position: relative; gap: 22px; }
+.logos--connexion .logo-chu { width: 112px; height: auto; margin: 0; }
+.logos--connexion .logo-rea { width: 150px; margin: 0; }
+.logos .logo-chu { padding: 4px; }
+.logo-chu--petit { width: 72px; height: auto; }
+.logos .logo-rea--petit { width: 104px; }
+.logos > img + img { border-left: 1px solid #d9e1ee; padding-left: 14px; }
+.pastille-logo.logos { padding: 6px 12px; gap: 10px; }
+.pied__texte { font-family: Barlow, sans-serif; font-weight: 600; color: var(--titre); }
+@media (max-width: 360px) { .logo-chu--petit { width: 60px; } .logos .logo-rea--petit { width: 86px; } }
+.export { margin-top: 14px; background: var(--surface); border-radius: var(--r-m); box-shadow: var(--ombre); padding: 12px 16px; }
+.export__titre { font-weight: 700; color: var(--titre); margin-bottom: 8px; }
+.export__boutons { display: flex; flex-wrap: wrap; gap: 8px; }
+.export__boutons .bouton { flex: 1 1 140px; width: auto; }
+
+/* ---------- Plan : plein écran, édition ---------- */
+.plan__ajout { flex: none; border: 2px solid var(--trait); background: var(--surface); color: var(--action); border-radius: 999px; padding: 8px 12px; font: 700 .95rem Barlow, sans-serif; cursor: pointer; }
+.plan__ajout[aria-pressed="true"] { background: var(--action-fond); border-color: var(--action-fond); color: #fff; }
+.plan__aide-ajout { position: absolute; left: 10px; right: 60px; top: 10px; z-index: 5; margin: 0; padding: 8px 12px; border-radius: 12px; background: #223b80; color: #fff; font-size: .9rem; pointer-events: none; }
+.plan__cadre--ajout .plan__svg { cursor: crosshair; }
+.plan__entete { display: grid; gap: 10px; }
+.plan__btn-plein { display: grid; place-items: center; }
+html.plan-plein-ouvert, html.plan-plein-ouvert body { overflow: hidden; }
+.plan--plein { position: fixed; inset: 0; z-index: 100; background: #fff; display: block; }
+.plan--plein .plan__cadre { position: absolute; inset: 0; height: auto; border-radius: 0; box-shadow: none; }
+.plan--plein .plan__entete { position: absolute; z-index: 20; left: 0; right: 0; top: 0; padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+  background: color-mix(in srgb, var(--fond) 94%, transparent); box-shadow: 0 6px 18px rgba(34,59,128,.16); transition: transform .2s ease, opacity .2s ease; }
+.plan--plein.plan--entete-cache .plan__entete { transform: translateY(-110%); opacity: 0; pointer-events: none; }
+.plan--plein .plan__zoom { top: max(10px, env(safe-area-inset-top)); transition: top .2s ease; }
+.plan--plein:not(.plan--entete-cache) .plan__zoom { top: 128px; }
+.plan--plein .plan__fiche { padding-bottom: max(18px, env(safe-area-inset-bottom)); max-height: 60%; }
+.plan--plein .plan__aide-ajout { top: max(10px, env(safe-area-inset-top)); }
