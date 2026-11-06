@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test GPS sur le plan – Réa</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#223b80">
+<link rel="icon" href="assets/icons/favicon.png" type="image/png">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  [hidden] { display: none !important; }
+  .gps-page { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }
+  .gps-tete { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .gps-tete h1 { font: 700 1.35rem/1.15 Barlow, sans-serif; color: #223b80; margin: 0; flex: 1; }
+  .gps-tete a { color: #1f6fa8; font-weight: 700; text-decoration: none; }
+  .gps-etat { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; }
+  .gps-pastille { font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #edf2f9; color: #4c5a7a; }
+  .gps-pastille--bon { background: #dff3e6; color: #046a2c; }
+  .gps-pastille--moyen { background: #fff1d6; color: #7a4a00; }
+  .gps-pastille--mauvais { background: #fde3e1; color: #a1261f; }
+  .gps-calque { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+  .gps-panneau { background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(34,59,128,.06), 0 6px 18px rgba(34,59,128,.07); padding: 14px 16px; margin-top: 14px; display: grid; gap: 10px; }
+  .gps-panneau h2 { font: 700 1.1rem/1.2 Barlow, sans-serif; color: #223b80; margin: 0; }
+  .gps-panneau p { margin: 0; color: #4c5a7a; font-size: .95rem; }
+  .gps-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .gps-boutons .bouton { flex: 1 1 auto; }
+  .gps-consigne { background: #223b80; color: #fff !important; border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+  .gps-points { margin: 0; padding-left: 20px; color: #4c5a7a; font-size: .92rem; }
+  textarea.gps-texte { width: 100%; min-height: 70px; font: 12px/1.3 ui-monospace, monospace; border: 1px solid #d9e1ee; border-radius: 10px; padding: 8px; }
+  .gps-note { font-size: .85rem; color: #4c5a7a; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="gps-page">
+  <header class="gps-tete">
+    <h1>Test GPS sur le plan</h1>
+    <a href="./">‹ Appli</a>
+  </header>
+  <p class="section__note">Page de test. Votre position est calculée <b>sur ce téléphone uniquement</b> : elle n'est ni envoyée, ni enregistrée, et personne d'autre ne la voit.</p>
+  <div class="gps-etat" id="etat"><span class="gps-pastille" id="pastille">GPS arrêté</span><span class="gps-pastille" id="calage-etat">Non calé</span></div>
+  <p class="gps-consigne" id="consigne" hidden style="margin-bottom:10px"></p>
+  <div id="zone"><div class="squelette" style="height:60vh"></div></div>
+
+  <section class="gps-panneau" id="panneau" hidden>
+    <div class="gps-boutons">
+      <button type="button" class="bouton" id="b-gps">Démarrer le GPS</button>
+      <button type="button" class="bouton bouton--discret" id="b-centrer" disabled>Centrer sur moi</button>
+    </div>
+    <h2>Caler le plan</h2>
+    <p>Le GPS donne une latitude et une longitude ; pour les placer sur le plan, il faut 2 points de calage (3 ou plus, c'est mieux), <b>éloignés d'au moins 20 m</b>, par exemple aux deux extrémités du couloir, près des fenêtres.</p>
+    <div class="gps-boutons">
+      <button type="button" class="bouton" id="b-point" disabled>+ Point de calage ici</button>
+      <button type="button" class="bouton bouton--discret" id="b-annuler" hidden>Annuler</button>
+    </div>
+    <ol class="gps-points" id="points"></ol>
+    <p id="qualite"></p>
+    <details>
+      <summary>Partager ou effacer le calage</summary>
+      <p style="margin:8px 0">Le calage ne contient aucune donnée personnelle : il peut être copié sur un autre téléphone.</p>
+      <textarea class="gps-texte" id="t-calage" aria-label="Calage (texte)"></textarea>
+      <div class="gps-boutons" style="margin-top:8px">
+        <button type="button" class="bouton bouton--discret" id="b-copier">Copier</button>
+        <button type="button" class="bouton bouton--discret" id="b-coller">Appliquer le texte</button>
+        <button type="button" class="bouton bouton--discret bouton--danger" id="b-effacer">Effacer le calage</button>
+      </div>
+    </details>
+  </section>
+  <p class="gps-note">Précision attendue en intérieur : 5 à 20 m, meilleure près des fenêtres et des patios. Le point bleu est la position estimée, le cercle la marge d'erreur annoncée par le téléphone.</p>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/plan.js"></script>
+<script>
+(function () {
+  'use strict';
+  var NS = 'http://www.w3.org/2000/svg', CLE_CALAGE = 'rea.gps-calage', MESURE_S = 15;
+  function $(id) { return document.getElementById(id); }
+  function lire(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  function ecrire(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* stockage bloqué */ } }
+  function el(tag, a, parent) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); if (parent) parent.appendChild(e); return e; }
+
+  /* ---------- 1. Plan (même accès que l'appli : il faut être connecté) ---------- */
+  var session = lire('rea.session'), zone = $('zone'), plan = null, svgPlan = null, calque = null, marque = {};
+  function message(t, lien) {
+    zone.replaceChildren();
+    var p = document.createElement('p'); p.className = 'vide'; p.textContent = t; zone.appendChild(p);
+    if (lien) { var a = document.createElement('a'); a.href = './'; a.className = 'bouton'; a.textContent = 'Ouvrir l\'appli pour se connecter'; zone.appendChild(a); }
+  }
+  function depuisCache() {
+    if (!window.caches) return Promise.resolve(null);
+    return caches.open('rea-donnees').then(function (c) { return c.match('plan'); }).then(function (r) { return r ? r.json() : null; }).catch(function () { return null; });
+  }
+  if (!session || !session.jeton) message('Connectez-vous d\'abord dans l\'appli avec votre code, puis revenez sur cette page.', true);
+  else ReaApi.appeler('plan', { jeton: session.jeton }).catch(function (e) {
+    return depuisCache().then(function (c) { if (c) return c; throw e; });
+  }).then(monter).catch(function (e) {
+    message(e && e.code === 'reseau' ? 'Pas de réseau et plan non enregistré sur ce téléphone.' : 'Le plan n\'a pas pu être chargé (' + ((e && e.code) || 'erreur') + '). Reconnectez-vous dans l\'appli.', true);
+  });
+
+  function monter(r) {
+    zone.replaceChildren();
+    plan = ReaPlan.creer(zone, { donnees: r.donnees, reglages: r.reglages, peutModifier: false, mode: 'texte' });
+    svgPlan = zone.querySelector('.plan__svg');
+    calque = el('svg', { 'class': 'gps-calque', 'aria-hidden': 'true' });
+    svgPlan.parentNode.insertBefore(calque, svgPlan.nextSibling);
+    // le calque suit le zoom et le déplacement du plan
+    function suivre() { calque.setAttribute('viewBox', svgPlan.getAttribute('viewBox') || ''); }
+    new MutationObserver(suivre).observe(svgPlan, { attributes: true, attributeFilter: ['viewBox'] }); suivre();
+    marque.cercle = el('circle', { r: 0, fill: 'rgba(64,168,223,.18)', stroke: '#40a8df', 'stroke-width': 3, visibility: 'hidden' }, calque);
+    marque.trace = el('polyline', { fill: 'none', stroke: '#40a8df', 'stroke-width': 4, 'stroke-dasharray': '6 8', opacity: .7 }, calque);
+    marque.point = el('circle', { r: 14, fill: '#1f6fa8', stroke: '#fff', 'stroke-width': 5, visibility: 'hidden' }, calque);
+    marque.calage = el('g', {}, calque);
+    marque.provisoire = el('circle', { r: 16, fill: 'none', stroke: '#d9600b', 'stroke-width': 6, visibility: 'hidden' }, calque);
+    // toucher le plan pendant un calage
+    var depart = null;
+    svgPlan.addEventListener('pointerdown', function (e) { depart = [e.clientX, e.clientY]; });
+    svgPlan.addEventListener('pointerup', function (e) {
+      if (!attenteToucher || !depart || Math.abs(e.clientX - depart[0]) + Math.abs(e.clientY - depart[1]) > 8) return;
+      var m = svgPlan.getScreenCTM(); if (!m) return;
+      var pt = svgPlan.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; var q = pt.matrixTransform(m.inverse());
+      setTimeout(function () { plan.choisir(null); }, 0); // pas de fiche pendant le calage
+      toucherCalage([q.x, q.y]);
+    });
+    $('panneau').hidden = false;
+    dessinerCalage();
+  }
+
+  /* ---------- 2. GPS ---------- */
+  var suivi = null, fixes = [], lat0 = null, lon0 = null, trace = [];
+  function versMetres(lat, lon) { // repère local en mètres : x vers l'est, y vers le sud (comme le plan)
+    if (lat0 == null) { lat0 = lat; lon0 = lon; }
+    return [(lon - lon0) * Math.cos(lat0 * Math.PI / 180) * 111320, -(lat - lat0) * 110574];
+  }
+  function moyenne(depuisMs) { // moyenne pondérée par la précision annoncée
+    var t = Date.now() - depuisMs, sx = 0, sy = 0, sw = 0, acc = 0;
+    fixes.forEach(function (f) { if (f.t >= t) { var w = 1 / Math.max(f.acc, 3) / Math.max(f.acc, 3); sx += f.m[0] * w; sy += f.m[1] * w; sw += w; acc += w * f.acc; } });
+    if (sw) return { m: [sx / sw, sy / sw], acc: acc / sw };
+    var f = fixes[fixes.length - 1]; // téléphone immobile : le GPS peut ne pas renvoyer de nouvelle mesure, on garde la dernière (moins d'1 min)
+    return f && f.t > Date.now() - 60000 ? { m: f.m, acc: f.acc } : null;
+  }
+  $('b-gps').addEventListener('click', function () {
+    if (suivi != null) { navigator.geolocation.clearWatch(suivi); suivi = null; this.textContent = 'Démarrer le GPS'; pastille('GPS arrêté', ''); return; }
+    if (!navigator.geolocation) { pastille('GPS indisponible sur cet appareil', 'mauvais'); return; }
+    this.textContent = 'Arrêter le GPS'; pastille('Recherche du signal…', 'moyen');
+    suivi = navigator.geolocation.watchPosition(function (p) {
+      var c = p.coords;
+      fixes.push({ t: Date.now(), m: versMetres(c.latitude, c.longitude), acc: c.accuracy });
+      fixes = fixes.filter(function (f) { return f.t > Date.now() - 60000; });
+      pastille('GPS ± ' + Math.round(c.accuracy) + ' m', c.accuracy <= 10 ? 'bon' : c.accuracy <= 25 ? 'moyen' : 'mauvais');
+      $('b-point').disabled = !!attenteToucher || !!mesure;
+      majPosition();
+    }, function (e) {
+      pastille(e.code === 1 ? 'Accès à la position refusé (réglages du téléphone)' : 'Pas de signal GPS', 'mauvais');
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  });
+  function pastille(t, niveau) { var p = $('pastille'); p.textContent = t; p.className = 'gps-pastille' + (niveau ? ' gps-pastille--' + niveau : ''); }
+
+  /* ---------- 3. Calage : transformation mètres → plan (similitude : échelle, rotation, translation) ---------- */
+  var calage = lire(CLE_CALAGE) || { points: [] }; // points : [{ geo: [lat, lon], plan: [x, y] }]
+  var attenteToucher = false, mesure = null, transfo = null;
+  function ajuster() { // moindres carrés en nombres complexes : z_plan = a · z_m + b (miroir testé si 3 points ou plus)
+    transfo = null;
+    var P = calage.points; if (P.length < 2) return;
+    var ref = P[0].geo, essais = P.length >= 3 ? [false, true] : [false];
+    essais.forEach(function (miroir) {
+      var src = P.map(function (p) {
+        var m = [(p.geo[1] - ref[1]) * Math.cos(ref[0] * Math.PI / 180) * 111320, -(p.geo[0] - ref[0]) * 110574];
+        return miroir ? [m[0], -m[1]] : m;
+      }), dst = P.map(function (p) { return p.plan; }), n = P.length;
+      var ms = [0, 0], md = [0, 0];
+      for (var i = 0; i < n; i++) { ms[0] += src[i][0] / n; ms[1] += src[i][1] / n; md[0] += dst[i][0] / n; md[1] += dst[i][1] / n; }
+      var nr = 0, ni = 0, de = 0;
+      for (i = 0; i < n; i++) {
+        var sx = src[i][0] - ms[0], sy = src[i][1] - ms[1], dx = dst[i][0] - md[0], dy = dst[i][1] - md[1];
+        nr += dx * sx + dy * sy; ni += dy * sx - dx * sy; de += sx * sx + sy * sy;
+      }
+      if (de < 100) return; // points trop proches (< ~10 m)
+      var a = [nr / de, ni / de], b = [md[0] - (a[0] * ms[0] - a[1] * ms[1]), md[1] - (a[0] * ms[1] + a[1] * ms[0])];
+      var ech = Math.hypot(a[0], a[1]), err = 0;
+      for (i = 0; i < n; i++) { var x = a[0] * src[i][0] - a[1] * src[i][1] + b[0], y = a[0] * src[i][1] + a[1] * src[i][0] + b[1]; err += (x - dst[i][0]) * (x - dst[i][0]) + (y - dst[i][1]) * (y - dst[i][1]); }
+      var t = { a: a, b: b, ref: ref, miroir: miroir, echelle: ech, erreurM: Math.sqrt(err / n) / ech };
+      if (!transfo || t.erreurM < transfo.erreurM) transfo = t;
+    });
+  }
+  function versPlan(lat, lon) {
+    var T = transfo, m = [(lon - T.ref[1]) * Math.cos(T.ref[0] * Math.PI / 180) * 111320, -(lat - T.ref[0]) * 110574];
+    if (T.miroir) m[1] = -m[1];
+    return [T.a[0] * m[0] - T.a[1] * m[1] + T.b[0], T.a[0] * m[1] + T.a[1] * m[0] + T.b[1]];
+  }
+  function geoDe(m) { return [lat0 - m[1] / 110574, lon0 + m[0] / (Math.cos(lat0 * Math.PI / 180) * 111320)]; }
+
+  $('b-point').addEventListener('click', function () {
+    attenteToucher = true; this.disabled = true; $('b-annuler').hidden = false;
+    consigne('Touchez sur le plan l\'endroit exact où vous vous trouvez (zoomez si besoin).');
+    $('consigne').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+  $('b-annuler').addEventListener('click', finCalage);
+  function finCalage() {
+    attenteToucher = false; if (mesure) clearInterval(mesure.minuterie); mesure = null;
+    marque.provisoire && marque.provisoire.setAttribute('visibility', 'hidden');
+    $('b-annuler').hidden = true; $('b-point').disabled = suivi == null; consigne('');
+  }
+  function toucherCalage(q) {
+    attenteToucher = false;
+    marque.provisoire.setAttribute('cx', q[0]); marque.provisoire.setAttribute('cy', q[1]); marque.provisoire.setAttribute('visibility', 'visible');
+    var debut = Date.now();
+    mesure = { minuterie: setInterval(function () {
+      var reste = MESURE_S - Math.floor((Date.now() - debut) / 1000);
+      if (reste > 0) { consigne('Ne bougez plus : mesure du GPS… ' + reste + ' s'); return; }
+      var moy = moyenne(MESURE_S * 1000);
+      if (!moy) { consigne('Pas de mesure GPS reçue : réessayez près d\'une fenêtre.'); setTimeout(finCalage, 2500); clearInterval(mesure.minuterie); mesure = null; return; }
+      calage.points.push({ geo: geoDe(moy.m).map(function (v) { return Math.round(v * 1e7) / 1e7; }), plan: [Math.round(q[0]), Math.round(q[1])], acc: Math.round(moy.acc) });
+      ecrire(CLE_CALAGE, calage); finCalage(); dessinerCalage();
+    }, 250) };
+    consigne('Ne bougez plus : mesure du GPS… ' + MESURE_S + ' s');
+  }
+  function consigne(t) { var c = $('consigne'); c.hidden = !t; c.textContent = t; }
+  function dessinerCalage() {
+    ajuster();
+    var ol = $('points'); ol.replaceChildren();
+    calage.points.forEach(function (p, i) {
+      var li = document.createElement('li'); li.textContent = 'Point ' + (i + 1) + ' : GPS ± ' + (p.acc || '?') + ' m au moment du calage ';
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'bouton bouton--discret'; b.style.cssText = 'padding:2px 10px;min-height:0;font-size:.85rem'; b.textContent = 'Retirer';
+      b.onclick = function () { calage.points.splice(i, 1); ecrire(CLE_CALAGE, calage); dessinerCalage(); };
+      li.appendChild(b); ol.appendChild(li);
+    });
+    if (marque.calage) {
+      marque.calage.replaceChildren();
+      calage.points.forEach(function (p, i) {
+        el('circle', { cx: p.plan[0], cy: p.plan[1], r: 12, fill: '#d9600b', stroke: '#fff', 'stroke-width': 4 }, marque.calage);
+        var t = el('text', { x: p.plan[0] + 18, y: p.plan[1] - 14, 'font-size': 30, 'font-weight': 700, fill: '#d9600b' }, marque.calage); t.textContent = String(i + 1);
+      });
+    }
+    var etat = $('calage-etat');
+    if (transfo) {
+      var e = transfo.erreurM;
+      etat.textContent = 'Calé (' + calage.points.length + ' points)'; etat.className = 'gps-pastille gps-pastille--bon';
+      $('qualite').textContent = calage.points.length >= 3 ? 'Écart moyen entre les points de calage : ' + e.toFixed(1) + ' m' + (e > 15 ? ' : calage peu fiable, retirez le point le plus douteux ou ajoutez-en.' : '.')
+        : 'Calage à 2 points : utilisable. Un 3e point permet de vérifier la qualité.';
+    } else {
+      etat.textContent = calage.points.length === 1 ? 'Calage : 1 point sur 2' : 'Non calé'; etat.className = 'gps-pastille';
+      $('qualite').textContent = calage.points.length >= 2 ? 'Les points sont trop proches : éloignez-les d\'au moins 20 m.' : '';
+    }
+    $('t-calage').value = JSON.stringify(calage);
+    majPosition();
+  }
+
+  /* ---------- 4. Affichage de la position ---------- */
+  var dernier = null;
+  function majPosition() {
+    if (!marque.point) return;
+    var moy = moyenne(8000); // lissage sur 8 s
+    if (!moy || !transfo) { marque.point.setAttribute('visibility', 'hidden'); marque.cercle.setAttribute('visibility', 'hidden'); $('b-centrer').disabled = true; return; }
+    var g = geoDe(moy.m), p = versPlan(g[0], g[1]);
+    dernier = { p: p, r: moy.acc * transfo.echelle };
+    [marque.point, marque.cercle].forEach(function (c) { c.setAttribute('cx', p[0].toFixed(1)); c.setAttribute('cy', p[1].toFixed(1)); c.setAttribute('visibility', 'visible'); });
+    marque.cercle.setAttribute('r', dernier.r.toFixed(1));
+    trace.push(p[0].toFixed(0) + ',' + p[1].toFixed(0)); if (trace.length > 40) trace.shift();
+    marque.trace.setAttribute('points', trace.join(' '));
+    $('b-centrer').disabled = false;
+  }
+  $('b-centrer').addEventListener('click', function () { if (dernier && plan) plan.centrerSur(dernier.p[0], dernier.p[1], dernier.r); });
+
+  /* ---------- 5. Partage du calage ---------- */
+  $('b-copier').addEventListener('click', function () {
+    var t = $('t-calage'); t.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).then(function () { consigne('Calage copié.'); setTimeout(function () { consigne(''); }, 2000); }, function () { document.execCommand && document.execCommand('copy'); });
+  });
+  $('b-coller').addEventListener('click', function () {
+    try {
+      var c = JSON.parse($('t-calage').value);
+      if (!c || !Array.isArray(c.points) || !c.points.every(function (p) { return p.geo && p.plan && p.geo.length === 2 && p.plan.length === 2 && p.geo.concat(p.plan).every(isFinite); })) throw 0;
+      calage = { points: c.points.slice(0, 20) }; ecrire(CLE_CALAGE, calage); dessinerCalage(); consigne('Calage appliqué.'); setTimeout(function () { consigne(''); }, 2000);
+    } catch (e) { consigne('Texte de calage non valide.'); setTimeout(function () { consigne(''); }, 2500); }
+  });
+  $('b-effacer').addEventListener('click', function () {
+    if (this.dataset.confirme !== '1') { this.dataset.confirme = '1'; this.textContent = 'Confirmer : effacer'; return; }
+    this.dataset.confirme = ''; this.textContent = 'Effacer le calage';
+    calage = { points: [] }; ecrire(CLE_CALAGE, calage); trace = []; dessinerCalage();
+  });
+})();
+</script>
+</body>
+</html>

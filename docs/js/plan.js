@@ -632,7 +632,7 @@
 
     dessiner();
     if (window.ResizeObserver) new ResizeObserver(function () { appliquerVB(); }).observe(svg);
-    return { redessiner: dessiner, reglages: R, choisir: choisir, pleinEcran: basculerPlein,
+    return { redessiner: dessiner, reglages: R, choisir: choisir, pleinEcran: basculerPlein, centrerSur: function (x, y, rayon) { var r = Math.max(rayon || 0, 60); centrerSur([x - r, y - r, x + r, y + r]); },
       // Liste des pièces avec leur nom effectif (pour le parcours de découverte)
       pieces: function () { return LISTE.filter(function (p) { return !p.supprimee; }).map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
   }
