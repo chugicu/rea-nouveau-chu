@@ -262,6 +262,31 @@ Collez `Code.gs` et `appsscript.json` (version 1.5.0), **Installer / réparer la
 
 ---
 
+## Partie K – Version 1.6 : Quiz
+
+### K1. Mettre à jour le moteur
+Collez `Code.gs` et `appsscript.json` (version 1.6.0), **Installer / réparer la base**, puis **Nouvelle version** du déploiement.
+L'installation crée l'onglet **Quiz** avec **21 questions préparées par Claude, en brouillon** (10 sur le plan, 11 sur les urgences), et le paramètre **Objectif quiz équipe** (3000 par défaut).
+
+### K2. Relire et publier la banque de Claude (administrateur)
+Appli > **Quiz** > **Gérer les questions** > filtre **Brouillons** : *Modifier* si besoin, puis *Publier* (ou **Publier tous les brouillons**).
+Les questions Urgences de Claude sont générales : adaptez-les aux procédures du CHU avant de les publier.
+
+### K3. Ce que contient le quiz
+- **Quiz du jour** : 3 questions par jour (dont 1 Urgences quand il y en a), badge **Fidèle** après 7 jours.
+- **Entraînement libre** : Plan et équipements, Urgences et sécurité, Couleurs des unités. Les questions ratées reviennent plus souvent (mémoire du téléphone).
+- **Questions automatiques**, fabriquées à partir du plan **en direct** (elles suivent les modifications des référents) : chambre → unité, toucher une chambre d'une unité, toucher une pièce nommée, toucher une section (poste de soins, WC, pharmacie…), équipement le plus proche d'une chambre, couleur des unités. Les futurs équipements (DAE, vannes…) y entreront automatiquement dès qu'ils seront ajoutés au plan.
+- **Jeux du plan** : *Placer les étiquettes* (noms d'unités gris à glisser), *Colorier les unités* (ronds de couleur à glisser sur les étiquettes grises, chambres grises), *Niveau ultime* (contours seuls, toutes les pièces à replacer zone par zone).
+- **Badges** : Boussole (20 bonnes réponses plan), Prêt pour l'urgence (toutes les questions Urgences réussies une fois), Fidèle (7 quiz du jour), Expert (100 bonnes réponses).
+- **Défi d'équipe** : seul un **total anonyme** de réponses est envoyé au moteur (aucune réponse individuelle).
+- Fonctionne **hors ligne** après une première ouverture.
+
+### K4. Questions rédigées par les référents
+Quiz > **Gérer les questions** > **+ Nouvelle question** : QCM (2 à 4 réponses), Vrai / faux, ou **Sur le plan** (toucher la ou les bonnes réponses sur le mini-plan). Publiées **directement** ; tous les référents peuvent les modifier ou les retirer.
+- Une question peut être **liée** à des pièces : si une pièce ou un équipement lié est modifié, la question passe **À revérifier** et disparaît du quiz jusqu'à ce qu'un référent clique **Toujours juste** (ou la modifie).
+
+---
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

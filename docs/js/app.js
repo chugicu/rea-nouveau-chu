@@ -59,7 +59,7 @@
     { id: 'plan', nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
     { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'newsletter', nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
-    { id: 'quiz', nom: 'Quiz', desc: 'Vérifier ce que l\'on sait du nouveau service', etape: 4 },
+    { id: 'quiz', nom: 'Quiz', desc: 'Quiz du jour, entraînement et jeux sur le plan', etape: 4, ouvrir: function () { window.ReaQuiz.ouvrir(); } },
     { id: 'simulations', nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
     { id: 'pret', nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
@@ -68,7 +68,10 @@
   var BADGES = [
     { id: 'visite', nom: 'Visite faite' },
     { id: 'plan', nom: 'Plan exploré' },
-    { id: 'quiz', nom: 'Quiz réussi' },
+    { id: 'boussole', nom: 'Boussole' },
+    { id: 'urgence', nom: 'Prêt pour l\'urgence' },
+    { id: 'fidele', nom: 'Fidèle' },
+    { id: 'expert', nom: 'Expert' },
     { id: 'simulation', nom: 'Simulation' },
     { id: 'pret', nom: 'Prêt(e) !' }
   ];
@@ -92,6 +95,7 @@
     places_insuffisantes: 'Il y a déjà plus d\'inscrits que ce nombre de places.',
     newsletter_introuvable: 'Cette newsletter n\'est plus disponible.',
     newsletter_incomplete: 'Toutes les pages n\'ont pas été reçues. Réessayez.',
+    question_introuvable: 'Cette question n\'existe plus.',
     erreur_serveur: 'Le serveur a rencontré un problème. Réessayez dans un instant.'
   };
   function message(code) { return MESSAGES[code] || MESSAGES.erreur_serveur; }
@@ -877,6 +881,14 @@
   if (s) ecranAccueil(); else ecranConnexion();
 
   // Utilisé par les modules suivants pour attribuer un badge
+  // Outils partagés avec le module Quiz (js/quiz.js)
+  window.ReaApp = {
+    h: h, afficher: afficher, stock: stock, CLE: CLE, Api: Api, message: message, ERREURS_SESSION: ERREURS_SESSION,
+    ecranAccueil: function () { ecranAccueil(); }, ecranConnexion: function (m) { ecranConnexion(m); },
+    majBandeaux: function (c) { majBandeaux(c); }, definirEcran: function (f) { ecranCourant = f; },
+    planEnCache: planEnCache, mettrePlanEnCache: mettrePlanEnCache, CACHE_DONNEES: CACHE_DONNEES, alerteDouce: alerteDouce,
+    aujourdhui: aujourdhuiIso
+  };
   window.ReaBadges = {
     attribuer: function (id) { var b = stock.lire(CLE.badges) || {}; b[id] = new Date().toISOString(); stock.ecrire(CLE.badges, b); }
   };

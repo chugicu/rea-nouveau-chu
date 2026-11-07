@@ -6,6 +6,7 @@
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
  * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
  * 1.3 : modification de la forme du plan (déplacer, redimensionner, supprimer, ajouter une pièce).
+ * 1.6 : quiz (questions rédigées, brouillons relus par l'administrateur, compteur collectif anonyme).
  * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
@@ -22,7 +23,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.5.0',
+  version: '1.6.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -42,7 +43,8 @@ var ONGLETS = {
   creneaux: 'Créneaux',
   inscriptions: 'Inscriptions',
   newsletters: 'Newsletters',
-  points: 'Équipements'
+  points: 'Équipements',
+  quiz: 'Quiz'
 };
 
 var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
@@ -83,6 +85,10 @@ function doPost(e) {
       home: function () { return home_(verifierJeton_(req.jeton)); },
       plan: function () { return plan_(verifierJeton_(req.jeton)); },
       plan_piece: function () { return planPiece_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
+      quiz_liste: function () { return quizListe_(verifierJeton_(req.jeton)); },
+      quiz_question: function () { return quizQuestion_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
+      quiz_statut: function () { return quizStatut_(exigerReferent_(verifierJeton_(req.jeton)), req.ids, req.statut); },
+      quiz_compteur: function () { verifierJeton_(req.jeton); return quizAjouterTotal_(req.n); },
       plan_point: function () { return planPoint_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); },
       visites: function () { return visites_(verifierJeton_(req.jeton)); },
@@ -621,6 +627,160 @@ function nlRetirer_(id) {
 }
 
 // ============================================================================
+// Quiz : questions rédigées (QCM, vrai/faux, toucher sur le plan) + compteur collectif anonyme.
+// Les questions automatiques (pièces, unités, couleurs, équipements) sont fabriquées dans l'appli à partir du plan.
+// Aucune réponse individuelle n'est enregistrée : seul un total anonyme est compté.
+// ============================================================================
+var QUIZ = {
+  entetes: ['ID', 'Thème', 'Type', 'Question', 'Propositions', 'Bonne réponse', 'Explication', 'Pièces liées', 'Statut', 'Auteur', 'Créée le', 'Modifiée le'],
+  themes: ['plan', 'urgences'], types: ['qcm', 'vf', 'plan'], objectifDefaut: 3000
+};
+// Première banque, préparée par Claude : arrive en brouillon, l'administrateur relit puis publie.
+var QUIZ_BANQUE = [
+  ['plan', 'qcm', 'Combien de lits de réanimation compte le nouveau service (hors lits gelés) ?', ['29', '34', '38', '45'], 0, 'Bougainvillier 9 + Hibiscus 8 + Atoumo 4 + Flamboyant 8 = 29 lits de réanimation.'],
+  ['plan', 'qcm', 'Quelle unité regroupe les 4 lits de SRPR (chambres 330 à 333) ?', ['Orchidée', 'Mahogany', 'Cannelle', 'Atoumo'], 0, 'Orchidée : SRPR, 4 lits, chambres 330 à 333.'],
+  ['plan', 'qcm', 'Mahogany, c\'est…', ['L\'USC (12 lits)', 'La SRPR (4 lits)', 'Une unité de réanimation (8 lits)', 'Les lits gelés'], 0, 'Mahogany est l\'USC : 12 lits, chambres 341 à 352.'],
+  ['plan', 'vf', 'Les 5 lits de Cannelle (chambres 336 à 340) sont gelés à l\'ouverture.', null, 'vrai', 'Cannelle compte 5 lits gelés, en réserve.'],
+  ['plan', 'qcm', 'Les chambres 334 et 335 sont destinées…', ['Aux brûlés ambulatoires', 'À la SRPR', 'À l\'USC', 'Aux lits gelés'], 0, '334 et 335 : brûlés ambulatoires (hors réanimation).'],
+  ['plan', 'vf', 'Les chambres de Flamboyant vont de 301 à 308.', null, 'vrai', 'Flamboyant : 8 lits, chambres 301 à 308.'],
+  ['plan', 'qcm', 'Combien de lits compte l\'unité Atoumo ?', ['4', '8', '9', '12'], 0, 'Atoumo : 4 lits, chambres 326 à 329.'],
+  ['plan', 'qcm', 'Quelle unité de réanimation compte le plus de lits ?', ['Bougainvillier', 'Hibiscus', 'Flamboyant', 'Atoumo'], 0, 'Bougainvillier : 9 lits (309 à 317). Hibiscus et Flamboyant : 8 lits, Atoumo : 4.'],
+  ['plan', 'qcm', 'Les chambres 318 à 325 font partie de…', ['Hibiscus', 'Bougainvillier', 'Atoumo', 'Mahogany'], 0, 'Hibiscus : 8 lits, chambres 318 à 325.'],
+  ['plan', 'vf', 'L\'USC Mahogany compte 12 lits, chambres 341 à 352.', null, 'vrai', 'Mahogany : 12 lits d\'USC, de 341 à 352.'],
+  ['urgences', 'vf', 'Le chariot d\'urgence se vérifie avec une check-list datée et signée, y compris après chaque utilisation.', null, 'vrai', 'Vérification régulière et après chaque utilisation (à adapter à la procédure du service).'],
+  ['urgences', 'qcm', 'Devant un arrêt cardiaque dans une chambre, la première chose à faire est de…', ['Appeler à l\'aide et commencer le massage cardiaque', 'Aller chercher seul le chariot d\'urgence', 'Prévenir la famille', 'Chercher le dossier du patient'], 0, 'Alerter et masser sans attendre : un collègue apporte le chariot et le DAE.'],
+  ['urgences', 'qcm', 'Début d\'incendie dans une chambre : quel est le bon enchaînement ?', ['Donner l\'alerte, mettre à l\'abri les personnes menacées, fermer les portes, attaquer le feu si c\'est sans risque', 'Ouvrir les fenêtres pour évacuer la fumée', 'Attendre les pompiers sans rien faire', 'Descendre les patients par l\'ascenseur'], 0, 'Alerter, protéger, fermer les portes pour confiner la fumée ; jamais l\'ascenseur (à adapter aux consignes incendie du CHU).'],
+  ['urgences', 'vf', 'En cas d\'incendie, on prend les ascenseurs pour évacuer plus vite les patients.', null, 'faux', 'Les ascenseurs ne s\'utilisent pas en cas d\'incendie, sauf consigne contraire des secours.'],
+  ['urgences', 'vf', 'Il faut connaître l\'emplacement des vannes de coupure des fluides médicaux (oxygène, air, vide) de son secteur.', null, 'vrai', 'En cas de fuite ou d\'incendie, savoir où elles sont fait gagner un temps précieux.'],
+  ['urgences', 'vf', 'Un DAE peut être utilisé par n\'importe qui : l\'appareil guide chaque étape à voix haute.', null, 'vrai', 'Le défibrillateur automatisé externe analyse le rythme et guide l\'utilisateur.'],
+  ['urgences', 'qcm', 'Après avoir utilisé le chariot d\'urgence, il faut…', ['Le réapprovisionner, refaire la check-list et le remettre à sa place', 'Le laisser dans la chambre jusqu\'au lendemain', 'Le ranger sans contrôle s\'il semble complet', 'Prévenir seulement la pharmacie'], 0, 'Un chariot incomplet ou absent de sa place est un risque pour le patient suivant.'],
+  ['urgences', 'vf', 'Pendant le déménagement, on peut encombrer un moment une issue de secours avec des cartons.', null, 'faux', 'Les issues et dégagements de secours restent libres en permanence.'],
+  ['urgences', 'qcm', 'En arrivant dans les nouveaux locaux, que faut-il repérer en premier dans son secteur ?', ['Chariot d\'urgence, DAE, vannes de fluides et issues de secours', 'La salle de détente', 'Le parking', 'Le secrétariat'], 0, 'Ce sont les repères de sécurité indispensables dès le premier jour.'],
+  ['urgences', 'qcm', 'La bouteille d\'oxygène de transport se vérifie…', ['Avant chaque transfert (pression, autonomie)', 'Une fois par mois', 'Seulement si une alarme sonne', 'Uniquement par le brancardier'], 0, 'L\'autonomie doit couvrir tout le trajet, avec une marge.'],
+  ['urgences', 'vf', 'Lors d\'une alarme incendie, on ferme les portes des chambres et des locaux.', null, 'vrai', 'Fermer les portes limite la propagation de la fumée.']
+];
+
+function quizDatesModif_(ss) { // id pièce ou équipement → date de dernière modification ; équipements existants
+  var m = {}, existe = {};
+  var p = ss.getSheetByName(ONGLETS.pieces).getDataRange().getValues();
+  for (var i = 1; i < p.length; i++) if (p[i][0] && p[i][6] instanceof Date) m[String(p[i][0])] = p[i][6].getTime();
+  var shp = ss.getSheetByName(ONGLETS.points);
+  if (shp) { var q = shp.getDataRange().getValues(); for (var j = 1; j < q.length; j++) if (q[j][0]) { existe[String(q[j][0])] = 1; if (q[j][5] instanceof Date) m[String(q[j][0])] = q[j][5].getTime(); } }
+  return { m: m, existe: existe };
+}
+function lireQuiz_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.quiz);
+  if (!sh) return [];
+  var v = sh.getDataRange().getValues(), l = [], dm = quizDatesModif_(ss);
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id) continue;
+    var choix = null; try { choix = v[i][4] ? JSON.parse(v[i][4]) : null; } catch (e) { choix = null; }
+    var lies = String(v[i][7] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    var modif = v[i][11] instanceof Date ? v[i][11].getTime() : 0;
+    var aReverifier = lies.some(function (x) { return (dm.m[x] && dm.m[x] > modif) || (/^Q/.test(x) && !dm.existe[x]); });
+    var bonne = v[i][5] === '' || v[i][5] == null ? '' : String(v[i][5]);
+    l.push({ ligne: i + 1, id: id, theme: String(v[i][1] || ''), type: String(v[i][2] || ''), texte: String(v[i][3] || ''), choix: choix, bonne: bonne,
+      explication: String(v[i][6] || ''), lies: lies, statut: String(v[i][8] || '').trim().toLowerCase(), auteur: String(v[i][9] || ''),
+      modifiee: v[i][11] instanceof Date ? formaterDate_(v[i][11]) : '', aReverifier: aReverifier });
+  }
+  return l;
+}
+function quizCompteur_() { return Number(PropertiesService.getScriptProperties().getProperty('quiz_total') || 0); }
+function quizListe_(session) {
+  var ss = classeur_(), ref = session.r === 'referent' || session.r === 'admin', admin = session.r === 'admin';
+  var l = lireQuiz_(ss).filter(function (q) {
+    if (q.statut === 'brouillon') return admin;
+    if (ref) return true;
+    return q.statut === 'publiée' && !q.aReverifier;
+  }).map(function (q) {
+    var o = { id: q.id, theme: q.theme, type: q.type, texte: q.texte, choix: q.choix, bonne: q.bonne, explication: q.explication, lies: q.lies };
+    if (ref) { o.statut = q.statut; o.auteur = q.auteur; o.modifiee = q.modifiee; o.aReverifier = q.aReverifier; }
+    return o;
+  });
+  var objectif = Number(lireParametres_(ss)['Objectif quiz équipe']) || QUIZ.objectifDefaut;
+  return { ok: true, questions: l, total: quizCompteur_(), objectif: objectif, peutGerer: ref, admin: admin };
+}
+function validerQuestion_(d) {
+  d = d || {};
+  var theme = String(d.theme || ''), type = String(d.type || ''), texte = nettoyerTexte_(d.texte, 300), expl = nettoyerTexte_(d.explication, 400);
+  if (QUIZ.themes.indexOf(theme) < 0 || QUIZ.types.indexOf(type) < 0 || texte.length < 5) throw erreurApp_('requete_invalide');
+  var choix = '', bonne = '', lies = (Array.isArray(d.lies) ? d.lies : []).map(String).filter(function (x) { return /^(P\d{3}|N[a-z0-9]{6,12}|Q[a-z0-9]{6,12})$/.test(x); });
+  if (type === 'qcm') {
+    var c = (Array.isArray(d.choix) ? d.choix : []).map(function (x) { return nettoyerTexte_(x, 120); }).filter(Boolean);
+    var b = Number(d.bonne);
+    if (c.length < 2 || c.length > 4 || !(b >= 0 && b < c.length && Math.floor(b) === b)) throw erreurApp_('requete_invalide');
+    choix = JSON.stringify(c); bonne = String(b);
+  } else if (type === 'vf') {
+    if (d.bonne !== 'vrai' && d.bonne !== 'faux') throw erreurApp_('requete_invalide');
+    bonne = d.bonne;
+  } else {
+    var cibles = (Array.isArray(d.bonne) ? d.bonne : String(d.bonne || '').split(',')).map(String).map(function (x) { return x.trim(); })
+      .filter(function (x) { return /^(P\d{3}|N[a-z0-9]{6,12}|Q[a-z0-9]{6,12})$/.test(x); });
+    if (!cibles.length || cibles.length > 20) throw erreurApp_('requete_invalide');
+    bonne = cibles.join(',');
+    cibles.forEach(function (x) { if (lies.indexOf(x) < 0) lies.push(x); });
+  }
+  return { theme: theme, type: type, texte: texte, choix: choix, bonne: bonne, explication: expl, lies: lies.slice(0, 30).join(',') };
+}
+function quizQuestion_(session, id, d) {
+  var q = validerQuestion_(d), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.quiz);
+    if (!sh) throw erreurApp_('non_installe');
+    var maintenant = new Date();
+    if (!id) {
+      var nid = 'QZ' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toLowerCase();
+      sh.appendRow([nid, q.theme, q.type, q.texte, q.choix, q.bonne, q.explication, q.lies, 'publiée', session.n || 'Administrateur', maintenant, maintenant]);
+      return { ok: true, id: nid };
+    }
+    var l = lireQuiz_(ss), x = null;
+    for (var i = 0; i < l.length; i++) if (l[i].id === String(id)) x = l[i];
+    if (!x) throw erreurApp_('question_introuvable');
+    if (x.statut === 'brouillon' && session.r !== 'admin') throw erreurApp_('non_autorise');
+    sh.getRange(x.ligne, 2, 1, 7).setValues([[q.theme, q.type, q.texte, q.choix, q.bonne, q.explication, q.lies]]);
+    sh.getRange(x.ligne, 12).setValue(maintenant);
+    return { ok: true, id: x.id };
+  } finally { verrou.releaseLock(); }
+}
+function quizStatut_(session, ids, action) {
+  if (['publier', 'retirer', 'confirmer'].indexOf(action) < 0) throw erreurApp_('requete_invalide');
+  ids = (Array.isArray(ids) ? ids : [ids]).map(String);
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.quiz), l = lireQuiz_(ss), n = 0;
+    l.forEach(function (x) {
+      if (ids.indexOf(x.id) < 0) return;
+      if (x.statut === 'brouillon' && session.r !== 'admin') throw erreurApp_('non_autorise'); // brouillons : relus par l'administrateur
+      if (action === 'retirer') sh.getRange(x.ligne, 9).setValue('retirée');
+      if (action === 'publier') sh.getRange(x.ligne, 9).setValue('publiée');
+      if (action === 'publier' || action === 'confirmer') sh.getRange(x.ligne, 12).setValue(new Date()); // efface l'alerte « à revérifier »
+      n++;
+    });
+    if (!n) throw erreurApp_('question_introuvable');
+    return { ok: true, n: n };
+  } finally { verrou.releaseLock(); }
+}
+function quizAjouterTotal_(n) {
+  n = Math.floor(Number(n));
+  if (!(n >= 1 && n <= 50)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var props = PropertiesService.getScriptProperties(), t = Number(props.getProperty('quiz_total') || 0) + n;
+    props.setProperty('quiz_total', String(t));
+    return { ok: true, total: t };
+  } finally { verrou.releaseLock(); }
+}
+function installerBanqueQuiz_(ss) { // seulement si l'onglet est vide
+  var sh = ss.getSheetByName(ONGLETS.quiz);
+  if (!sh || sh.getLastRow() > 1) return 0;
+  var maintenant = new Date(), lignes = QUIZ_BANQUE.map(function (b, i) {
+    return ['QZclaude' + ('0' + (i + 1)).slice(-2), b[0], b[1], b[2], b[3] ? JSON.stringify(b[3]) : '', String(b[4]), b[5], '', 'brouillon', 'Claude (à relire)', maintenant, maintenant];
+  });
+  sh.getRange(2, 1, lignes.length, QUIZ.entetes.length).setValues(lignes);
+  return lignes.length;
+}
+
+// ============================================================================
 // Jetons signés (HMAC-SHA256)
 // ============================================================================
 function signerJeton_(charge) {
@@ -744,6 +904,9 @@ function installer() {
   completerEntetes_(ss.getSheetByName(ONGLETS.pieces), ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée']);
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.points, ['ID équipement', 'Type', 'X', 'Y', 'Précision', 'Modifié le', 'Par'], []);
+  creerOnglet_(ss, ONGLETS.quiz, QUIZ.entetes, []);
+  installerBanqueQuiz_(ss);
+  ajouterParametre_(ss, 'Objectif quiz équipe', 'Nombre total de réponses visé par l\'équipe (compteur anonyme). Par défaut : 3000.');
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
   creerOnglet_(ss, ONGLETS.newsletters, NL.entetes, []);
   ajouterParametre_(ss, 'Dossier des newsletters (ID Drive)', 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');

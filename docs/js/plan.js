@@ -34,9 +34,9 @@
 
   // Équipements placés par les référents dans les parties communes (points sur le plan, repris par les quiz)
   var POINTS = [
-    { id: 'chariot', nom: 'Chariot d\'urgence', pluriel: 'Chariots d\'urgence', couleur: '#d93a2f' },
-    { id: 'echographe', nom: 'Échographe', pluriel: 'Échographes', couleur: '#1f6fa8' },
-    { id: 'imprimante', nom: 'Imprimante', pluriel: 'Imprimantes', couleur: '#4c5a7a' }
+    { id: 'chariot', nom: 'Chariot d\'urgence', pluriel: 'Chariots d\'urgence', couleur: '#d93a2f', urgence: true, article: 'le' },
+    { id: 'echographe', nom: 'Échographe', pluriel: 'Échographes', couleur: '#1f6fa8', article: 'l\'' },
+    { id: 'imprimante', nom: 'Imprimante', pluriel: 'Imprimantes', couleur: '#4c5a7a', article: 'l\'' }
   ];
   var PT = {}; POINTS.forEach(function (t) { PT[t.id] = t; });
 
@@ -237,7 +237,8 @@
     var fiche = h('section', { class: 'plan__fiche', hidden: true, 'aria-live': 'polite' });
     cadre.appendChild(fiche);
     var entetePlein = h('div', { class: 'plan__entete' }, barre, filtres);
-    remplir(racine, entetePlein, cadre);
+    var Q = opt.quiz ? Object.assign({ textes: 'tout', grisChambres: false, neutre: false, titres: 'normal', points: true, marques: [], poses: [], zone: null, couleursTitres: {} }, opt.quiz) : null;
+    if (Q) { racine.classList.add('plan--quiz'); remplir(racine, cadre); } else remplir(racine, entetePlein, cadre);
     listeFiltres();
 
     function majBoutons() {
@@ -269,11 +270,13 @@
         var inf = infos(p), vis = visible(p, inf), fond, trait, ep = 3, dash = null;
         if (p.type === 'chambre') {
           var u = p.unite && D.unites[p.unite];
-          if (u) { fond = u.fond; trait = u.trait; ep = 5; if (p.unite === 'cannelle') dash = '14 9'; }
+          if (u && Q && Q.grisChambres && !(Q.couleursTitres[p.unite])) { fond = '#e3e6ec'; trait = '#9aa4b4'; ep = 4; }
+          else if (u) { fond = u.fond; trait = u.trait; ep = 5; if (p.unite === 'cannelle') dash = '14 9'; }
           else if (estRea(p)) { fond = '#e3e6ec'; trait = '#9aa4b4'; }
           else { var gc = GRIS[p.bbox[0] < 983 ? 'usic' : 'usinv']; fond = gc[0]; trait = gc[1]; }
         } else if (p.type === 'usic' || p.type === 'usinv') { fond = GRIS[p.type][0]; trait = GRIS[p.type][1]; }
         else if (p.type === 'terrasse') { fond = '#dfe3e9'; trait = '#a9b2c0'; }
+        else if (Q && Q.neutre) { fond = '#eef1f5'; trait = '#9aa4b4'; }
         else {
           var c = inf.couleur || (inf.categorie === 'poste' ? CAT.poste.couleur : null);
           if (filtre && vis && !c) c = etat.filtre === 'adesigner' ? '#d9600b' : couleurCat(etat.filtre);
@@ -285,13 +288,19 @@
         el('path', { d: p.d, fill: fond, stroke: trait, 'stroke-width': etat.choix === p.id ? 12 : ep, 'stroke-dasharray': dash,
           'data-id': cible ? p.id : null, 'class': cible ? 'plan__piece' + (etat.choix === p.id ? ' plan__piece--choisie' : '') : null }, svg);
         if (etat.choix === p.id) svg.lastChild.setAttribute('stroke', '#223b80');
-        if (!filtre || vis) etiquette(calqueTexte, p, inf);
+        if (Q && Q.zone && (p.type === 'piece' || p.type === 'chambre')) {
+          if (Q.zone[p.id]) { svg.lastChild.setAttribute('fill', '#dbeefa'); svg.lastChild.setAttribute('stroke', '#1f6fa8'); svg.lastChild.setAttribute('stroke-width', '5'); }
+          else svg.lastChild.setAttribute('opacity', '0.35');
+        }
+        if (Q) { if (Q.textes === 'tout' || Q.textes === 'chambres' && p.type === 'chambre') etiquette(calqueTexte, p, inf); }
+        else if (!filtre || vis) etiquette(calqueTexte, p, inf);
       });
       (D.acces || []).forEach(function (a) { var g = icone(calqueTexte, a.cat, a.X, a.Y, 1.8, '#223b80'); if (filtre) g.setAttribute('opacity', '0.35'); });
       svg.appendChild(calqueTexte);
       el('rect', { x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], rx: 10, fill: 'none', stroke: '#223b80', 'stroke-width': 10, 'pointer-events': 'none' }, svg);
       titres();
-      dessinerPoints();
+      if (!Q || Q.points) dessinerPoints();
+      if (Q) dessinerMarques();
       dessinerEdition();
       appliquerVB();
     }
@@ -385,6 +394,27 @@
         icone(gg, q.type, q.x, q.y, taille, t.couleur);
       });
       if (etat.placement && etat.placement.x != null) icone(g, etat.placement.type, etat.placement.x, etat.placement.y, 1.6, PT[etat.placement.type].couleur).setAttribute('opacity', '0.6');
+    }
+    function dessinerMarques() { // mode quiz : contours de correction, étiquettes posées
+      var g = el('g', { 'class': 'plan__marques', 'pointer-events': 'none' }, svg);
+      Q.marques.forEach(function (m) {
+        if (m.point) { var q = R.points[m.point]; if (q) el('circle', { cx: q.x, cy: q.y, r: 44, fill: 'none', stroke: m.couleur, 'stroke-width': 10 }, g); return; }
+        var p = pieceEff(m.id); if (!p) return;
+        el('path', { d: p.d, fill: m.fond || 'none', 'fill-opacity': m.fond ? 0.35 : null, stroke: m.couleur, 'stroke-width': 12 }, g);
+      });
+      Q.poses.forEach(function (e) {
+        var taille = e.taille || 34, w = Math.max(60, e.texte.length * taille * 0.56 + 30);
+        el('rect', { x: e.x - w / 2, y: e.y - taille * 0.85, width: w, height: taille * 1.5, rx: taille * 0.75, fill: e.fond || '#223b80', opacity: 0.94 }, g);
+        var t = el('text', { x: e.x, y: e.y + taille * 0.3, 'text-anchor': 'middle', 'font-size': taille, 'font-weight': 700, fill: e.couleur || '#fff' }, g); t.textContent = e.texte;
+      });
+    }
+    function cibleEcran(cx, cy) { // ce qui se trouve sous le doigt (mode quiz)
+      var c = document.elementFromPoint(cx, cy);
+      if (!c || !c.closest || !svg.contains(c)) return { type: 'dehors' };
+      var pp = c.closest('[data-point]'); if (pp) return { type: 'point', id: pp.getAttribute('data-point') };
+      var u = c.closest('[data-unite]'); if (u) return { type: 'titre', unite: u.getAttribute('data-unite') };
+      var pi = c.closest('[data-id]'); if (pi) return { type: 'piece', id: pi.getAttribute('data-id'), xy: versPlan(cx, cy) };
+      return { type: 'vide', xy: versPlan(cx, cy) };
     }
     function choisirPoint(id, centrer) {
       etat.choix = null; etat.point = id; dessiner();
@@ -505,17 +535,20 @@
       return true;
     }
     function titres() {
-      var g = el('g', { 'pointer-events': 'none' }, svg), filtre = etat.filtre !== 'tout' && etat.filtre !== 'chambres';
+      if (Q && Q.titres === 'masques') return;
+      var gris = Q && Q.titres === 'gris';
+      var g = el('g', { 'pointer-events': gris ? 'auto' : 'none' }, svg), filtre = etat.filtre !== 'tout' && etat.filtre !== 'chambres';
       (D.titres || []).forEach(function (t) {
         var u = D.unites[t.unite]; if (!u) return;
+        if (gris && !Q.couleursTitres[t.unite]) u = { nom: u.nom, info: u.info, pastille: '#b9c0cc' };
         var w = Math.max(u.nom.length * 25, u.info.length * 17) + 70, x0 = t.ancre === 'm' ? t.x - w / 2 : (t.ancre === 'd' ? t.x - w : t.x);
-        var gg = el('g', { opacity: filtre ? 0.35 : 1 }, g);
+        var gg = el('g', { opacity: filtre ? 0.35 : 1, 'data-unite': gris ? t.unite : null, style: gris ? 'cursor:pointer' : null }, g);
         if (t.cible) {
           el('path', { d: 'M' + t.cible[0] + ' ' + t.cible[1] + ' L' + t.cible[2] + ' ' + t.cible[3], stroke: u.pastille, 'stroke-width': 6, 'stroke-dasharray': '2 12', 'stroke-linecap': 'round', fill: 'none' }, gg);
           el('circle', { cx: t.cible[0], cy: t.cible[1], r: 11, fill: u.pastille, stroke: '#fff', 'stroke-width': 4 }, gg);
         }
         el('rect', { x: x0, y: t.y - 50, width: w, height: 100, rx: 50, fill: u.pastille }, gg);
-        var texteCouleur = t.unite === 'atoumo' ? '#1b2a52' : '#fff';
+        var texteCouleur = t.unite === 'atoumo' && u.pastille !== '#b9c0cc' ? '#1b2a52' : '#fff';
         var a = el('text', { x: x0 + w / 2, y: t.y - 6, 'text-anchor': 'middle', 'font-size': 46, 'font-weight': 700, fill: texteCouleur }, gg); a.textContent = u.nom;
         var b = el('text', { x: x0 + w / 2, y: t.y + 34, 'text-anchor': 'middle', 'font-size': 31, 'font-weight': 600, fill: texteCouleur }, gg); b.textContent = u.info;
       });
@@ -620,7 +653,8 @@
         var cible = document.elementFromPoint(e.clientX, e.clientY);
         var porteur = cible && cible.closest ? cible.closest('[data-id]') : null, id = porteur && porteur.getAttribute('data-id');
         var pp = cible && cible.closest ? cible.closest('[data-point]') : null;
-        if (etat.placement) placer(versPlan(e.clientX, e.clientY));
+        if (Q) { if (Q.surToucher) Q.surToucher(cibleEcran(e.clientX, e.clientY)); }
+        else if (etat.placement) placer(versPlan(e.clientX, e.clientY));
         else if (etat.edition) { /* pendant une modification de forme, un toucher ne change pas de pièce */ }
         else if (pp) choisirPoint(pp.getAttribute('data-point'));
         else if (id) choisir(id);
@@ -790,10 +824,16 @@
     if (window.ResizeObserver) new ResizeObserver(function () { appliquerVB(); }).observe(svg);
     return { redessiner: dessiner, reglages: R, choisir: choisir, pleinEcran: basculerPlein, centrerSur: function (x, y, rayon) { var r = Math.max(rayon || 0, 60); centrerSur([x - r, y - r, x + r, y + r]); },
       // Liste des pièces avec leur nom effectif (pour le parcours de découverte)
+      quiz: function (changements) { if (Q) { Object.assign(Q, changements || {}); dessiner(); } },
+      cibleEcran: cibleEcran,
+      voir: function (bb, marge) { var m = marge || 1; var w = bb[2] - bb[0], hh = bb[3] - bb[1], cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2;
+        var a = ajuste([0, 0, Math.max(560, w * 1.15 * m), Math.max(360, hh * 1.15 * m)]); etat.vb = borner([cx - a[2] / 2, cy - a[3] / 2, a[2], a[3]]); appliquerVB(); },
+      vueDepart: function () { etat.vb = null; appliquerVB(); },
+      donnees: D,
       // Équipements avec la pièce la plus proche (pour les quiz)
       points: function () { return listePoints().map(function (q) { var pr = pieceProche(q.x, q.y); return Object.assign({ nom: PT[q.type].nom, proche: pr }, q); }); },
-      pieces: function () { return LISTE.filter(function (p) { return !p.supprimee; }).map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
+      pieces: function () { return LISTE.filter(function (p) { return !p.supprimee; }).map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom, categorie: i.categorie, unite: p.unite || null, rea: estRea(p), bbox: p.bbox, centre: p.centre }; }); } };
   }
 
-  window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE, POINTS: POINTS };
+  window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE, POINTS: POINTS, iconeHTML: iconeHTML };
 })();

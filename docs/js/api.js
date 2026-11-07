@@ -75,10 +75,45 @@
         }
         if (action.indexOf('visite') === 0) return demoVisites(action, d, ok, ko);
         if (action.indexOf('nl_') === 0) return demoNewsletters(action, d, ok, ko);
+        if (action.indexOf('quiz_') === 0) return demoQuiz(action, d, ok, ko);
         if (action === 'ping') return ok({ ok: true });
         ko(new ErreurApi('action_inconnue'));
       }, 350);
     });
+  }
+
+  /* Quiz du mode démonstration (en mémoire) */
+  var DQ = null, DQ_TOTAL = 1240;
+  function quizDemo() {
+    var ph = (planDemo().pieces.filter(function (p) { return p.nom === 'Pharmacie'; })[0] || {}).id || 'P001';
+    if (!DQ) DQ = [
+      { id: 'QZdemo00001', theme: 'urgences', type: 'vf', texte: 'Le chariot d\'urgence se vérifie avec une check-list datée et signée, y compris après chaque utilisation.', choix: null, bonne: 'vrai', explication: 'Vérification régulière et après chaque utilisation.', lies: [], statut: 'publiée', auteur: 'Démo', modifiee: '2026-11-01' },
+      { id: 'QZdemo00002', theme: 'urgences', type: 'qcm', texte: 'Devant un arrêt cardiaque dans une chambre, la première chose à faire est de…', choix: ['Appeler à l\'aide et commencer le massage cardiaque', 'Aller chercher seul le chariot d\'urgence', 'Prévenir la famille'], bonne: '0', explication: 'Alerter et masser sans attendre.', lies: [], statut: 'publiée', auteur: 'Démo', modifiee: '2026-11-01' },
+      { id: 'QZdemo00003', theme: 'plan', type: 'plan', texte: 'Touchez la pharmacie.', choix: null, bonne: ph, explication: 'Exemple de question rédigée « sur le plan ».', lies: [ph], statut: 'publiée', auteur: 'Démo', modifiee: '2026-11-01' },
+      { id: 'QZclaude01', theme: 'plan', type: 'qcm', texte: 'Combien de lits de réanimation compte le nouveau service (hors lits gelés) ?', choix: ['29', '34', '38', '45'], bonne: '0', explication: 'Bougainvillier 9 + Hibiscus 8 + Atoumo 4 + Flamboyant 8.', lies: [], statut: 'brouillon', auteur: 'Claude (à relire)', modifiee: '2026-11-07' }
+    ];
+    return DQ;
+  }
+  function demoQuiz(action, d, ok, ko) {
+    if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_absente'));
+    var ref = d.jeton !== 'demo.agent', admin = d.jeton === 'demo.admin', l = quizDemo();
+    if (action === 'quiz_liste') return ok({ ok: true, total: DQ_TOTAL, objectif: 3000, peutGerer: ref, admin: admin,
+      questions: l.filter(function (q) { return q.statut === 'brouillon' ? admin : (ref || q.statut === 'publiée'); }).map(function (q) {
+        var o = { id: q.id, theme: q.theme, type: q.type, texte: q.texte, choix: q.choix, bonne: q.bonne, explication: q.explication, lies: q.lies };
+        if (ref) { o.statut = q.statut; o.auteur = q.auteur; o.modifiee = q.modifiee; o.aReverifier = false; } return o; }) });
+    if (action === 'quiz_compteur') { if (!(d.n >= 1 && d.n <= 50)) return ko(new ErreurApi('requete_invalide')); DQ_TOTAL += d.n; return ok({ ok: true, total: DQ_TOTAL }); }
+    if (!ref) return ko(new ErreurApi('non_autorise'));
+    if (action === 'quiz_question') {
+      var x = d.donnees || {}, q = d.id ? l.filter(function (y) { return y.id === d.id; })[0] : null;
+      var v = { theme: x.theme, type: x.type, texte: x.texte, choix: x.choix || null, bonne: Array.isArray(x.bonne) ? x.bonne.join(',') : String(x.bonne), explication: x.explication || '', lies: (x.lies || []).concat(Array.isArray(x.bonne) ? x.bonne : []), modifiee: '2026-11-07' };
+      if (q) Object.assign(q, v); else { q = Object.assign({ id: 'QZ' + Math.random().toString(36).slice(2, 12), statut: 'publiée', auteur: 'Démo' }, v); l.push(q); }
+      return ok({ ok: true, id: q.id });
+    }
+    if (action === 'quiz_statut') {
+      var n = 0; l.forEach(function (q) { if (d.ids.indexOf(q.id) < 0) return; if (q.statut === 'brouillon' && !admin) return; n++; if (d.statut === 'retirer') q.statut = 'retirée'; if (d.statut === 'publier') q.statut = 'publiée'; });
+      return n ? ok({ ok: true, n: n }) : ko(new ErreurApi('question_introuvable'));
+    }
+    ko(new ErreurApi('action_inconnue'));
   }
 
   /* Newsletters du mode démonstration (en mémoire). Une lettre fictive est dessinée à la volée. */
