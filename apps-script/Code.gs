@@ -6,6 +6,7 @@
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
  * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
  * 1.3 : modification de la forme du plan (déplacer, redimensionner, supprimer, ajouter une pièce).
+ * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
  * Principes :
@@ -21,7 +22,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.4.0',
+  version: '1.5.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -40,16 +41,18 @@ var ONGLETS = {
   categories: 'Catégories',
   creneaux: 'Créneaux',
   inscriptions: 'Inscriptions',
-  newsletters: 'Newsletters'
+  newsletters: 'Newsletters',
+  points: 'Équipements'
 };
 
 var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
 
 // Valeurs autorisées pour la désignation des pièces (identiques à docs/js/plan.js)
 var PLAN = {
-  categories: ['poste', 'soins', 'bureau', 'personnel', 'familles', 'logistique', 'technique', 'urgence', 'exterieur', 'autre'],
+  categories: ['poste', 'soins', 'wc', 'pharmacie', 'dm', 'logistique', 'biomed', 'secretariat', 'entretien', 'bureau', 'personnel', 'familles', 'technique', 'urgence', 'exterieur', 'autre'],
+  points: ['chariot', 'echographe', 'imprimante'],
   icones: ['poste', 'soins', 'bureau', 'personnel', 'garde', 'familles', 'vestiaire', 'office', 'linge', 'reserve', 'menage', 'pharmacie',
-           'technique', 'reunion', 'simulation', 'urgence', 'dae', 'wc', 'exterieur', 'autre'],
+           'technique', 'reunion', 'simulation', 'urgence', 'dae', 'wc', 'dm', 'biomed', 'secretariat', 'entretien', 'exterieur', 'autre'],
   cacheSec: 21600
 };
 
@@ -80,6 +83,7 @@ function doPost(e) {
       home: function () { return home_(verifierJeton_(req.jeton)); },
       plan: function () { return plan_(verifierJeton_(req.jeton)); },
       plan_piece: function () { return planPiece_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
+      plan_point: function () { return planPoint_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); },
       visites: function () { return visites_(verifierJeton_(req.jeton)); },
       visite_inscrire: function () { return visiteInscrire_(verifierJeton_(req.jeton), req.creneau, req.donnees); },
@@ -261,7 +265,7 @@ function geometriePlan_() {
 }
 
 function reglagesPlan_() {
-  var ss = classeur_(), r = { pieces: {}, categories: {} };
+  var ss = classeur_(), r = { pieces: {}, categories: {}, points: {} };
   var p = ss.getSheetByName(ONGLETS.pieces).getDataRange().getValues();
   for (var i = 1; i < p.length; i++) {
     var id = String(p[i][0] || '').trim(); if (!id) continue;
@@ -280,6 +284,14 @@ function reglagesPlan_() {
   for (var j = 1; j < c.length; j++) {
     var cat = String(c[j][0] || '').trim(), coul = String(c[j][1] || '').trim();
     if (cat && /^#[0-9a-fA-F]{6}$/.test(coul)) r.categories[cat] = { couleur: coul };
+  }
+  var shp = ss.getSheetByName(ONGLETS.points);
+  if (shp) {
+    var q = shp.getDataRange().getValues();
+    for (var k = 1; k < q.length; k++) {
+      var pid = String(q[k][0] || '').trim(), type = String(q[k][1] || '').trim(), x = Number(q[k][2]), y = Number(q[k][3]);
+      if (pid && PLAN.points.indexOf(type) >= 0 && q[k][2] !== '' && q[k][3] !== '' && isFinite(x) && isFinite(y)) r.points[pid] = { type: type, x: x, y: y, precision: String(q[k][4] || '') };
+    }
   }
   return r;
 }
@@ -323,6 +335,25 @@ function planPiece_(session, id, d) {
     if (couleur === null) throw erreurApp_('requete_invalide');
     var valeurs = [[id, nom, precision, categorie, icone || '', couleur, new Date(), session.n || 'Administrateur', forme, supprimee, ajout]];
     if (ligne > 0) sh.getRange(ligne, 1, 1, 11).setValues(valeurs); else sh.appendRow(valeurs[0]);
+    return { ok: true };
+  } finally { verrou.releaseLock(); }
+}
+
+/** Ajoute, modifie (type, position, précision) ou supprime (donnees = null) un équipement placé sur le plan. */
+function planPoint_(session, id, d) {
+  id = String(id || '');
+  if (!/^Q[a-z0-9]{6,12}$/.test(id)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var sh = classeur_().getSheetByName(ONGLETS.points);
+    if (!sh) throw erreurApp_('non_installe');
+    var v = sh.getDataRange().getValues(), ligne = -1;
+    for (var i = 1; i < v.length; i++) if (String(v[i][0]) === id) { ligne = i + 1; break; }
+    if (d == null) { if (ligne > 0) sh.deleteRow(ligne); return { ok: true }; }
+    var x = Number(d.x), y = Number(d.y);
+    if (PLAN.points.indexOf(d.type) < 0 || !isFinite(x) || !isFinite(y) || x < -2000 || x > 6000 || y < -2000 || y > 6000) throw erreurApp_('requete_invalide');
+    var valeurs = [[id, d.type, Math.round(x), Math.round(y), nettoyerTexte_(d.precision, 40), new Date(), session.n || 'Administrateur']];
+    if (ligne > 0) sh.getRange(ligne, 1, 1, 7).setValues(valeurs); else sh.appendRow(valeurs[0]);
     return { ok: true };
   } finally { verrou.releaseLock(); }
 }
@@ -712,6 +743,7 @@ function installer() {
   creerOnglet_(ss, ONGLETS.pieces, ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée'], []);
   completerEntetes_(ss.getSheetByName(ONGLETS.pieces), ['ID pièce', 'Nom', 'Précision', 'Catégorie', 'Icône', 'Couleur', 'Modifié le', 'Par', 'Forme (x0,y0,x1,y1)', 'Supprimée', 'Ajoutée']);
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
+  creerOnglet_(ss, ONGLETS.points, ['ID équipement', 'Type', 'X', 'Y', 'Précision', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
   creerOnglet_(ss, ONGLETS.newsletters, NL.entetes, []);
   ajouterParametre_(ss, 'Dossier des newsletters (ID Drive)', 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');

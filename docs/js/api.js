@@ -68,9 +68,9 @@
         }
         if (action === 'plan') {
           if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_invalide'));
-          return ok({ ok: true, donnees: planDemo(), reglages: { pieces: {}, categories: {} }, peutModifier: d.jeton !== 'demo.agent' });
+          return ok({ ok: true, donnees: planDemo(), reglages: { pieces: {}, categories: {}, points: { Qdemo0001: { type: 'chariot', x: 450, y: 290, precision: 'Adulte' }, Qdemo0002: { type: 'echographe', x: 250, y: 530, precision: '' }, Qdemo0003: { type: 'imprimante', x: 620, y: 530, precision: 'Couleur' } } }, peutModifier: d.jeton !== 'demo.agent' });
         }
-        if (action === 'plan_piece' || action === 'plan_categorie') {
+        if (action === 'plan_piece' || action === 'plan_categorie' || action === 'plan_point') {
           return d.jeton === 'demo.agent' ? ko(new ErreurApi('non_autorise')) : ok({ ok: true });
         }
         if (action.indexOf('visite') === 0) return demoVisites(action, d, ok, ko);

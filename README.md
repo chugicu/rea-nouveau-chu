@@ -30,6 +30,7 @@ GUIDE_DEPLOIEMENT.md
 | 3 | Visites des locaux : créneaux, inscription, code de réservation, présence, badges « Visite faite » et « Plan exploré » | Livrée |
 | 3.1 | Exports Excel/PDF des visiteurs, émargement, modification du plan (forme, ajout, retrait), plein écran, logo CHU | Livrée |
 | 3.2 | Newsletter : PDF converti en images HD, publication par l'administrateur, lecture hors ligne | Livrée |
+| 3.3 | Plan : sections WC, Pharmacie, DM, Logistique, Biomed, Secrétariats, Entretiens ; équipements (chariots d'urgence, échographes, imprimantes) ; page test GPS sur le plan | Livrée |
 | 4 | Quiz | À venir |
 | 5 | Simulations in situ | À venir |
 | 6 | Documents, FAQ, « Je suis prêt(e) » | À venir |

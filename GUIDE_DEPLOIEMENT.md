@@ -249,6 +249,19 @@ Les désignations sont rattachées à un identifiant de pièce (P001, P002…) :
 
 ---
 
+## Partie J – Version 1.5 : sections et équipements sur le plan
+
+### J1. Mettre à jour le moteur
+Collez `Code.gs` et `appsscript.json` (version 1.5.0), **Installer / réparer la base** (crée l'onglet **Équipements**), puis **Nouvelle version** du déploiement.
+
+### J2. Nouveautés (référents et administrateur)
+- **Sections de pièces** : WC, Pharmacie, DM (dispositifs médicaux), Logistique, Biomed, Secrétariats, Entretiens (en plus des postes de soins, bureaux, personnel, familles…). Chaque section a son filtre, sa couleur et son icône. Les pièces déjà nommées « WC », « Pharmacie », « Secrétariat »… y sont rangées automatiquement ; corrigez si besoin (Plan > pièce > *Modifier le nom, l'icône ou la couleur* > Catégorie).
+- **Équipements** (chariots d'urgence, échographes, imprimantes) : Plan > **+ Équipement** > type et précision (ex. « Adulte », « n° 2 ») > **Placer sur le plan** > toucher l'emplacement. Toucher un équipement : *Modifier*, *Déplacer* (puis toucher le nouvel emplacement), *Supprimer*.
+- Tout le monde voit les équipements, peut les rechercher (« chariot », « écho »…) et filtrer « Chariots d'urgence », « Échographes », « Imprimantes ». La fiche indique la pièce la plus proche (« Près de : chambre 312 »).
+- Les équipements sont dans l'onglet **Équipements** du Sheets (une ligne par équipement) ; ils serviront aux quiz (« Où est le chariot d'urgence le plus proche de la 318 ? »).
+
+---
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

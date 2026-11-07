@@ -645,6 +645,10 @@
           return Api.appeler('plan_piece', { jeton: session.jeton, id: id, donnees: d })
             .then(function () { majCache(); }, function (e) { throw new Error(message(e.code)); });
         },
+        enregistrerPoint: function (id, d) {
+          return Api.appeler('plan_point', { jeton: session.jeton, id: id, donnees: d })
+            .then(function () { majCache(); }, function (e) { throw new Error(message(e.code)); });
+        },
         enregistrerCategorie: function (cat, d) {
           return Api.appeler('plan_categorie', { jeton: session.jeton, categorie: cat, donnees: d })
             .then(function () { majCache(); }, function (e) { throw new Error(message(e.code)); });

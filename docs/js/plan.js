@@ -14,16 +14,31 @@
   var CATEGORIES = [
     { id: 'poste', nom: 'Postes de soins', couleur: '#1f6fa8', icone: 'poste' },
     { id: 'soins', nom: 'Soins', couleur: '#2f86c9', icone: 'soins' },
+    { id: 'wc', nom: 'WC', couleur: '#0e8f86', icone: 'wc' },
+    { id: 'pharmacie', nom: 'Pharmacie', couleur: '#1a9a5c', icone: 'pharmacie' },
+    { id: 'dm', nom: 'DM', couleur: '#7fa31a', icone: 'dm' },
+    { id: 'logistique', nom: 'Logistique', couleur: '#2e7a4f', icone: 'reserve' },
+    { id: 'biomed', nom: 'Biomed', couleur: '#c99a00', icone: 'biomed' },
+    { id: 'secretariat', nom: 'Secrétariats', couleur: '#3d7fd1', icone: 'secretariat' },
+    { id: 'entretien', nom: 'Entretiens', couleur: '#a0527a', icone: 'entretien' },
     { id: 'bureau', nom: 'Bureaux', couleur: '#5b5fb0', icone: 'bureau' },
     { id: 'personnel', nom: 'Personnel', couleur: '#7b3fc4', icone: 'personnel' },
     { id: 'familles', nom: 'Familles', couleur: '#c2416f', icone: 'familles' },
-    { id: 'logistique', nom: 'Logistique', couleur: '#2e8a55', icone: 'reserve' },
     { id: 'technique', nom: 'Technique', couleur: '#8a6d3b', icone: 'technique' },
     { id: 'urgence', nom: 'Urgence', couleur: '#d93a2f', icone: 'urgence' },
     { id: 'exterieur', nom: 'Extérieur', couleur: '#7f8c9d', icone: 'exterieur' },
     { id: 'autre', nom: 'Autre', couleur: '#6b7586', icone: 'autre' }
   ];
   var CAT = {}; CATEGORIES.forEach(function (c) { CAT[c.id] = c; });
+  var NOMS_LONGS = { wc: 'WC, sanitaires', dm: 'Dispositifs médicaux (DM)', biomed: 'Biomédical', entretien: 'Salles d\'entretien' };
+
+  // Équipements placés par les référents dans les parties communes (points sur le plan, repris par les quiz)
+  var POINTS = [
+    { id: 'chariot', nom: 'Chariot d\'urgence', pluriel: 'Chariots d\'urgence', couleur: '#d93a2f' },
+    { id: 'echographe', nom: 'Échographe', pluriel: 'Échographes', couleur: '#1f6fa8' },
+    { id: 'imprimante', nom: 'Imprimante', pluriel: 'Imprimantes', couleur: '#4c5a7a' }
+  ];
+  var PT = {}; POINTS.forEach(function (t) { PT[t.id] = t; });
 
   // Pictogrammes filaires (repère : cercle de rayon 15 centré en 0,0)
   var GLYPHES = {
@@ -48,11 +63,19 @@
     exterieur: '<path d="M0 9V-1M0-1c-6 0-8-4-8-8 4 0 8 2 8 8zM0 2c5 0 7-3 7-7-4 0-7 2-7 7z" stroke-width="2.2" fill="none"/>',
     ascenseur: '<rect x="-7.5" y="-9" width="15" height="18" rx="2.5" stroke-width="2.4" fill="none"/><path d="M-3.4-1.6L0-5.6 3.4-1.6Z M-3.4 1.6L0 5.6 3.4 1.6Z" fill="#fff" stroke-width="1"/>',
     escalier: '<path d="M-7 7v-5h4.5v-4.5h4.5v-4.5h5" stroke-width="2.8" fill="none"/>',
+    dm: '<path d="M-7 7l9-9M0-9l9 9M-2-4l6 6M-9 9l3-3" stroke-width="2.4" fill="none"/>',
+    biomed: '<path d="M-10 1h4l2-6 4 11 3-8 2 3h5" stroke-width="2.4" fill="none"/>',
+    secretariat: '<path d="M-6-9h9l4 4v14h-13z M3-9v4h4M-3 0h7M-3 4h7" stroke-width="2.2" fill="none"/>',
+    entretien: '<path d="M-9-7h10v7h-6l-4 3z M3-3h6v7l-3-2h-6v-2" stroke-width="2.1" fill="none"/>',
+    chariot: '<rect x="-9" y="-7" width="18" height="12" rx="2" stroke-width="2.2" fill="none"/><path d="M0-4v6M-3-1h6" stroke-width="2.4"/><circle cx="-5" cy="8" r="1.8" stroke-width="1.8" fill="none"/><circle cx="5" cy="8" r="1.8" stroke-width="1.8" fill="none"/>',
+    echographe: '<rect x="-9" y="-9" width="13" height="10" rx="1.5" stroke-width="2.2" fill="none"/><path d="M-6-2a3.5 3.5 0 0 1 7 0M-3 1v5M-7 6h8" stroke-width="2" fill="none"/><path d="M8-6v6a2 2 0 0 1-4 0" stroke-width="2.2" fill="none"/>',
+    imprimante: '<path d="M-6-4v-5h12v5M-6 5h-3v-9h18v9h-3" stroke-width="2.2" fill="none"/><rect x="-6" y="1" width="12" height="8" stroke-width="2.2" fill="none"/>',
     autre: '<circle r="2" fill="#fff" stroke-width="0"/><circle cx="-6" r="2" fill="#fff" stroke-width="0"/><circle cx="6" r="2" fill="#fff" stroke-width="0"/>'
   };
   var NOMS_ICONES = { poste: 'Poste de soins', soins: 'Soins', bureau: 'Bureau', personnel: 'Personnel', garde: 'Garde', familles: 'Familles',
     vestiaire: 'Vestiaire', office: 'Office, repas', linge: 'Linge', reserve: 'Réserve', menage: 'Ménage', pharmacie: 'Pharmacie',
-    technique: 'Technique', reunion: 'Réunion', simulation: 'Simulation', urgence: 'Urgence', dae: 'DAE', wc: 'Sanitaires', exterieur: 'Extérieur', autre: 'Autre' };
+    technique: 'Technique', reunion: 'Réunion', simulation: 'Simulation', urgence: 'Urgence', dae: 'DAE', wc: 'Sanitaires', dm: 'Dispositifs médicaux', biomed: 'Biomédical', secretariat: 'Secrétariat', entretien: 'Entretien',
+    exterieur: 'Extérieur', autre: 'Autre' };
   var PALETTE = ['#1f6fa8', '#2f86c9', '#0e8f86', '#24934f', '#7fa31a', '#c99a00', '#d9600b', '#d93a2f', '#c2416f', '#7b3fc4', '#5b5fb0', '#6b7586'];
   var GRIS = { usic: ['#c9cfd9', '#9aa3b1'], usinv: ['#98a1b0', '#717b8b'] };
 
@@ -97,7 +120,7 @@
   /* ---------- Composant ---------- */
   function creer(racine, opt) {
     var D = opt.donnees, R = opt.reglages || { pieces: {}, categories: {} };
-    R.pieces = R.pieces || {}; R.categories = R.categories || {};
+    R.pieces = R.pieces || {}; R.categories = R.categories || {}; R.points = R.points || {};
     // Format compact : rectangle « r » à la place du chemin « d » ; boîte et centre recalculés si absents
     D.pieces.forEach(function (p) {
       if (!p.d && p.r) p.d = 'M' + p.r[0] + ',' + p.r[1] + ' H' + p.r[2] + ' V' + p.r[3] + ' H' + p.r[0] + 'Z';
@@ -133,7 +156,9 @@
     var etat = { mode: opt.mode === 'icones' ? 'icones' : 'texte', filtre: 'tout', choix: null, vb: null,
                  edition: null,   // { id, r: [x0,y0,x1,y1] } : forme en cours de modification
                  ajout: false,    // mode « dessiner une nouvelle pièce »
-                 plein: false };  // mode plein écran
+                 plein: false,    // mode plein écran
+                 point: null,     // équipement sélectionné
+                 placement: null }; // { id, type, precision } : en attente du toucher qui place l'équipement
 
     /* Infos effectives d'une pièce (réglages des référents > données du plan) */
     function infos(p) {
@@ -141,10 +166,20 @@
       var cat = r.categorie || p.categorie || null;
       var nom = r.nom != null && r.nom !== '' ? r.nom : p.nom;
       if (!r.categorie && nom === 'Poste de soins') cat = 'poste';
+      if (!r.categorie && nom) { // nouvelles sections, déduites du nom tant qu'un référent n'a pas choisi
+        var nn = nom.toLowerCase();
+        if (/\bwc\b|sanitaire|toilette/.test(nn)) cat = 'wc';
+        else if (/pharmacie/.test(nn)) cat = 'pharmacie';
+        else if (/secr[ée]tariat/.test(nn)) cat = 'secretariat';
+        else if (/biom[ée]d/.test(nn)) cat = 'biomed';
+        else if (/\bdm\b|dispositifs? m[ée]dica/.test(nn)) cat = 'dm';
+        else if (/entretien/.test(nn)) cat = 'entretien';
+      }
       var icone = r.icone || (cat === 'poste' ? 'poste' : (cat && CAT[cat] ? CAT[cat].icone : null));
       if (!r.icone && nom) { // icônes plus parlantes pour quelques noms connus
         var n = nom.toLowerCase();
-        if (/garde/.test(n)) icone = 'garde'; else if (/vestiaire/.test(n)) icone = 'vestiaire'; else if (/office/.test(n)) icone = 'office';
+        if (cat && ['wc', 'pharmacie', 'dm', 'biomed', 'secretariat', 'entretien'].indexOf(cat) >= 0 && !r.categorie) icone = CAT[cat].icone;
+        else if (/garde/.test(n)) icone = 'garde'; else if (/vestiaire/.test(n)) icone = 'vestiaire'; else if (/office/.test(n)) icone = 'office';
         else if (/linge/.test(n)) icone = 'linge'; else if (/ménage/.test(n)) icone = 'menage'; else if (/pharmacie/.test(n)) icone = 'pharmacie';
         else if (/réunion/.test(n)) icone = 'reunion'; else if (/simulation/.test(n)) icone = 'simulation'; else if (/détente/.test(n)) icone = 'office';
       }
@@ -165,18 +200,23 @@
     });
     var filtres = h('div', { class: 'plan__filtres', role: 'group', 'aria-label': 'Afficher une catégorie' });
     function listeFiltres() {
-      var l = [{ id: 'tout', nom: 'Tout' }, { id: 'chambres', nom: 'Chambres' }].concat(CATEGORIES.filter(function (c) { return c.id !== 'exterieur' && c.id !== 'autre'; }));
+      var l = [{ id: 'tout', nom: 'Tout' }, { id: 'chambres', nom: 'Chambres' }]
+        .concat(POINTS.map(function (t) { return { id: 'pt:' + t.id, nom: t.pluriel, point: t }; }))
+        .concat(CATEGORIES.filter(function (c) { return c.id !== 'exterieur' && c.id !== 'autre'; }));
       if (opt.peutModifier) l.push({ id: 'adesigner', nom: 'À désigner' }, { id: 'supprimees', nom: 'Pièces supprimées' });
       filtres.replaceChildren.apply(filtres, l.map(function (f) {
-        var coul = f.id === 'tout' || f.id === 'chambres' || f.id === 'adesigner' || f.id === 'supprimees' ? null : couleurCat(f.id);
+        var coul = f.point || f.id === 'tout' || f.id === 'chambres' || f.id === 'adesigner' || f.id === 'supprimees' ? null : couleurCat(f.id);
         return h('button', { type: 'button', 'data-filtre': f.id, 'aria-pressed': String(etat.filtre === f.id), onclick: function () { etat.filtre = f.id; majBoutons(); dessiner(); } },
-          coul ? h('i', { style: 'background:' + coul }) : null, f.nom);
+          coul ? h('i', { style: 'background:' + coul }) : null, f.point ? iconeHTML(f.point.id, f.point.couleur) : null, f.nom);
       }));
     }
     function couleurCat(id) { return (R.categories[id] && R.categories[id].couleur) || (CAT[id] && CAT[id].couleur) || '#6b7586'; }
     barre.append(h('div', { class: 'plan__cherche' }, recherche, resultats), modes);
     var boutonAjout = opt.peutModifier ? h('button', { type: 'button', class: 'plan__ajout', 'aria-pressed': 'false', onclick: function () { basculerAjout(); }, text: '+ Pièce' }) : null;
     if (boutonAjout) barre.appendChild(boutonAjout);
+    var boutonPoint = opt.peutModifier ? h('button', { type: 'button', class: 'plan__ajout plan__ajout-point', 'aria-pressed': 'false', onclick: function () { if (etat.placement) finPlacement(); else fichePoint(null); }, text: '+ Équipement' }) : null;
+    if (boutonPoint) barre.appendChild(boutonPoint);
+    if (opt.peutModifier) barre.classList.add('plan__outils--ref');
 
     var cadre = h('div', { class: 'plan__cadre' });
     var svg = el('svg', { 'class': 'plan__svg', role: 'img', 'aria-label': 'Plan du niveau 3 : réanimation et USC', 'font-family': 'Barlow, PT Sans, sans-serif' });
@@ -191,8 +231,9 @@
     var ICONE_QUITTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     zoom.lastChild.innerHTML = ICONE_PLEIN; // constante interne
     var aideAjout = h('p', { class: 'plan__aide-ajout', hidden: true, text: 'Faites glisser le doigt sur le plan pour dessiner la nouvelle pièce.' });
+    var aidePoint = h('p', { class: 'plan__aide-ajout', hidden: true, text: 'Touchez le plan à l\'endroit de l\'équipement.' });
     cadre.appendChild(zoom);
-    cadre.appendChild(aideAjout);
+    cadre.appendChild(aideAjout); cadre.appendChild(aidePoint);
     var fiche = h('section', { class: 'plan__fiche', hidden: true, 'aria-live': 'polite' });
     cadre.appendChild(fiche);
     var entetePlein = h('div', { class: 'plan__entete' }, barre, filtres);
@@ -211,6 +252,7 @@
       if (f === 'chambres') return p.type === 'chambre';
       if (f === 'adesigner') return p.type === 'piece' && !inf.nom;
       if (f === 'supprimees') return !!p.supprimee;
+      if (f.indexOf('pt:') === 0) return false;
       return p.type === 'piece' && inf.categorie === f;
     }
     function dessiner() {
@@ -249,6 +291,7 @@
       svg.appendChild(calqueTexte);
       el('rect', { x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], rx: 10, fill: 'none', stroke: '#223b80', 'stroke-width': 10, 'pointer-events': 'none' }, svg);
       titres();
+      dessinerPoints();
       dessinerEdition();
       appliquerVB();
     }
@@ -305,7 +348,7 @@
       if (boutonAjout) boutonAjout.setAttribute('aria-pressed', String(etat.ajout));
       aideAjout.hidden = !etat.ajout;
       cadre.classList.toggle('plan__cadre--ajout', etat.ajout);
-      if (etat.ajout) { etat.edition = null; choisir(null); }
+      if (etat.ajout) { if (etat.placement) finPlacement(); etat.edition = null; choisir(null); }
     }
     function nouvellePiece(r) {
       var id = 'N' + Math.random().toString(36).slice(2, 10);
@@ -313,6 +356,112 @@
       R.pieces[id] = { ajout: true, forme: r }; recalculer(); // provisoire, confirmé à l'enregistrement du formulaire
       etat.choix = id; dessiner();
       formulaire(p, function annuler() { delete R.pieces[id]; recalculer(); choisir(null); });
+    }
+
+    /* ----- Équipements (points) ----- */
+    function listePoints() {
+      return Object.keys(R.points).map(function (id) { var q = R.points[id]; return { id: id, type: q.type, x: q.x, y: q.y, precision: q.precision || '' }; })
+        .filter(function (q) { return PT[q.type] && isFinite(q.x) && isFinite(q.y); });
+    }
+    function pieceProche(x, y) { // pièce nommée ou chambre la plus proche (pour « près de … »)
+      var best = null, dmin = Infinity;
+      LISTE.forEach(function (p) {
+        if (p.supprimee || !(p.type === 'chambre' && p.chambre && estRea(p) || p.type === 'piece' && infos(p).nom)) return;
+        var dx = Math.max(p.bbox[0] - x, 0, x - p.bbox[2]), dy = Math.max(p.bbox[1] - y, 0, y - p.bbox[3]), d = Math.hypot(dx, dy);
+        if (d < dmin) { dmin = d; best = p; }
+      });
+      if (!best) return null;
+      return { id: best.id, nom: best.type === 'chambre' ? 'chambre ' + best.chambre : infos(best).nom };
+    }
+    function dessinerPoints() {
+      var f = etat.filtre, seul = f.indexOf('pt:') === 0 ? f.slice(3) : null, autreFiltre = f !== 'tout' && !seul;
+      var g = el('g', { 'class': 'plan__points' }, svg);
+      listePoints().forEach(function (q) {
+        if (seul && q.type !== seul) return;
+        var t = PT[q.type], choisi = etat.point === q.id, taille = seul ? 2.1 : 1.6;
+        var gg = el('g', { 'data-point': q.id, 'class': 'plan__point', style: 'cursor:pointer', opacity: autreFiltre ? 0.3 : 1 }, g);
+        if (choisi) el('circle', { cx: q.x, cy: q.y, r: 15 * taille + 12, fill: 'none', stroke: '#223b80', 'stroke-width': 8 }, gg);
+        if (seul) el('circle', { cx: q.x, cy: q.y, r: 15 * taille + 20, fill: melange(t.couleur, 0.18), stroke: 'none' }, gg);
+        icone(gg, q.type, q.x, q.y, taille, t.couleur);
+      });
+      if (etat.placement && etat.placement.x != null) icone(g, etat.placement.type, etat.placement.x, etat.placement.y, 1.6, PT[etat.placement.type].couleur).setAttribute('opacity', '0.6');
+    }
+    function choisirPoint(id, centrer) {
+      etat.choix = null; etat.point = id; dessiner();
+      var q = id && R.points[id];
+      if (!q) { fiche.hidden = true; return; }
+      if (etat.plein) basculerEntete(false);
+      if (centrer) centrerSur([q.x - 60, q.y - 60, q.x + 60, q.y + 60]);
+      afficherFichePoint(id);
+    }
+    function afficherFichePoint(id) {
+      var q = R.points[id], t = PT[q.type], proche = pieceProche(q.x, q.y);
+      remplir(fiche, h('div', { class: 'plan__poignee' }),
+        h('div', { class: 'plan__fiche-tete' }, iconeHTML(q.type, t.couleur),
+          h('div', null, h('h3', { text: t.nom + (q.precision ? ' – ' + q.precision : '') }), h('p', { class: 'plan__sous', text: proche ? 'Près de : ' + proche.nom : 'Équipement' })),
+          h('button', { type: 'button', class: 'plan__fermer', 'aria-label': 'Fermer', onclick: function () { choisirPoint(null); }, text: '×' })),
+        opt.peutModifier ? h('div', { class: 'plan__actions' },
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { fichePoint(id); }, text: 'Modifier' }),
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { commencerPlacement({ id: id, type: q.type, precision: q.precision || '' }); }, text: 'Déplacer' }),
+          h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', onclick: function (ev) {
+            var b = ev.currentTarget;
+            if (b.dataset.confirme !== '1') { b.dataset.confirme = '1'; b.textContent = 'Confirmer la suppression'; return; }
+            b.disabled = true;
+            enregistrerPoint(id, null).then(function () { choisirPoint(null); }, function (e) { b.disabled = false; b.textContent = (e && e.message) || 'Suppression impossible'; });
+          }, text: 'Supprimer' })) : null);
+      fiche.hidden = false;
+    }
+    function enregistrerPoint(id, donnees) {
+      return Promise.resolve(opt.enregistrerPoint ? opt.enregistrerPoint(id, donnees) : null).then(function () {
+        if (donnees === null) delete R.points[id]; else R.points[id] = donnees;
+      });
+    }
+    function fichePoint(id) { // choix du type et de la précision (nouvel équipement ou modification)
+      var q = id ? R.points[id] : null, sel = q ? q.type : POINTS[0].id;
+      var types = h('div', { class: 'plan__types-points', role: 'radiogroup', 'aria-label': 'Type d\'équipement' });
+      POINTS.forEach(function (t) {
+        var b = h('button', { type: 'button', role: 'radio', 'aria-checked': String(t.id === sel), onclick: function () { sel = t.id; maj(); } }, iconeHTML(t.id, t.couleur), h('span', { text: t.nom }));
+        b.dataset.type = t.id; types.appendChild(b);
+      });
+      function maj() { types.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.type === sel)); }); }
+      var prec = h('input', { type: 'text', id: 'pt-prec', maxlength: '40', value: q ? q.precision || '' : '', placeholder: 'Ex. : n° 2, adulte, couleur…' });
+      var erreur = h('p', { class: 'plan__erreur', role: 'alert' });
+      var bouton = h('button', { type: 'submit', class: 'bouton', text: q ? 'Enregistrer' : 'Placer sur le plan' });
+      var form = h('form', { class: 'plan__form', onsubmit: function (ev) {
+        ev.preventDefault();
+        if (!q) { commencerPlacement({ id: null, type: sel, precision: prec.value.trim() }); return; }
+        bouton.disabled = true;
+        enregistrerPoint(id, { type: sel, x: q.x, y: q.y, precision: prec.value.trim() }).then(function () { dessiner(); afficherFichePoint(id); })
+          .catch(function (e) { bouton.disabled = false; erreur.textContent = (e && e.message) || 'Enregistrement impossible.'; });
+      } },
+        h('h3', { text: q ? 'Modifier l\'équipement' : 'Ajouter un équipement' }),
+        h('span', { class: 'plan__label', text: 'Type' }), types,
+        h('label', { for: 'pt-prec', text: 'Précision (facultatif)' }), prec,
+        erreur,
+        h('div', { class: 'plan__actions' },
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (q) afficherFichePoint(id); else { fiche.hidden = true; } }, text: 'Annuler' }),
+          bouton));
+      etat.choix = null; basculerAjout(false);
+      remplir(fiche, h('div', { class: 'plan__poignee' }), form);
+      fiche.hidden = false; if (etat.plein) basculerEntete(false);
+    }
+    function commencerPlacement(pl) {
+      etat.placement = pl; etat.point = pl.id; basculerAjout(false);
+      fiche.hidden = true; aidePoint.hidden = false;
+      if (boutonPoint) { boutonPoint.setAttribute('aria-pressed', 'true'); boutonPoint.textContent = 'Annuler le placement'; }
+      cadre.classList.add('plan__cadre--ajout'); dessiner();
+    }
+    function finPlacement() {
+      etat.placement = null; aidePoint.hidden = true;
+      if (boutonPoint) { boutonPoint.setAttribute('aria-pressed', 'false'); boutonPoint.textContent = '+ Équipement'; }
+      cadre.classList.toggle('plan__cadre--ajout', etat.ajout); dessiner();
+    }
+    function placer(xy) {
+      var pl = etat.placement, id = pl.id || 'Q' + Math.random().toString(36).slice(2, 10);
+      var donnees = { type: pl.type, x: Math.round(xy[0]), y: Math.round(xy[1]), precision: pl.precision || '' };
+      pl.x = donnees.x; pl.y = donnees.y; dessiner();
+      enregistrerPoint(id, donnees).then(function () { finPlacement(); choisirPoint(id); })
+        .catch(function (e) { finPlacement(); remplir(fiche, h('p', { class: 'plan__erreur', role: 'alert', text: (e && e.message) || 'Enregistrement impossible.' })); fiche.hidden = false; });
     }
 
     function etiquette(calque, p, inf) {
@@ -470,7 +619,10 @@
       if (etaitSeul && !bouge && e.type === 'pointerup') {
         var cible = document.elementFromPoint(e.clientX, e.clientY);
         var porteur = cible && cible.closest ? cible.closest('[data-id]') : null, id = porteur && porteur.getAttribute('data-id');
-        if (etat.edition) { /* pendant une modification de forme, un toucher ne change pas de pièce */ }
+        var pp = cible && cible.closest ? cible.closest('[data-point]') : null;
+        if (etat.placement) placer(versPlan(e.clientX, e.clientY));
+        else if (etat.edition) { /* pendant une modification de forme, un toucher ne change pas de pièce */ }
+        else if (pp) choisirPoint(pp.getAttribute('data-point'));
         else if (id) choisir(id);
         else if (etat.plein && fiche.hidden) basculerEntete();   // plein écran : toucher hors pièce = afficher/masquer le bandeau du haut
         else choisir(null);
@@ -515,6 +667,10 @@
         if (p.type === 'chambre' && p.chambre && estRea(p)) l.push({ id: p.id, titre: 'Chambre ' + p.chambre, sous: p.unite ? D.unites[p.unite].nom : 'Brûlés ambu.', cle: p.chambre + ' chambre ' + (p.unite ? D.unites[p.unite].nom : ''), icone: null });
         else if (p.type === 'piece' && inf.nom) l.push({ id: p.id, titre: inf.nom, sous: inf.precision || (inf.categorie && CAT[inf.categorie] ? CAT[inf.categorie].nom : ''), cle: inf.nom + ' ' + inf.precision + ' ' + (inf.complet || ''), icone: inf.icone, couleur: inf.couleur || (inf.categorie ? couleurCat(inf.categorie) : null) });
       });
+      listePoints().forEach(function (q) {
+        var t = PT[q.type], pr = pieceProche(q.x, q.y);
+        l.push({ point: q.id, titre: t.nom + (q.precision ? ' – ' + q.precision : ''), sous: pr ? 'près de ' + pr.nom : '', cle: t.nom + ' ' + t.pluriel + ' ' + q.precision, icone: q.type, couleur: t.couleur });
+      });
       return l;
     }
     function sansAccent(s) { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -524,7 +680,7 @@
       var l = index().filter(function (x) { return sansAccent(x.cle).indexOf(q) >= 0; })
         .sort(function (a, b) { return (sansAccent(a.titre).indexOf(q) === 0 ? 0 : 1) - (sansAccent(b.titre).indexOf(q) === 0 ? 0 : 1) || a.titre.localeCompare(b.titre, 'fr', { numeric: true }); }).slice(0, 8);
       resultats.replaceChildren.apply(resultats, l.length ? l.map(function (x) {
-        return h('li', { role: 'option' }, h('button', { type: 'button', onclick: function () { recherche.value = ''; resultats.hidden = true; choisir(x.id, true); } },
+        return h('li', { role: 'option' }, h('button', { type: 'button', onclick: function () { recherche.value = ''; resultats.hidden = true; if (x.point) choisirPoint(x.point, true); else choisir(x.id, true); } },
           x.icone ? iconeHTML(x.icone, x.couleur) : h('span', { class: 'plan__num', text: '#' }), h('span', null, h('b', { text: x.titre }), x.sous ? h('small', { text: x.sous }) : null)));
       }) : [h('li', { class: 'plan__vide', text: 'Aucune pièce ne correspond.' })]);
       resultats.hidden = false;
@@ -534,7 +690,7 @@
     function pieceEff(id) { for (var i = 0; i < LISTE.length; i++) if (LISTE[i].id === id) return LISTE[i]; return null; }
     var piece = pieceEff;
     function choisir(id, centrer) {
-      etat.choix = id; dessiner();
+      etat.choix = id; etat.point = null; dessiner();
       var p = id && piece(id);
       if (!p) { fiche.hidden = true; return; }
       if (etat.plein) basculerEntete(false);
@@ -578,7 +734,7 @@
       var inf = infos(p), sel = { icone: inf.icone || 'autre', couleur: (R.pieces[p.id] || {}).couleur || null, categorie: inf.categorie || 'autre' };
       var nom = h('input', { type: 'text', id: 'pl-nom', maxlength: '40', value: inf.nom || '', required: true });
       var prec = h('input', { type: 'text', id: 'pl-prec', maxlength: '40', value: inf.precision || '', placeholder: 'Ex. : 4 postes' });
-      var cat = h('select', { id: 'pl-cat' }, CATEGORIES.map(function (c) { var o = h('option', { value: c.id, text: c.nom }); if (c.id === sel.categorie) o.selected = true; return o; }));
+      var cat = h('select', { id: 'pl-cat' }, CATEGORIES.map(function (c) { var o = h('option', { value: c.id, text: NOMS_LONGS[c.id] || c.nom }); if (c.id === sel.categorie) o.selected = true; return o; }));
       var grille = h('div', { class: 'plan__icones', role: 'radiogroup', 'aria-label': 'Icône' });
       Object.keys(NOMS_ICONES).forEach(function (k) {
         var b = h('button', { type: 'button', role: 'radio', 'aria-checked': String(k === sel.icone), title: NOMS_ICONES[k], 'aria-label': NOMS_ICONES[k], onclick: function () { sel.icone = k; majChoix(); } }, iconeHTML(k));
@@ -634,8 +790,10 @@
     if (window.ResizeObserver) new ResizeObserver(function () { appliquerVB(); }).observe(svg);
     return { redessiner: dessiner, reglages: R, choisir: choisir, pleinEcran: basculerPlein, centrerSur: function (x, y, rayon) { var r = Math.max(rayon || 0, 60); centrerSur([x - r, y - r, x + r, y + r]); },
       // Liste des pièces avec leur nom effectif (pour le parcours de découverte)
+      // Équipements avec la pièce la plus proche (pour les quiz)
+      points: function () { return listePoints().map(function (q) { var pr = pieceProche(q.x, q.y); return Object.assign({ nom: PT[q.type].nom, proche: pr }, q); }); },
       pieces: function () { return LISTE.filter(function (p) { return !p.supprimee; }).map(function (p) { var i = infos(p); return { id: p.id, type: p.type, chambre: p.chambre, nom: i.nom }; }); } };
   }
 
-  window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE };
+  window.ReaPlan = { creer: creer, CATEGORIES: CATEGORIES, PALETTE: PALETTE, POINTS: POINTS };
 })();
