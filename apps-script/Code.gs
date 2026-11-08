@@ -24,7 +24,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.8.0',
+  version: '1.8.1',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -314,6 +314,7 @@ function geometriePlan_() {
 
 function reglagesPlan_() {
   var ss = classeur_(), r = { pieces: {}, categories: {}, points: {} };
+  try { synchroniserPlan_(ss); } catch (e) { console.error('synchronisation du plan : ' + e); } // ne bloque jamais l'affichage
   var p = ss.getSheetByName(ONGLETS.pieces).getDataRange().getValues();
   for (var i = 1; i < p.length; i++) {
     var id = String(p[i][0] || '').trim(); if (!id) continue;
@@ -381,8 +382,9 @@ function planPiece_(session, id, d) {
     if (ajout && !forme) throw erreurApp_('requete_invalide');            // une pièce ajoutée a forcément une forme
     if (!nom && !forme && !supprimee && !couleur) throw erreurApp_('requete_invalide');
     if (couleur === null) throw erreurApp_('requete_invalide');
-    var valeurs = [[id, nom, precision, categorie, icone || '', couleur, new Date(), session.n || 'Administrateur', forme, supprimee, ajout]];
-    if (ligne > 0) sh.getRange(ligne, 1, 1, 11).setValues(valeurs); else sh.appendRow(valeurs[0]);
+    colonnesRepere_(sh);
+    var valeurs = [[id, nom, precision, categorie, icone || '', couleur, new Date(), session.n || 'Administrateur', forme, supprimee, ajout, ajout ? '' : repereDe_(indexPlan_(geometriePlan_())[id]), '']];
+    if (ligne > 0) sh.getRange(ligne, 1, 1, 13).setValues(valeurs); else sh.appendRow(valeurs[0]);
     return { ok: true };
   } finally { verrou.releaseLock(); }
 }
@@ -420,6 +422,100 @@ function planCategorie_(session, categorie, d) {
     if (ligne > 0) sh.getRange(ligne, 1, 1, 4).setValues(valeurs); else sh.appendRow(valeurs[0]);
     return { ok: true };
   } finally { verrou.releaseLock(); }
+}
+
+/* ---------- Nouvelle version du fichier du plan : les modifications suivent les pièces ----------
+   Les pièces du fichier sont numérotées P001, P002… : une nouvelle version du fichier peut changer cette numérotation.
+   Chaque modification garde donc un « repère » (position et numéro de chambre de la pièce). Quand le fichier change,
+   le moteur retrouve chaque pièce par son repère et met à jour les identifiants partout (Pièces, Quiz, QR codes).
+   Rien n'est jamais effacé : une pièce introuvable est signalée « À vérifier » dans l'onglet Pièces (et reste
+   visible sur le plan comme pièce ajoutée si sa forme est connue). Le détail est noté dans l'onglet « Suivi du plan ». */
+var ENTETES_REPERE = ['Repère (automatique, ne pas modifier)', 'À vérifier'];
+function colonnesRepere_(sh) {
+  if (sh.getLastColumn() < 13 || String(sh.getRange(1, 12).getValue()) !== ENTETES_REPERE[0])
+    sh.getRange(1, 12, 1, 2).setValues([ENTETES_REPERE]).setFontWeight('bold').setBackground('#223b80').setFontColor('#ffffff');
+}
+function indexPlan_(D) { // id → { c: centre, b: rectangle, ch: numéro de chambre }
+  var ix = {};
+  (D.pieces || []).forEach(function (p) {
+    var b = p.r || p.bbox; if (!b || b.length < 4) return;
+    ix[p.id] = { c: p.centre ? [p.centre[0], p.centre[1]] : [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], b: b, ch: p.chambre ? String(p.chambre) : '' };
+  });
+  return ix;
+}
+function repereDe_(x) { return x ? Math.round(x.c[0]) + ',' + Math.round(x.c[1]) + (x.ch ? '|' + x.ch : '') : ''; }
+function lireRepere_(t) {
+  var m = /^(-?\d+),(-?\d+)(?:\|(.+))?$/.exec(String(t || '').trim());
+  return m ? { c: [Number(m[1]), Number(m[2])], ch: m[3] || '' } : null;
+}
+function empreintePlan_(ix) {
+  var t = Object.keys(ix).sort().map(function (id) { return id + ':' + ix[id].b.map(Math.round).join(','); }).join(';');
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, t)).slice(0, 22);
+}
+function retrouverPiece_(rep, ix, pris) { // la pièce du nouveau plan qui correspond au repère
+  var ids = Object.keys(ix).filter(function (id) { return !pris[id]; });
+  if (rep.ch) { var memes = ids.filter(function (id) { return ix[id].ch === rep.ch; }); if (memes.length === 1) return memes[0]; }
+  var meilleur = null, dmin = Infinity;
+  ids.forEach(function (id) {
+    var x = ix[id], dedans = rep.c[0] >= x.b[0] && rep.c[0] <= x.b[2] && rep.c[1] >= x.b[1] && rep.c[1] <= x.b[3];
+    var d = Math.hypot(x.c[0] - rep.c[0], x.c[1] - rep.c[1]);
+    if ((dedans || d <= 40) && d < dmin) { dmin = d; meilleur = id; }
+  });
+  return meilleur;
+}
+function synchroniserPlan_(ss) {
+  var props = PropertiesService.getScriptProperties(), ix = indexPlan_(geometriePlan_()), emp = empreintePlan_(ix), avant = props.getProperty('plan_empreinte');
+  if (avant === emp) return null;
+  var verrou = LockService.getScriptLock(); if (!verrou.tryLock(5000)) return null;
+  try {
+    if (props.getProperty('plan_empreinte') === emp) return null;
+    var sh = ss.getSheetByName(ONGLETS.pieces); colonnesRepere_(sh);
+    var v = sh.getDataRange().getValues(), corresp = {}, pris = {}, journal = [], i;
+    if (!avant) { // première fois : on note le repère des pièces déjà modifiées (le plan n'a pas encore changé)
+      for (i = 1; i < v.length; i++) { var id0 = String(v[i][0] || ''); if (/^P/.test(id0) && !v[i][11] && ix[id0]) sh.getRange(i + 1, 12).setValue(repereDe_(ix[id0])); }
+      props.setProperty('plan_empreinte', emp); return { premier: true };
+    }
+    for (i = 1; i < v.length; i++) { // 1) les pièces qui n'ont pas bougé gardent leur identifiant
+      var id = String(v[i][0] || ''), rep = lireRepere_(v[i][11]);
+      if (!/^P/.test(id) || !rep || !ix[id]) continue;
+      if (Math.hypot(ix[id].c[0] - rep.c[0], ix[id].c[1] - rep.c[1]) <= 40 && (!rep.ch || ix[id].ch === rep.ch)) { pris[id] = 1; v[i].__ok = true; }
+    }
+    for (i = 1; i < v.length; i++) { // 2) les autres sont retrouvées par leur repère
+      var id2 = String(v[i][0] || ''), rep2 = lireRepere_(v[i][11]);
+      if (!/^P/.test(id2) || v[i].__ok) continue;
+      var nom = String(v[i][1] || '') || '(sans nom)';
+      if (!rep2) { sh.getRange(i + 1, 13).setValue('Repère inconnu : vérifier sur le plan'); journal.push([new Date(), id2, '', nom, 'À vérifier (pas de repère)']); continue; }
+      var nouvel = retrouverPiece_(rep2, ix, pris);
+      if (nouvel) {
+        pris[nouvel] = 1; corresp[id2] = nouvel;
+        sh.getRange(i + 1, 1).setValue(nouvel); sh.getRange(i + 1, 12, 1, 2).setValues([[repereDe_(ix[nouvel]), '']]);
+        journal.push([new Date(), id2, nouvel, nom, 'Rattachée']);
+      } else if (v[i][9] === true) { // pièce masquée qui n'existe plus : rien à afficher
+        sh.getRange(i + 1, 13).setValue('Pièce masquée absente du nouveau plan'); journal.push([new Date(), id2, '', nom, 'Masquée, absente du nouveau plan']);
+      } else {
+        var forme = String(v[i][8] || ''), nid = 'N' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toLowerCase();
+        if (!forme) forme = [rep2.c[0] - 40, rep2.c[1] - 40, rep2.c[0] + 40, rep2.c[1] + 40].join(',');
+        sh.getRange(i + 1, 1).setValue(nid); sh.getRange(i + 1, 9).setValue(forme); sh.getRange(i + 1, 11).setValue(true);
+        sh.getRange(i + 1, 13).setValue('Pièce introuvable dans le nouveau plan : gardée comme pièce ajoutée, à vérifier');
+        corresp[id2] = nid; journal.push([new Date(), id2, nid, nom, 'Introuvable : gardée comme pièce ajoutée, à vérifier']);
+      }
+    }
+    remplacerIds_(ss, corresp);
+    if (journal.length) { var sj = creerOnglet_(ss, 'Suivi du plan', ['Date', 'Ancien ID', 'Nouvel ID', 'Nom', 'Résultat'], []); sj.getRange(sj.getLastRow() + 1, 1, journal.length, 5).setValues(journal); }
+    props.setProperty('plan_empreinte', emp);
+    return { corresp: corresp, journal: journal };
+  } finally { verrou.releaseLock(); }
+}
+function remplacerIds_(ss, corresp) { // dans les questions du quiz (pièces liées, bonne réponse) et les QR codes
+  if (!Object.keys(corresp).length) return;
+  function conv(t) { return String(t || '').split(',').map(function (x) { x = x.trim(); return corresp[x] || x; }).join(','); }
+  var q = ss.getSheetByName(ONGLETS.quiz);
+  if (q) { var vq = q.getDataRange().getValues(); for (var i = 1; i < vq.length; i++) {
+    if (vq[i][7]) q.getRange(i + 1, 8).setValue(conv(vq[i][7]));
+    if (String(vq[i][2]) === 'plan' && vq[i][5]) q.getRange(i + 1, 6).setValue(conv(vq[i][5]));
+  } }
+  var r = ss.getSheetByName(ONGLETS.qr);
+  if (r) { var vr = r.getDataRange().getValues(); for (var j = 1; j < vr.length; j++) if (corresp[String(vr[j][2] || '')]) r.getRange(j + 1, 3).setValue(corresp[String(vr[j][2])]); }
 }
 
 /** À lancer après avoir remplacé le fichier du plan dans le Drive. */

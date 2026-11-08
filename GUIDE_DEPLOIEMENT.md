@@ -333,6 +333,21 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 4. Visez au moins 8 points bien répartis, en commençant par les points 1 à 4. Le panneau affiche l'écart moyen ; refaites ou retirez un point dont l'écart est nettement plus grand que les autres.
 5. Touchez « Enregistrer pour tous ». Un « Point libre » permet aussi de toucher n'importe quel endroit du plan.
 
+## Partie O – Garder les modifications du plan (moteur 1.8.1)
+
+**Où sont les modifications ?** Renommages, pièces ajoutées, couleurs, équipements et calage GPS sont dans le Google Sheets « Base » (onglets Pièces, Catégories, Équipements) et dans les propriétés du script. Ils ne sont jamais effacés par :
+- une nouvelle version du moteur (Déployer › Gérer les déploiements › modifier › **Nouvelle version**) ;
+- une nouvelle version de l'appli sur GitHub ;
+- « Installer » (qui ne crée que les onglets manquants).
+
+À éviter : supprimer ou renommer ces onglets, repartir d'un autre Google Sheets, ou créer un « Nouveau déploiement » au lieu d'une « Nouvelle version » (l'adresse du moteur changerait).
+
+**Nouvelle version du fichier du plan** (plan de l'architecte mis à jour) : la numérotation des pièces peut changer. Depuis la 1.8.1, chaque modification garde un repère (position et numéro de chambre), et le moteur rattache tout automatiquement.
+1. Déployez d'abord le moteur 1.8.1 et ouvrez une fois le plan dans l'appli : les repères des modifications existantes sont notés (colonne « Repère », à ne pas modifier).
+2. Remplacez le fichier du plan dans le Drive (ou changez son ID dans Paramètres), puis lancez `viderCachePlan` dans Apps Script.
+3. À la première ouverture du plan, les modifications, les questions du quiz et les QR codes suivent leurs pièces. Le détail est noté dans l'onglet « Suivi du plan ».
+4. Une pièce qui n'existe plus est gardée comme « pièce ajoutée » et signalée dans la colonne « À vérifier » de l'onglet Pièces : rien n'est perdu.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |
