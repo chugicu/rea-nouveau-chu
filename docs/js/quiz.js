@@ -404,7 +404,8 @@
       h('div', { class: 'quiz-progression' }, h('span', { text: o.etape || '' }), compte), info, zonePlan, bac,
       h('p', { class: 'section__note', text: 'Glissez une étiquette sur le plan, ou touchez-la puis touchez le bon endroit.' })), function () { accueilQuiz(); });
     var plan = monterPlan(zonePlan, Object.assign({}, o.vue, { surToucher: function (c) { if (choisi) deposer(choisi, c); } }));
-    if (o.cadre) plan.voir(o.cadre, 1.05);
+    // marge à droite : les boutons du plan (zoom, plein écran) ne doivent cacher aucune pièce
+    if (o.cadre) { var cad = o.cadre.slice(); cad[2] += (cad[2] - cad[0]) * 0.24; cad[0] -= (cad[2] - cad[0]) * 0.02; plan.voir(cad, 1.05); }
     function dessinerBac() {
       bac.replaceChildren.apply(bac, restants.map(function (j) {
         var b = h('button', { type: 'button', class: 'quiz-jeton' + (j.couleur && !j.texte ? ' quiz-jeton--couleur' : '') + (choisi === j ? ' quiz-jeton--choisi' : ''), role: 'listitem',
@@ -424,15 +425,20 @@
         function lache(ev) {
           if (ev.pointerId !== pid) return;
           document.removeEventListener('pointermove', bouge); document.removeEventListener('pointerup', lache); document.removeEventListener('pointercancel', lache);
-          if (fantome) { fantome.remove(); if (ev.type === 'pointerup') deposer(j, plan.cibleEcran(ev.clientX, ev.clientY)); }
+          if (fantome) { var rf = fantome.getBoundingClientRect(); fantome.remove(); if (ev.type === 'pointerup') deposer(j, plan.cibleEcran(rf.left + rf.width / 2, rf.bottom + 10)); } // dépôt à la pointe de la flèche, visible au-dessus du doigt
           else if (ev.type === 'pointerup') { choisi = choisi === j ? null : j; info.textContent = choisi ? 'Touchez maintenant le bon endroit sur le plan.' : o.consigne; dessinerBac(); }
         }
         document.addEventListener('pointermove', bouge, { passive: false }); document.addEventListener('pointerup', lache); document.addEventListener('pointercancel', lache);
       });
     }
     function deposer(j, c) {
-      if (!c || c.type === 'dehors') return;
+      if (!c || c.type === 'dehors') { info.textContent = 'Lâchez l\'étiquette sur le plan.'; return; }
       var r = o.verifier(j, c);
+      if (r === null) { // lâchée dans un couloir ou un espace vide : pas d'erreur comptée
+        info.textContent = o.indice || 'Rapprochez-la un peu plus de son emplacement.'; if (window.ReaFun) window.ReaFun.vibrer(15);
+        if (choisi !== j) { choisi = j; dessinerBac(); }
+        return;
+      }
       if (r) {
         restants = restants.filter(function (x) { return x !== j; }); choisi = null;
         o.surReussite(j, c, r, plan); info.textContent = restants.length ? 'Bien joué !' : ''; if (window.ReaFun) window.ReaFun.reponse(true);
@@ -447,11 +453,40 @@
     majCompte(); dessinerBac();
     return plan;
   }
+  /* Tolérance des dépôts : on juge à la distance, en pixels d'écran (donc indépendamment du zoom).
+     - à moins de PRES px du bon endroit : réussi (le bord d'une pièce ou un léger décalage du doigt suffisent) ;
+     - posée franchement à l'intérieur d'un mauvais endroit : erreur ;
+     - dans un couloir ou entre deux : réussi si le bon endroit est le plus proche et à moins de « tol » px, sinon simple indice. */
+  var PRES = 14;
+  function distRect(xy, b) { return Math.hypot(Math.max(b[0] - xy[0], 0, xy[0] - b[2]), Math.max(b[1] - xy[1], 0, xy[1] - b[3])); }
+  function juger(dBon, dAutre, k, tol) {
+    var bon = dBon / k, autre = dAutre / k;
+    if (bon <= PRES) return true;
+    if (autre === 0) return false;
+    if (bon <= tol && bon <= autre) return true;
+    return null; // entre deux : simple indice, jamais une erreur
+  }
+  function distUnite(u, xy) { // distance aux pièces de l'unité et à l'emplacement de son nom
+    var d = Infinity;
+    CTX.source.pieces().forEach(function (p) { if (p.unite === u) d = Math.min(d, distRect(xy, p.bbox)); });
+    (CTX.source.donnees.titres || []).forEach(function (t) { if (t.unite === u) d = Math.min(d, distRect(xy, [t.x - 90, t.y - 30, t.x + 90, t.y + 30])); });
+    return d;
+  }
+  function jugerUnite(id, U, c) {
+    if (!c.xy) return null;
+    var dBon = distUnite(id, c.xy), dAutre = Infinity;
+    U.forEach(function (u) { if (u.id !== id) dAutre = Math.min(dAutre, distUnite(u.id, c.xy)); });
+    return juger(dBon, dAutre, c.k || 1, 70);
+  }
   function centreTitre(u) {
     var t = (CTX.source.donnees.titres || []).filter(function (x) { return x.unite === u; })[0];
     if (t) return [t.x, t.y];
     var b = bboxDe(CTX.source.pieces().filter(function (p) { return p.unite === u; }).map(function (p) { return p.bbox; }));
     return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+  }
+  function cadreUnites() { // cadrage serré sur les chambres des unités (cibles plus grandes à l'écran)
+    var l = CTX.source.pieces().filter(function (p) { return p.type === 'chambre' && p.unite; }).map(function (p) { return p.bbox; });
+    return l.length ? bboxDe(l) : cadreRea();
   }
   function cadreRea() {
     var l = CTX.source.pieces().filter(function (p) { return p.rea && (p.type === 'chambre' || p.type === 'piece'); }).map(function (p) { return p.bbox; });
@@ -475,10 +510,11 @@
   function jeuEtiquettes() {
     var U = unitesDuPlan(), poses = [];
     if (U.length < 2) return accueilQuiz('Pas assez d\'unités sur le plan pour ce jeu.');
-    plateau({ titre: 'Placer les étiquettes', consigne: 'Glissez chaque nom d\'unité sur ses chambres (zoom possible à deux doigts).',
+    plateau({ titre: 'Placer les étiquettes', cadre: cadreUnites(), consigne: 'Glissez chaque nom d\'unité sur ses chambres (zoom possible à deux doigts).',
       vue: { textes: 'chambres', titres: 'masques', neutre: true, points: false, poses: poses },
       jetons: melanger(U.map(function (u) { return { id: u.id, texte: u.nom, u: u }; })),
-      verifier: function (j, c) { if (c.type !== 'piece') return false; var p = CTX.source.pieces().filter(function (x) { return x.id === c.id; })[0]; return p && p.unite === j.id; },
+      indice: 'Lâchez le nom sur les chambres de l\'unité (pas besoin d\'être précis).',
+      verifier: function (j, c) { return jugerUnite(j.id, U, c); },
       surReussite: function (j, c, r, plan) { var xy = centreTitre(j.id); poses.push({ x: xy[0], y: xy[1], texte: j.u.nom, fond: j.u.couleur, couleur: '#fff', taille: 44 }); plan.quiz({ poses: poses }); },
       fin: function (err) { finJeu('Placer les étiquettes', err, U.length, jeuEtiquettes, 'etiquettes'); } });
   }
@@ -486,10 +522,11 @@
   function jeuCouleurs() {
     var U = unitesDuPlan().filter(function (u) { return (CTX.source.donnees.titres || []).some(function (t) { return t.unite === u.id; }); }), faits = {};
     if (U.length < 2) return accueilQuiz('Pas assez d\'unités sur le plan pour ce jeu.');
-    plateau({ titre: 'Colorier les unités', consigne: 'Glissez chaque couleur sur l\'étiquette grise de son unité.',
+    plateau({ titre: 'Colorier les unités', cadre: cadreUnites(), consigne: 'Glissez chaque couleur sur l\'étiquette grise de son unité.',
       vue: { textes: 'chambres', titres: 'gris', grisChambres: true, neutre: true, points: false, couleursTitres: faits },
       jetons: melanger(U.map(function (u, i) { return { id: u.id, couleur: u.couleur, aria: 'Couleur ' + (i + 1) }; })),
-      verifier: function (j, c) { return c.type === 'titre' && c.unite === j.id; },
+      indice: 'Lâchez la couleur sur l\'étiquette grise ou sur les chambres de l\'unité.',
+      verifier: function (j, c) { if (c.type === 'titre') return c.unite === j.id; return jugerUnite(j.id, U, c); },
       surReussite: function (j, c, r, plan) { faits[j.id] = true; plan.quiz({ couleursTitres: faits }); },
       fin: function (err) { finJeu('Colorier les unités', err, U.length, jeuCouleurs, 'couleurs'); } });
   }
@@ -536,9 +573,18 @@
         consigne: 'Replacez les ' + g.length + ' pièces de la zone en bleu.', cadre: bboxDe(g.map(function (p) { return p.bbox; })),
         vue: { textes: 'aucun', titres: 'masques', grisChambres: true, neutre: true, points: false, zone: zoneIds, poses: poses, marques: marques },
         jetons: melanger(g.map(function (p) { return { id: p.id, texte: libelle(p), cle: sansAccent(libelle(p)) }; })),
+        indice: 'Lâchez le nom sur une pièce de la zone en bleu.',
         verifier: function (j, c) {
-          if (c.type !== 'piece' || !zoneIds[c.id] || places[c.id]) return false;
-          return parLib[j.cle].some(function (p) { return p.id === c.id; }) ? c.id : false; // pièces de même nom : n'importe laquelle encore libre
+          if (!c.xy) return null;
+          // pièces de même nom : n'importe laquelle encore libre ; les pièces déjà placées ne comptent plus
+          var bonne = null, dBon = Infinity, dAutre = Infinity;
+          g.forEach(function (p) {
+            if (places[p.id]) return;
+            var d = distRect(c.xy, p.bbox);
+            if (sansAccent(libelle(p)) === j.cle) { if (d < dBon) { dBon = d; bonne = p.id; } } else dAutre = Math.min(dAutre, d);
+          });
+          var r = juger(dBon, dAutre, c.k || 1, 40);
+          return r ? bonne : r;
         },
         surReussite: function (j, c, id, plan) {
           places[id] = 1; var p = g.filter(function (x) { return x.id === id; })[0];

@@ -411,10 +411,12 @@
     function cibleEcran(cx, cy) { // ce qui se trouve sous le doigt (mode quiz)
       var c = document.elementFromPoint(cx, cy);
       if (!c || !c.closest || !svg.contains(c)) return { type: 'dehors' };
-      var pp = c.closest('[data-point]'); if (pp) return { type: 'point', id: pp.getAttribute('data-point') };
-      var u = c.closest('[data-unite]'); if (u) return { type: 'titre', unite: u.getAttribute('data-unite') };
-      var pi = c.closest('[data-id]'); if (pi) return { type: 'piece', id: pi.getAttribute('data-id'), xy: versPlan(cx, cy) };
-      return { type: 'vide', xy: versPlan(cx, cy) };
+      // xy : position sur le plan ; k : unités du plan par pixel d'écran (pour des tolérances qui suivent le zoom)
+      var xy = versPlan(cx, cy), xy2 = versPlan(cx + 10, cy), k = Math.abs(xy2[0] - xy[0]) / 10 || 1;
+      var pp = c.closest('[data-point]'); if (pp) return { type: 'point', id: pp.getAttribute('data-point'), xy: xy, k: k };
+      var u = c.closest('[data-unite]'); if (u) return { type: 'titre', unite: u.getAttribute('data-unite'), xy: xy, k: k };
+      var pi = c.closest('[data-id]'); if (pi) return { type: 'piece', id: pi.getAttribute('data-id'), xy: xy, k: k };
+      return { type: 'vide', xy: xy, k: k };
     }
     function choisirPoint(id, centrer) {
       etat.choix = null; etat.point = id; dessiner();

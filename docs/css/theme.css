@@ -238,3 +238,8 @@ details.detail-jauge summary::after { color: #1f6fa8; }
 .page > h2, .page > h3, .jeux > div > h2 { color: var(--sur-ciel); }
 /* Charte : logos toujours sur fond blanc, y compris en mode sombre */
 .logos--connexion { background: #fff; border-radius: 18px; padding: 12px 14px; align-self: flex-start; display: inline-flex; overflow: hidden; }
+/* Étiquette en cours de glissé : affichée au-dessus du doigt, la pointe de la flèche marque l'endroit exact du dépôt */
+.quiz-fantome { transform: translate(-50%, calc(-100% - 38px)); opacity: .97; overflow: visible; }
+.quiz-fantome::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 9px solid transparent; border-top: 10px solid #ff3b6b; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+.quiz-fantome::before { content: ""; position: absolute; left: 50%; top: calc(100% + 6px); width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ff3b6b; box-shadow: 0 0 0 3px #fff; }
+.quiz-fantome.quiz-jeton--couleur::after { border-top-color: #fff; }
