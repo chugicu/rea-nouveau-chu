@@ -6,6 +6,7 @@
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
  * Étape 3 : visites des locaux (créneaux, inscriptions prénom + initiale + fonction, présence, purge à J+30).
  * 1.3 : modification de la forme du plan (déplacer, redimensionner, supprimer, ajouter une pièce).
+ * 1.7 : jeux (jauge du déménagement, souvenirs, concours photo, nuage, QR codes, paris, escape game, bingo), activables par l'administrateur.
  * 1.6 : quiz (questions rédigées, brouillons relus par l'administrateur, compteur collectif anonyme).
  * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
@@ -23,7 +24,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.6.0',
+  version: '1.7.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -44,7 +45,8 @@ var ONGLETS = {
   inscriptions: 'Inscriptions',
   newsletters: 'Newsletters',
   points: 'Équipements',
-  quiz: 'Quiz'
+  quiz: 'Quiz',
+  jeux: 'Jeux', souvenirs: 'Souvenirs', nuage: 'Nuage', qr: 'QR codes', paris: 'Paris', pronostics: 'Pronostics', retours: 'Retours'
 };
 
 var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
@@ -85,6 +87,24 @@ function doPost(e) {
       home: function () { return home_(verifierJeton_(req.jeton)); },
       plan: function () { return plan_(verifierJeton_(req.jeton)); },
       plan_piece: function () { return planPiece_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
+      jeux_etat: function () { return jeuxEtat_(verifierJeton_(req.jeton)); },
+      jeux_reglage: function () { exigerAdmin_(verifierJeton_(req.jeton)); return jeuxReglage_(req.id, req.donnees); },
+      jeux_points: function () { verifierJeton_(req.jeton); return jeuxPoints_(req.type, req.n); },
+      souvenirs: function () { return souvenirsListe_(verifierJeton_(req.jeton), req.type); },
+      souvenir_ajouter: function () { return souvenirAjouter_(verifierJeton_(req.jeton), req.donnees); },
+      souvenir_photo: function () { return souvenirPhoto_(verifierJeton_(req.jeton), req.id, req.taille); },
+      souvenir_moderer: function () { return souvenirModerer_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.statut); },
+      souvenir_coeur: function () { verifierJeton_(req.jeton); return souvenirCoeur_(req.id, req.plus); },
+      nuage: function () { return nuageListe_(verifierJeton_(req.jeton)); },
+      nuage_ajouter: function () { verifierJeton_(req.jeton); return nuageAjouter_(req.q, req.mot); },
+      nuage_retirer: function () { exigerReferent_(verifierJeton_(req.jeton)); return nuageRetirer_(req.ids); },
+      qr_liste: function () { return qrListe_(verifierJeton_(req.jeton)); },
+      qr_trouver: function () { verifierJeton_(req.jeton); return qrTrouver_(req.code); },
+      qr_enregistrer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return qrEnregistrer_(req.code, req.donnees); },
+      paris: function () { return parisListe_(verifierJeton_(req.jeton), req.appareil); },
+      pronostic: function () { verifierJeton_(req.jeton); return pronostic_(req.id, req.donnees); },
+      pari_admin: function () { exigerAdmin_(verifierJeton_(req.jeton)); return pariAdmin_(req.id, req.donnees); },
+      escape_valider: function () { return escapeValider_(exigerReferent_(verifierJeton_(req.jeton)), req.scenario, req.valide, req.remarque); },
       quiz_liste: function () { return quizListe_(verifierJeton_(req.jeton)); },
       quiz_question: function () { return quizQuestion_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       quiz_statut: function () { return quizStatut_(exigerReferent_(verifierJeton_(req.jeton)), req.ids, req.statut); },
@@ -180,6 +200,7 @@ function home_(session) {
     actualites: lireActualites_(ss),
     newsletter: derniereNewsletter_(ss),
     jauge: calculerJauge_(ss),
+    elan: calculerElan_(ss),
     misAJour: new Date().toISOString()
   };
 }
@@ -454,6 +475,7 @@ function visiteInscrire_(session, idCreneau, d) {
     if (pris >= c.places) throw erreurApp_('creneau_complet');
     var id = 'I' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), code = genererCode_(6);
     ss.getSheetByName(ONGLETS.inscriptions).appendRow([id, c.id, prenom, initiale, fonction, empreinte_(code), new Date(), false]);
+    if (jeuxConfig_(ss).jauge.actif) ajouterPointsJeux_(JEUX.points.visite, true);
     return { ok: true, id: id, code: code, creneau: publierCreneau_(c, new Array(pris + 1), false) };
   } finally { verrou.releaseLock(); }
 }
@@ -781,6 +803,407 @@ function installerBanqueQuiz_(ss) { // seulement si l'onglet est vide
 }
 
 // ============================================================================
+// Jeux (1.7) : réglages par l'administrateur, jauge du déménagement, souvenirs, concours photo,
+// nuage de mots, QR codes cachés, paris, escape game, bingo.
+// Aucun suivi individuel : seuls des totaux, des textes signés librement (ou pas) et des pseudos sont enregistrés.
+// ============================================================================
+var JEUX = {
+  liste: ['jauge', 'souvenirs', 'concours', 'nuage', 'qr', 'escape', 'bingo', 'paris'],
+  noms: { jauge: 'Jauge du déménagement', souvenirs: 'Souvenirs', concours: 'Concours photo', nuage: 'Le nuage', qr: 'QR codes cachés', escape: 'Escape game', bingo: 'Bingo du déménagement', paris: 'Paris' },
+  points: { newsletter: 1, qr: 2, bingo_ligne: 3, bingo_plein: 10, escape: 5, visite: 3, souvenir: 5, concours: 3, nuage: 1, pari: 1, ultime: 5 },
+  maxPhoto: 2 * 1024 * 1024, maxMini: 300 * 1024
+};
+var JEUX_DEFAUTS = {
+  jauge: { objectif: 4000, paliers: [
+    { pc: 10, titre: 'Échauffement', texte: 'L\'équipe est lancée : merci à toutes et à tous !' },
+    { pc: 25, titre: 'Les cartons sont prêts', texte: 'Un quart du chemin : le nouveau service commence à devenir familier.' },
+    { pc: 50, titre: 'Mi-parcours', texte: 'La moitié ! Le plan n\'a presque plus de secrets pour l\'équipe.' },
+    { pc: 75, titre: 'Dernière ligne droite', texte: 'Encore un effort : les urgences et les circuits sont presque maîtrisés.' },
+    { pc: 100, titre: 'Prêts pour le grand départ', texte: 'Objectif atteint ! Récompense collective à définir avec l\'encadrement.' }] },
+  nuage: { questions: ['Ce que j\'emporte', 'Ce que je laisse', 'Ce qui me fait envie', 'Ce qui m\'inquiète'] },
+  bingo: { cases: [
+    { texte: 'J\'ai visité les nouveaux locaux', auto: 'visite' }, { texte: 'J\'ai fait le quiz du jour', auto: 'quizjour' },
+    { texte: 'J\'ai trouvé un QR code caché', auto: 'qr' }, { texte: 'J\'ai exploré 8 pièces du plan', auto: 'plan' },
+    { texte: 'J\'ai lu la newsletter', auto: 'newsletter' }, { texte: 'J\'ai partagé un souvenir', auto: 'souvenir' },
+    { texte: 'J\'ai mis un mot dans le nuage', auto: 'nuage' }, { texte: 'J\'ai fait un pari', auto: 'pari' },
+    { texte: 'J\'ai terminé un escape game', auto: 'escape' }, { texte: 'Je sais où est le chariot d\'urgence de mon secteur' },
+    { texte: 'J\'ai repéré les vannes de fluides' }, { texte: 'J\'ai trouvé mon vestiaire' }, { texte: 'J\'ai aidé un collègue à se repérer' },
+    { texte: 'Je connais mon trajet domicile – nouveau CHU' }, { texte: 'J\'ai rangé mon casier actuel' }, { texte: 'J\'ai participé à une simulation' },
+    { texte: 'Je connais les couleurs des unités' }, { texte: 'J\'ai pris une photo souvenir de l\'ancien service' }, { texte: 'J\'ai repéré la salle de détente' },
+    { texte: 'J\'ai parlé du déménagement avec un collègue d\'une autre équipe' }] },
+  escape: { valides: {} }
+};
+var PARIS_DEFAUTS = [
+  ['cartons', 'Combien de cartons au total pour le déménagement ?', 'nombre', 'cartons'],
+  ['premier', 'Jour et heure d\'arrivée du premier patient dans le nouveau service ?', 'dateheure', ''],
+  ['dernier', 'Jour et heure d\'arrivée du dernier patient ?', 'dateheure', ''],
+  ['duree', 'Durée totale du transfert des patients (en heures) ?', 'nombre', 'heures'],
+  ['ambulances', 'Nombre de trajets d\'ambulance ?', 'nombre', 'trajets']
+];
+var MOTS_INTERDITS = ['con', 'conne', 'connard', 'connasse', 'merde', 'putain', 'pute', 'salope', 'salaud', 'enculé', 'encule', 'nique', 'niquer', 'bite', 'couille', 'couilles', 'chier', 'bordel', 'pd', 'batard', 'bâtard', 'abruti', 'débile', 'debile', 'crétin', 'cretin', 'imbécile', 'imbecile', 'kouni', 'manman', 'makoumè', 'makoume', 'bouzin'];
+
+function jeuxConfig_(ss) { // { id: { actif (dates comprises), actifBrut, ouverture, fermeture, reglages } }
+  var sh = ss.getSheetByName(ONGLETS.jeux), r = {}, maintenant = new Date();
+  JEUX.liste.forEach(function (id) { r[id] = { id: id, nom: JEUX.noms[id], actifBrut: false, ouverture: '', fermeture: '', reglages: JSON.parse(JSON.stringify(JEUX_DEFAUTS[id] || {})) }; });
+  if (sh) {
+    var v = sh.getDataRange().getValues();
+    for (var i = 1; i < v.length; i++) {
+      var id = String(v[i][0] || '').trim(); if (!r[id]) continue;
+      r[id].ligne = i + 1;
+      r[id].actifBrut = v[i][2] === true || String(v[i][2]).toLowerCase() === 'oui' || String(v[i][2]).toUpperCase() === 'TRUE';
+      r[id].ouvertureD = v[i][3] instanceof Date ? v[i][3] : null; r[id].fermetureD = v[i][4] instanceof Date ? v[i][4] : null;
+      r[id].ouverture = r[id].ouvertureD ? formaterDate_(r[id].ouvertureD) : ''; r[id].fermeture = r[id].fermetureD ? formaterDate_(r[id].fermetureD) : '';
+      if (v[i][5]) { try { var g = JSON.parse(v[i][5]); for (var k in g) r[id].reglages[k] = g[k]; } catch (e) { /* réglages illisibles : valeurs par défaut */ } }
+    }
+  }
+  JEUX.liste.forEach(function (id) {
+    var c = r[id], fin = c.fermetureD ? new Date(c.fermetureD.getTime() + 864e5) : null; // fermeture : jusqu'au soir inclus
+    c.actif = c.actifBrut && (!c.ouvertureD || maintenant >= c.ouvertureD) && (!fin || maintenant < fin);
+    c.termine = !!(fin && maintenant >= fin);
+  });
+  return r;
+}
+function exigerJeu_(ss, id) { var c = jeuxConfig_(ss)[id]; if (!c || !c.actif) throw erreurApp_('jeu_inactif'); return c; }
+function jeuxEtat_(session) {
+  var ss = classeur_(), cfg = jeuxConfig_(ss), admin = session.r === 'admin', ref = admin || session.r === 'referent', r = {};
+  JEUX.liste.forEach(function (id) {
+    var c = cfg[id];
+    if (!c.actif && !admin && !(id === 'escape' && ref && c.actifBrut)) { r[id] = { actif: false, termine: c.termine }; return; }
+    r[id] = { actif: c.actif, actifBrut: c.actifBrut, termine: c.termine, ouverture: c.ouverture, fermeture: c.fermeture, reglages: c.reglages };
+  });
+  return { ok: true, jeux: r, admin: admin, referent: ref, elan: calculerElan_(ss, cfg) };
+}
+function jeuxReglage_(id, d) {
+  if (JEUX.liste.indexOf(id) < 0) throw erreurApp_('requete_invalide');
+  d = d || {};
+  var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.jeux), c = jeuxConfig_(ss)[id];
+  if (!sh || !c.ligne) throw erreurApp_('non_installe');
+  function date(x) { if (!x) return ''; if (!/^\d{4}-\d{2}-\d{2}$/.test(x)) throw erreurApp_('requete_invalide'); return new Date(+x.slice(0, 4), +x.slice(5, 7) - 1, +x.slice(8, 10)); }
+  if ('actif' in d) sh.getRange(c.ligne, 3).setValue(!!d.actif);
+  if ('ouverture' in d) sh.getRange(c.ligne, 4).setValue(date(d.ouverture));
+  if ('fermeture' in d) sh.getRange(c.ligne, 5).setValue(date(d.fermeture));
+  if ('reglages' in d) {
+    var g = d.reglages || {}, propre = {};
+    if (id === 'jauge') {
+      var obj = Math.floor(Number(g.objectif)); if (!(obj >= 10 && obj <= 1000000)) throw erreurApp_('requete_invalide');
+      propre.objectif = obj;
+      if (Array.isArray(g.paliers)) propre.paliers = g.paliers.slice(0, 10).map(function (p) {
+        var pc = Math.round(Number(p.pc)); if (!(pc >= 1 && pc <= 100)) throw erreurApp_('requete_invalide');
+        return { pc: pc, titre: nettoyerTexte_(p.titre, 60), texte: nettoyerTexte_(p.texte, 200) };
+      }).sort(function (a, b) { return a.pc - b.pc; });
+    } else if (id === 'nuage') {
+      var q = (Array.isArray(g.questions) ? g.questions : []).map(function (x) { return nettoyerTexte_(x, 60); }).filter(Boolean);
+      if (!q.length || q.length > 8) throw erreurApp_('requete_invalide');
+      propre.questions = q;
+    } else if (id === 'bingo') {
+      var autos = ['visite', 'quizjour', 'qr', 'plan', 'newsletter', 'souvenir', 'nuage', 'pari', 'escape'];
+      var cs = (Array.isArray(g.cases) ? g.cases : []).map(function (x) {
+        var t = nettoyerTexte_(x && x.texte, 90); if (!t) return null;
+        var o = { texte: t }; if (x.auto && autos.indexOf(x.auto) >= 0) o.auto = x.auto; return o;
+      }).filter(Boolean);
+      if (cs.length < 16 || cs.length > 60) throw erreurApp_('bingo_cases');
+      propre.cases = cs;
+    } else if (id === 'escape') {
+      propre.valides = c.reglages.valides || {};
+    } else throw erreurApp_('requete_invalide');
+    sh.getRange(c.ligne, 6).setValue(JSON.stringify(propre));
+  }
+  return { ok: true };
+}
+
+/* ----- Jauge du déménagement (« élan ») ----- */
+function calculerElan_(ss, cfg) {
+  cfg = cfg || jeuxConfig_(ss);
+  var c = cfg.jauge; if (!c.actif) return null;
+  var pts = quizCompteur_() + Number(PropertiesService.getScriptProperties().getProperty('jeux_points') || 0);
+  var obj = Number(c.reglages.objectif) || 4000;
+  return { points: pts, objectif: obj, pourcent: Math.min(100, Math.floor(100 * pts / obj)), paliers: c.reglages.paliers || [] };
+}
+function ajouterPointsJeux_(n, dejaVerrouille) { // dejaVerrouille : appelé alors que le verrou du script est déjà pris
+  if (!(n > 0)) return;
+  function ajouter() { var p = PropertiesService.getScriptProperties(); p.setProperty('jeux_points', String(Number(p.getProperty('jeux_points') || 0) + n)); }
+  if (dejaVerrouille) return ajouter();
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try { ajouter(); } finally { verrou.releaseLock(); }
+}
+function jeuxPoints_(type, n) { // événements venus de l'appli (sans identité)
+  var unit = JEUX.points[type]; n = Math.floor(Number(n) || 1);
+  if (!unit || ['newsletter', 'qr', 'bingo_ligne', 'bingo_plein', 'escape', 'ultime'].indexOf(type) < 0 || !(n >= 1 && n <= 10)) throw erreurApp_('requete_invalide');
+  ajouterPointsJeux_(unit * n);
+  return { ok: true };
+}
+
+/* ----- Souvenirs et concours photo ----- */
+function dossierJeux_(ss) {
+  var nom = 'Dossier des photos (ID Drive)', id = String(lireParametres_(ss)[nom] || '').trim();
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* recréé */ } }
+  var parents = DriveApp.getFileById(ss.getId()).getParents(), parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  var d = parent.createFolder('Réa – Souvenirs et concours');
+  ajouterParametre_(ss, nom, 'Créé automatiquement : photos des souvenirs et du concours. Dossier privé : ne pas le partager.');
+  var sh = ss.getSheetByName(ONGLETS.parametres), v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) if (String(v[i][0]).trim() === nom) sh.getRange(i + 1, 2).setValue(d.getId());
+  return d;
+}
+function jpegValide_(b64, max) {
+  var o; try { o = Utilities.base64Decode(String(b64 || '')); } catch (e) { throw erreurApp_('requete_invalide'); }
+  if (o.length < 500 || o.length > max || (o[0] & 255) !== 0xFF || (o[1] & 255) !== 0xD8 || (o[2] & 255) !== 0xFF) throw erreurApp_('requete_invalide');
+  return o;
+}
+function lireSouvenirs_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.souvenirs); if (!sh) return [];
+  var v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    if (!v[i][0]) continue;
+    l.push({ ligne: i + 1, id: String(v[i][0]), type: String(v[i][1]), titre: String(v[i][2] || ''), texte: String(v[i][3] || ''), annee: String(v[i][4] || ''),
+      lieu: String(v[i][5] || ''), signature: String(v[i][6] || ''), photo: String(v[i][7] || ''), mini: String(v[i][8] || ''), statut: String(v[i][9] || ''),
+      coeurs: Number(v[i][10]) || 0, depose: v[i][11] instanceof Date ? formaterDate_(v[i][11]) : '', ratio: Number(v[i][12]) || 1 });
+  }
+  return l;
+}
+function souvenirsListe_(session, type) {
+  type = type === 'concours' ? 'concours' : 'souvenir';
+  var ss = classeur_(), cfg = jeuxConfig_(ss), c = cfg[type === 'concours' ? 'concours' : 'souvenirs'], ref = session.r !== 'agent';
+  if (!c.actif && !(c.termine && type === 'concours') && session.r !== 'admin') throw erreurApp_('jeu_inactif');
+  var montrerCoeurs = type !== 'concours' || c.termine;
+  var l = lireSouvenirs_(ss).filter(function (s) { return s.type === type && (s.statut === 'publié' || (ref && s.statut === 'attente')); })
+    .map(function (s) { return { id: s.id, titre: s.titre, texte: s.texte, annee: s.annee, lieu: s.lieu, signature: s.signature, photo: !!s.photo, ratio: s.ratio,
+      statut: ref ? s.statut : undefined, coeurs: montrerCoeurs ? s.coeurs : null, depose: s.depose }; }).reverse();
+  var podium = null;
+  if (type === 'concours' && c.termine) podium = l.filter(function (s) { return s.statut !== 'attente'; }).slice().sort(function (a, b) { return b.coeurs - a.coeurs; }).slice(0, 3).map(function (s) { return s.id; });
+  return { ok: true, souvenirs: l, peutModerer: ref, coeursVisibles: montrerCoeurs, podium: podium, ouvert: c.actif, fermeture: c.fermeture };
+}
+function souvenirAjouter_(session, d) {
+  d = d || {};
+  var type = d.type === 'concours' ? 'concours' : 'souvenir', ss = classeur_();
+  exigerJeu_(ss, type === 'concours' ? 'concours' : 'souvenirs');
+  var titre = nettoyerTexte_(d.titre, 80), texte = nettoyerTexte_(d.texte, 1200), annee = nettoyerTexte_(d.annee, 20), lieu = nettoyerTexte_(d.lieu, 60), sign = nettoyerTexte_(d.signature, 60);
+  if (type === 'concours' && !d.photo) throw erreurApp_('requete_invalide');
+  if (!d.photo && texte.length < 3) throw erreurApp_('requete_invalide');
+  if (d.photo && d.consentement !== true) throw erreurApp_('consentement');
+  var photo = '', mini = '';
+  if (d.photo) {
+    var o1 = jpegValide_(d.photo, JEUX.maxPhoto), o2 = jpegValide_(d.mini, JEUX.maxMini), dossier = dossierJeux_(ss);
+    var base = (type === 'concours' ? 'concours-' : 'souvenir-') + Utilities.getUuid().slice(0, 8);
+    photo = dossier.createFile(Utilities.newBlob(o1, 'image/jpeg', base + '.jpg')).getId();
+    mini = dossier.createFile(Utilities.newBlob(o2, 'image/jpeg', base + '-mini.jpg')).getId();
+  }
+  var ratio = Number(d.ratio); if (!(ratio > 0.2 && ratio < 5)) ratio = 1;
+  var id = 'S' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toLowerCase();
+  ss.getSheetByName(ONGLETS.souvenirs).appendRow([id, type, titre, texte, annee, lieu, sign, photo, mini, 'attente', 0, new Date(), Math.round(ratio * 1000) / 1000, '']);
+  return { ok: true, id: id };
+}
+function souvenirPhoto_(session, id, taille) {
+  var s = lireSouvenirs_(classeur_()).filter(function (x) { return x.id === String(id); })[0];
+  if (!s || !s.photo || (s.statut !== 'publié' && session.r === 'agent')) throw erreurApp_('introuvable');
+  var fid = taille === 'mini' && s.mini ? s.mini : s.photo;
+  return { ok: true, type: 'image/jpeg', data: Utilities.base64Encode(DriveApp.getFileById(fid).getBlob().getBytes()) };
+}
+function souvenirModerer_(session, id, action) {
+  if (['publier', 'refuser', 'retirer'].indexOf(action) < 0) throw erreurApp_('requete_invalide');
+  var ss = classeur_(), s = lireSouvenirs_(ss).filter(function (x) { return x.id === String(id); })[0];
+  if (!s) throw erreurApp_('introuvable');
+  var sh = ss.getSheetByName(ONGLETS.souvenirs);
+  if (action === 'publier') {
+    if (s.statut !== 'publié') ajouterPointsJeux_(s.type === 'concours' ? JEUX.points.concours : JEUX.points.souvenir);
+    sh.getRange(s.ligne, 10).setValue('publié'); sh.getRange(s.ligne, 14).setValue(session.n || 'Référent');
+  } else {
+    sh.getRange(s.ligne, 10).setValue(action === 'refuser' ? 'refusé' : 'retiré');
+    [s.photo, s.mini].forEach(function (f) { if (f) { try { DriveApp.getFileById(f).setTrashed(true); } catch (e) { /* déjà absent */ } } });
+  }
+  return { ok: true };
+}
+function souvenirCoeur_(id, plus) {
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), s = lireSouvenirs_(ss).filter(function (x) { return x.id === String(id); })[0];
+    if (!s || s.statut !== 'publié') throw erreurApp_('introuvable');
+    if (s.type === 'concours') { var c = jeuxConfig_(ss).concours; if (!c.actif) throw erreurApp_('jeu_inactif'); }
+    var n = Math.max(0, s.coeurs + (plus === false ? -1 : 1));
+    ss.getSheetByName(ONGLETS.souvenirs).getRange(s.ligne, 11).setValue(n);
+    return { ok: true, coeurs: s.type === 'concours' ? null : n };
+  } finally { verrou.releaseLock(); }
+}
+
+/* ----- Nuage de mots ----- */
+function motInterdit_(t) {
+  var mots = sansAccents_(t).split(/[^a-z0-9]+/);
+  return MOTS_INTERDITS.some(function (m) { return mots.indexOf(sansAccents_(m)) >= 0; });
+}
+function sansAccents_(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function nuageListe_(session) {
+  var ss = classeur_(), c = jeuxConfig_(ss).nuage;
+  if (!c.actif && session.r !== 'admin') throw erreurApp_('jeu_inactif');
+  var sh = ss.getSheetByName(ONGLETS.nuage), v = sh ? sh.getDataRange().getValues() : [], comptes = {}, ref = session.r !== 'agent';
+  for (var i = 1; i < v.length; i++) {
+    if (!v[i][0] || String(v[i][3]) !== 'affiché') continue;
+    var q = Number(v[i][1]), mot = String(v[i][2]), cle = q + '|' + sansAccents_(mot);
+    if (!comptes[cle]) comptes[cle] = { q: q, mot: mot, n: 0, ids: [] };
+    comptes[cle].n++; if (ref) comptes[cle].ids.push(String(v[i][0]));
+  }
+  return { ok: true, questions: c.reglages.questions, mots: Object.keys(comptes).map(function (k) { var x = comptes[k]; return { q: x.q, mot: x.mot, n: x.n, ids: ref ? x.ids : undefined }; }), peutModerer: ref };
+}
+function nuageAjouter_(q, mot) {
+  var ss = classeur_(), c = exigerJeu_(ss, 'nuage');
+  q = Number(q); mot = nettoyerTexte_(mot, 40).replace(/\s+/g, ' ');
+  if (!(q >= 0 && q < c.reglages.questions.length) || mot.length < 2 || mot.split(' ').length > 3) throw erreurApp_('requete_invalide');
+  if (motInterdit_(mot)) throw erreurApp_('mot_refuse');
+  ss.getSheetByName(ONGLETS.nuage).appendRow(['M' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), q, mot, 'affiché', new Date()]);
+  ajouterPointsJeux_(JEUX.points.nuage);
+  return { ok: true };
+}
+function nuageRetirer_(ids) {
+  ids = (Array.isArray(ids) ? ids : []).map(String);
+  var sh = classeur_().getSheetByName(ONGLETS.nuage), v = sh.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < v.length; i++) if (ids.indexOf(String(v[i][0])) >= 0) { sh.getRange(i + 1, 4).setValue('retiré'); n++; }
+  return { ok: true, n: n };
+}
+
+/* ----- QR codes cachés ----- */
+function lireQr_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.qr); if (!sh) return [];
+  var v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) if (v[i][0]) l.push({ ligne: i + 1, code: String(v[i][0]), nom: String(v[i][1] || ''), cible: String(v[i][2] || ''), message: String(v[i][3] || ''), actif: v[i][4] !== false && String(v[i][4]).toLowerCase() !== 'non' });
+  return l;
+}
+function qrListe_(session) {
+  var ss = classeur_(), c = jeuxConfig_(ss).qr, admin = session.r === 'admin';
+  if (!c.actif && !admin) throw erreurApp_('jeu_inactif');
+  var l = lireQr_(ss).filter(function (q) { return q.actif || admin; });
+  return { ok: true, total: l.filter(function (q) { return q.actif; }).length,
+    qr: admin ? l.map(function (q) { return { code: q.code, nom: q.nom, cible: q.cible, message: q.message, actif: q.actif }; }) : undefined };
+}
+function qrTrouver_(code) {
+  var ss = classeur_(); exigerJeu_(ss, 'qr');
+  var q = lireQr_(ss).filter(function (x) { return x.code === String(code || '').toUpperCase() && x.actif; })[0];
+  if (!q) throw erreurApp_('qr_inconnu');
+  ajouterPointsJeux_(JEUX.points.qr);
+  return { ok: true, code: q.code, nom: q.nom, cible: q.cible, message: q.message };
+}
+function qrEnregistrer_(code, d) {
+  d = d || {};
+  var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.qr), l = lireQr_(ss), nom = nettoyerTexte_(d.nom, 60), msg = nettoyerTexte_(d.message, 300);
+  var cible = String(d.cible || ''); if (cible && !/^(P\d{3}|N[a-z0-9]{6,12}|Q[a-z0-9]{6,12})$/.test(cible)) throw erreurApp_('requete_invalide');
+  if (d.supprimer) { var x = l.filter(function (q) { return q.code === code; })[0]; if (x) sh.deleteRow(x.ligne); return { ok: true }; }
+  if (!nom) throw erreurApp_('requete_invalide');
+  if (code) {
+    var y = l.filter(function (q) { return q.code === code; })[0]; if (!y) throw erreurApp_('introuvable');
+    sh.getRange(y.ligne, 2, 1, 4).setValues([[nom, cible, msg, d.actif !== false]]);
+    return { ok: true, code: code };
+  }
+  var alpha = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', nouveau = '';
+  for (var k = 0; k < 8; k++) nouveau += alpha.charAt(Math.floor(Math.random() * alpha.length));
+  sh.appendRow([nouveau, nom, cible, msg, true]);
+  return { ok: true, code: nouveau };
+}
+
+/* ----- Paris ----- */
+function fermeturePari_(ss, cfg) {
+  var c = cfg.paris;
+  if (c.fermetureD) return new Date(c.fermetureD.getTime() + 864e5);
+  var j = lireParametres_(ss)['Date J'];
+  return (j instanceof Date && !isNaN(j)) ? j : null; // par défaut : fermés à minuit la veille du jour J
+}
+function lireParis_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.paris), l = [];
+  if (!sh) return l;
+  var v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) if (v[i][0]) l.push({ ligne: i + 1, id: String(v[i][0]), question: String(v[i][1]), type: String(v[i][2]), unite: String(v[i][3] || ''),
+    resultat: v[i][4] === '' || v[i][4] == null ? null : String(v[i][4]).replace(/^'/, ''), actif: v[i][5] !== false });
+  return l;
+}
+function valeurPari_(type, x) {
+  if (type === 'nombre') { var n = Number(String(x).replace(',', '.')); if (!isFinite(n) || n < 0 || n > 1e7) throw erreurApp_('requete_invalide'); return n; }
+  var s = String(x || ''); if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) throw erreurApp_('requete_invalide'); return s;
+}
+function ecartPari_(type, a, b) {
+  if (type === 'nombre') return Math.abs(Number(a) - Number(b));
+  function m(s) { s = String(s); return Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10), +s.slice(11, 13), +s.slice(14, 16)) / 6e4; }
+  return Math.abs(m(a) - m(b));
+}
+function parisListe_(session, appareil) {
+  var ss = classeur_(), cfg = jeuxConfig_(ss), c = cfg.paris;
+  if (!c.actif && !c.termine && session.r !== 'admin') throw erreurApp_('jeu_inactif');
+  var fin = fermeturePari_(ss, cfg), ouvert = c.actif && (!fin || new Date() < fin), hash = appareil ? empreinteAppareil_(appareil) : '';
+  var sh = ss.getSheetByName(ONGLETS.pronostics), v = sh ? sh.getDataRange().getValues() : [], parPari = {};
+  for (var i = 1; i < v.length; i++) if (v[i][0]) (parPari[String(v[i][0])] = parPari[String(v[i][0])] || []).push({ pseudo: String(v[i][1]), valeur: String(v[i][2]).replace(/^'/, ''), app: String(v[i][3]) });
+  var l = lireParis_(ss).filter(function (p) { return p.actif; }).map(function (p) {
+    var pr = parPari[p.id] || [], mien = pr.filter(function (x) { return hash && x.app === hash; })[0];
+    var o = { id: p.id, question: p.question, type: p.type, unite: p.unite, resultat: p.resultat, participants: pr.length, monPari: mien ? { pseudo: mien.pseudo, valeur: mien.valeur } : null };
+    if (p.resultat != null) o.podium = pr.map(function (x) { return { pseudo: x.pseudo, valeur: x.valeur, ecart: ecartPari_(p.type, x.valeur, p.resultat) }; })
+      .sort(function (a, b) { return a.ecart - b.ecart; }).slice(0, 3);
+    return o;
+  });
+  return { ok: true, paris: l, ouvert: ouvert, fermeture: fin ? formaterDate_(new Date(fin.getTime() - 1)) : null, admin: session.r === 'admin' };
+}
+function empreinteAppareil_(a) {
+  a = String(a || ''); if (!/^[a-z0-9]{16,40}$/.test(a)) throw erreurApp_('requete_invalide');
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'appareil|' + a, Utilities.Charset.UTF_8)).slice(0, 22);
+}
+function pronostic_(id, d) {
+  d = d || {};
+  var ss = classeur_(), cfg = jeuxConfig_(ss); exigerJeu_(ss, 'paris');
+  var fin = fermeturePari_(ss, cfg); if (fin && new Date() >= fin) throw erreurApp_('paris_fermes');
+  var p = lireParis_(ss).filter(function (x) { return x.id === String(id) && x.actif; })[0]; if (!p) throw erreurApp_('introuvable');
+  var pseudo = nettoyerTexte_(d.pseudo, 30), valeur = valeurPari_(p.type, d.valeur), hash = empreinteAppareil_(d.appareil);
+  if (pseudo.length < 2 || motInterdit_(pseudo)) throw erreurApp_('pseudo_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var sh = ss.getSheetByName(ONGLETS.pronostics), v = sh.getDataRange().getValues(), ligne = -1;
+    for (var i = 1; i < v.length; i++) {
+      if (String(v[i][0]) !== p.id) continue;
+      if (String(v[i][3]) === hash) ligne = i + 1;
+      else if (sansAccents_(v[i][1]) === sansAccents_(pseudo)) throw erreurApp_('pseudo_pris');
+    }
+    var stocke = p.type === 'dateheure' ? '\'' + valeur : valeur; // texte : pas de conversion automatique en date
+    if (ligne > 0) sh.getRange(ligne, 2, 1, 4).setValues([[pseudo, stocke, hash, new Date()]]);
+    else { sh.appendRow([p.id, pseudo, stocke, hash, new Date()]); ajouterPointsJeux_(JEUX.points.pari, true); }
+    return { ok: true };
+  } finally { verrou.releaseLock(); }
+}
+function pariAdmin_(id, d) {
+  d = d || {};
+  var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.paris), l = lireParis_(ss);
+  if (!id) {
+    var q = nettoyerTexte_(d.question, 160), type = d.type === 'dateheure' ? 'dateheure' : 'nombre';
+    if (q.length < 5) throw erreurApp_('requete_invalide');
+    var nid = 'X' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    sh.appendRow([nid, q, type, nettoyerTexte_(d.unite, 20), '', true]);
+    return { ok: true, id: nid };
+  }
+  var p = l.filter(function (x) { return x.id === String(id); })[0]; if (!p) throw erreurApp_('introuvable');
+  if ('resultat' in d) sh.getRange(p.ligne, 5).setValue(d.resultat === '' || d.resultat == null ? '' : (p.type === 'dateheure' ? '\'' : '') + String(valeurPari_(p.type, d.resultat)));
+  if ('actif' in d) sh.getRange(p.ligne, 6).setValue(!!d.actif);
+  return { ok: true };
+}
+
+/* ----- Escape game : validation des scénarios par les référents ----- */
+function escapeValider_(session, scenario, valide, remarque) {
+  scenario = String(scenario || ''); if (!/^[a-z0-9-]{3,30}$/.test(scenario)) throw erreurApp_('requete_invalide');
+  var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.jeux), c = jeuxConfig_(ss).escape;
+  var g = c.reglages; g.valides = g.valides || {};
+  if (valide === true) g.valides[scenario] = { par: session.n || 'Référent', le: formaterDate_(new Date()) }; else if (valide === false) delete g.valides[scenario];
+  sh.getRange(c.ligne, 6).setValue(JSON.stringify({ valides: g.valides }));
+  var rq = nettoyerTexte_(remarque, 600);
+  if (rq) ss.getSheetByName(ONGLETS.retours).appendRow([new Date(), 'escape:' + scenario, rq, session.n || '']);
+  return { ok: true, valides: g.valides };
+}
+
+function installerJeux_(ss) {
+  creerOnglet_(ss, ONGLETS.jeux, ['Jeu', 'Nom', 'Activé', 'Ouverture', 'Fermeture', 'Réglages (JSON)'], []);
+  var sh = ss.getSheetByName(ONGLETS.jeux), v = sh.getDataRange().getValues(), deja = {};
+  for (var i = 1; i < v.length; i++) deja[String(v[i][0])] = 1;
+  JEUX.liste.forEach(function (id) { if (!deja[id]) sh.appendRow([id, JEUX.noms[id], false, '', '', '']); });
+  creerOnglet_(ss, ONGLETS.souvenirs, ['ID', 'Type', 'Titre', 'Texte', 'Année', 'Lieu', 'Signature', 'Photo (Drive)', 'Miniature (Drive)', 'Statut', 'Cœurs', 'Déposé le', 'Format', 'Validé par'], []);
+  creerOnglet_(ss, ONGLETS.nuage, ['ID', 'Question (n°)', 'Mot', 'Statut', 'Déposé le'], []);
+  creerOnglet_(ss, ONGLETS.qr, ['Code', 'Lieu', 'Pièce ou équipement (ID)', 'Message', 'Actif'], []);
+  creerOnglet_(ss, ONGLETS.paris, ['ID', 'Question', 'Type', 'Unité', 'Résultat', 'Actif'], []);
+  var sp = ss.getSheetByName(ONGLETS.paris);
+  if (sp.getLastRow() <= 1) PARIS_DEFAUTS.forEach(function (p) { sp.appendRow([p[0], p[1], p[2], p[3], '', true]); });
+  creerOnglet_(ss, ONGLETS.pronostics, ['Pari', 'Pseudo', 'Valeur', 'Appareil (empreinte anonyme)', 'Déposé le'], []);
+  creerOnglet_(ss, ONGLETS.retours, ['Date', 'Sujet', 'Remarque', 'Par'], []);
+}
+
+// ============================================================================
 // Jetons signés (HMAC-SHA256)
 // ============================================================================
 function signerJeton_(charge) {
@@ -905,6 +1328,7 @@ function installer() {
   creerOnglet_(ss, ONGLETS.categories, ['Catégorie', 'Couleur', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.points, ['ID équipement', 'Type', 'X', 'Y', 'Précision', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.quiz, QUIZ.entetes, []);
+  installerJeux_(ss);
   installerBanqueQuiz_(ss);
   ajouterParametre_(ss, 'Objectif quiz équipe', 'Nombre total de réponses visé par l\'équipe (compteur anonyme). Par défaut : 3000.');
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);

@@ -48,6 +48,8 @@
     visites: I('<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M9 15l2 2 4-4"/>'),
     quiz: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5h.01"/>'),
     simulations: I('<path d="M3 12h4l2-5 4 10 2-5h6"/>'),
+    souvenirs: I('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>'),
+    jeux: I('<rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v4M5 13h4"/><circle cx="16" cy="12" r="1"/><circle cx="18" cy="14" r="1"/>'),
     newsletter: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h6M7 12h10M7 16h10"/><rect x="15" y="7" width="3" height="2.5"/>'),
     docs: I('<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/>'),
     pret: I('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
@@ -59,6 +61,8 @@
     { id: 'plan', nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
     { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'newsletter', nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
+    { id: 'souvenirs', nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
+    { id: 'jeux', nom: 'Jeux', desc: 'Concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
     { id: 'quiz', nom: 'Quiz', desc: 'Quiz du jour, entraînement et jeux sur le plan', etape: 4, ouvrir: function () { window.ReaQuiz.ouvrir(); } },
     { id: 'simulations', nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
@@ -72,6 +76,12 @@
     { id: 'urgence', nom: 'Prêt pour l\'urgence' },
     { id: 'fidele', nom: 'Fidèle' },
     { id: 'expert', nom: 'Expert' },
+    { id: 'qr5', nom: 'Explorateur' },
+    { id: 'qr10', nom: 'Grand explorateur' },
+    { id: 'qrtous', nom: 'Tous les QR codes' },
+    { id: 'evade', nom: 'Évadé' },
+    { id: 'bingo', nom: 'Bingo !' },
+    { id: 'cartonplein', nom: 'Carton plein' },
     { id: 'simulation', nom: 'Simulation' },
     { id: 'pret', nom: 'Prêt(e) !' }
   ];
@@ -96,6 +106,15 @@
     newsletter_introuvable: 'Cette newsletter n\'est plus disponible.',
     newsletter_incomplete: 'Toutes les pages n\'ont pas été reçues. Réessayez.',
     question_introuvable: 'Cette question n\'existe plus.',
+    jeu_inactif: 'Cette rubrique n\'est pas ouverte pour le moment.',
+    introuvable: 'Élément introuvable (peut-être retiré).',
+    consentement: 'Cochez les règles pour la photo.',
+    mot_refuse: 'Ce mot n\'est pas accepté.',
+    pseudo_pris: 'Ce pseudo est déjà pris.',
+    pseudo_invalide: 'Choisissez un autre pseudo.',
+    paris_fermes: 'Les paris sont fermés.',
+    qr_inconnu: 'QR code inconnu.',
+    bingo_cases: 'Il faut au moins 16 cases.',
     erreur_serveur: 'Le serveur a rencontré un problème. Réessayez dans un instant.'
   };
   function message(code) { return MESSAGES[code] || MESSAGES.erreur_serveur; }
@@ -243,6 +262,7 @@
           h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
         h('span', { class: 'entete__role', text: libelleRole })),
       horizon(d),
+      d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
       sectionJauge(d.jauge),
       sectionBadges(),
@@ -250,6 +270,7 @@
       sectionActus(d.actualites),
       piedDePage()));
     app.focus({ preventScroll: true });
+    if (window.ReaJeux) window.ReaJeux.apresAccueil(); // QR code scanné en attente
   }
 
   function horizon(d) {
@@ -763,7 +784,7 @@
     ecranCourant = null; // pas de rechargement automatique pendant la lecture
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
-    var lues = stock.lire(CLE.nlLues) || {}; lues[n.id] = 1; stock.ecrire(CLE.nlLues, lues);
+    var lues = stock.lire(CLE.nlLues) || {}; if (!lues[n.id] && window.ReaJeux) window.ReaJeux.point('newsletter'); lues[n.id] = 1; stock.ecrire(CLE.nlLues, lues);
     var pages = [];
     for (var k = 0; k < n.pages; k++) pages.push(h('figure', { class: 'nl-page', style: 'aspect-ratio:1/' + (n.ratio || 1.414) },
       h('div', { class: 'squelette nl-page__attente' }), h('figcaption', { class: 'visuellement-cache', text: 'Page ' + (k + 1) + ' sur ' + n.pages })));
@@ -875,11 +896,6 @@
     }).catch(function () { /* l'app fonctionne sans */ });
   }
 
-  /* ---------- Démarrage ---------- */
-  var s = stock.lire(CLE.session);
-  if (s && s.expiration && Date.parse(s.expiration) < Date.now()) { stock.effacer(CLE.session); s = null; }
-  if (s) ecranAccueil(); else ecranConnexion();
-
   // Utilisé par les modules suivants pour attribuer un badge
   // Outils partagés avec le module Quiz (js/quiz.js)
   window.ReaApp = {
@@ -892,4 +908,9 @@
   window.ReaBadges = {
     attribuer: function (id) { var b = stock.lire(CLE.badges) || {}; b[id] = new Date().toISOString(); stock.ecrire(CLE.badges, b); }
   };
+
+  /* ---------- Démarrage (après la mise à disposition des outils partagés) ---------- */
+  var s = stock.lire(CLE.session);
+  if (s && s.expiration && Date.parse(s.expiration) < Date.now()) { stock.effacer(CLE.session); s = null; }
+  if (s) ecranAccueil(); else ecranConnexion();
 })();

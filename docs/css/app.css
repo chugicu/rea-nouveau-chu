@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 /* Réa – Nouveau CHU · feuille de style
    Couleurs : charte CHU de la Guadeloupe 2026 (FI/COM/001) + logo Réanimation Guadeloupe.
    Polices : Barlow (substitut libre de DIN 2014) et PT Sans (substitut libre d'Aller), licence OFL. */
@@ -546,3 +547,132 @@ html.plan-plein-ouvert, html.plan-plein-ouvert body { overflow: hidden; }
 .quiz-lies { margin: 8px 0; }
 .quiz-lies summary { cursor: pointer; font-weight: 700; color: var(--action); padding: 6px 0; }
 .form-carte textarea { width: 100%; font: inherit; border: 2px solid var(--trait); border-radius: 12px; padding: 10px 12px; background: var(--surface); color: var(--texte); box-sizing: border-box; }
+
+/* ---------- Jauge du déménagement ---------- */
+.elan { background: linear-gradient(135deg, #223b80, #1f6fa8); color: #fff; border-radius: var(--r-m); padding: 14px 16px; margin: 12px 0; box-shadow: var(--ombre); }
+.elan--nouveau { animation: elan-flash 1.2s ease 2; }
+@keyframes elan-flash { 50% { box-shadow: 0 0 0 6px #95c127; } }
+@media (prefers-reduced-motion: reduce) { .elan--nouveau { animation: none; } }
+.elan__tete { all: unset; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
+.elan__tete:focus-visible { outline: 3px solid #fff; outline-offset: 3px; border-radius: 4px; }
+.elan__titre { font: 700 1.1rem Barlow, sans-serif; }
+.elan__pc { font: 700 1.6rem Barlow, sans-serif; }
+.elan__barre { position: relative; height: 14px; background: rgba(255, 255, 255, .22); border-radius: 999px; margin: 8px 0; overflow: visible; }
+.elan__plein { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #95c127, #ffd34d); transition: width .6s ease; }
+.elan__repere { position: absolute; top: -3px; width: 4px; height: 20px; margin-left: -2px; background: rgba(255, 255, 255, .55); border-radius: 2px; }
+.elan__repere--ok { background: #ffd34d; }
+.elan__texte { margin: 4px 0 0; font-size: .95rem; }
+.elan__paliers { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; font-size: .92rem; }
+.elan__palier { opacity: .7; }
+.elan__palier--ok { opacity: 1; }
+.elan__palier span { display: block; }
+
+/* ---------- Souvenirs, concours ---------- */
+.mosaique { columns: 2 160px; column-gap: 10px; }
+.tuile { break-inside: avoid; margin: 0 0 10px; background: var(--surface); border-radius: 14px; overflow: hidden; box-shadow: var(--ombre); position: relative; display: flex; flex-direction: column; }
+.tuile__ouvrir { all: unset; cursor: pointer; display: block; position: relative; flex: 1; }
+.tuile__ouvrir:focus-visible { outline: 3px solid var(--chu-bleu-clair); outline-offset: -3px; }
+.tuile__img { display: block; width: 100%; height: 100%; min-height: 120px; background: var(--surface-2); }
+.tuile__img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tuile:not(.tuile--texte) .tuile__img { position: absolute; inset: 0; }
+.tuile:not(.tuile--texte) .tuile__ouvrir { aspect-ratio: inherit; }
+.tuile--texte { background: linear-gradient(160deg, var(--chu-bleu-pastel), #fff); }
+.tuile__citation { display: block; padding: 16px 14px 34px; font: italic 1.02rem/1.4 'PT Sans', sans-serif; color: var(--texte); }
+.tuile__legende { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 6px; font: 700 .85rem Barlow, sans-serif; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, .55)); }
+.tuile--texte .tuile__legende { color: var(--texte-doux); background: none; }
+.tuile__legende:empty { display: none; }
+.tuile__rang { position: absolute; top: 6px; left: 8px; font-size: 1.8rem; }
+.tuile--podium { box-shadow: 0 0 0 3px #ffd34d, var(--ombre); }
+.coeur { align-self: flex-end; margin: 4px 6px 6px; border: 0; background: none; color: #d93a2f; font-size: 1.35rem; cursor: pointer; min-width: 44px; min-height: 36px; }
+.coeur span { font-size: .9rem; color: var(--texte-doux); }
+.coeur[disabled] { cursor: default; opacity: .6; }
+.tuile__moderation { padding: 6px; }
+.detail { position: fixed; inset: 0; z-index: 900; background: rgba(15, 22, 45, .75); display: grid; place-items: center; padding: 16px; overflow: auto; }
+.detail__carte { position: relative; background: var(--surface); border-radius: 18px; max-width: 640px; width: 100%; padding: 14px 16px 16px; max-height: 92vh; overflow: auto; }
+.detail__img img { width: 100%; border-radius: 10px; display: block; }
+.detail__texte { white-space: pre-wrap; font-size: 1.05rem; }
+.detail__fermer, .diapo__fermer { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .55); color: #fff; font-size: 1.6rem; cursor: pointer; z-index: 2; }
+.diapo { position: fixed; inset: 0; z-index: 950; background: #000; display: grid; place-items: center; }
+.diapo img { max-width: 100vw; max-height: 100vh; object-fit: contain; }
+.diapo__legende { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: 24px 20px 20px; color: #fff; font: 700 1.2rem Barlow, sans-serif; text-align: center; background: linear-gradient(transparent, rgba(0, 0, 0, .7)); }
+.diapo__etat { position: absolute; top: 16px; left: 16px; color: #fff; font-weight: 700; }
+.diapo__nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 64px; border: 0; background: rgba(255, 255, 255, .15); color: #fff; font-size: 2rem; cursor: pointer; border-radius: 10px; }
+.diapo__nav--prec { left: 8px; } .diapo__nav--suiv { right: 8px; }
+.sv-apercu img { max-height: 180px; border-radius: 10px; margin: 6px 0; }
+.sv-regles { display: grid; gap: 8px; background: #fff4e5; border-radius: 12px; padding: 10px 12px; margin: 6px 0 10px; }
+.sv-regles input { width: 22px; height: 22px; flex: none; }
+
+/* ---------- Nuage ---------- */
+.nuage { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; padding: 22px 12px; margin: 12px 0; background: var(--surface); border-radius: var(--r-m); box-shadow: var(--ombre); min-height: 200px; }
+.nuage__mot { font-family: Barlow, sans-serif; font-weight: 700; line-height: 1.15; border: 0; background: none; padding: 2px 4px; }
+button.nuage__mot { cursor: pointer; }
+.nuage__mot--retirer { color: #fff !important; background: var(--urgence); border-radius: 8px; font-size: 1rem !important; }
+.nuage__form { margin: 8px 0; }
+.nuage__saisie { display: flex; gap: 8px; align-items: center; }
+.nuage__saisie input { flex: 1; min-width: 0; }
+
+/* ---------- QR codes ---------- */
+.qr-trouve { display: grid; gap: 10px; }
+.qr-trouve__titre { font: 700 1.5rem Barlow, sans-serif; color: var(--chu-vert-fonce); margin: 6px 0 0; }
+.liste-simple { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+
+/* ---------- Bingo ---------- */
+.bingo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0; }
+.bingo__case { position: relative; aspect-ratio: 1; border: 2px solid var(--trait); background: var(--surface); border-radius: 12px; padding: 6px 4px; font: 600 .74rem/1.15 'PT Sans', sans-serif;
+  color: var(--texte); cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; hyphens: auto; }
+.bingo__case--ok { background: var(--chu-vert-fonce); border-color: var(--chu-vert-fonce); color: #fff; }
+.bingo__case[disabled] { cursor: default; opacity: 1; }
+.bingo__auto { position: absolute; top: 2px; right: 5px; font-size: .75rem; color: var(--chu-bleu-clair); }
+.bingo__case--ok .bingo__auto { color: #ffd34d; }
+.bingo__flash { font-size: 1.15rem; text-align: center; }
+@media (min-width: 520px) { .bingo__case { font-size: .9rem; } }
+
+/* ---------- Paris ---------- */
+.pari__resultat { background: var(--chu-vert-pastel); border-radius: 10px; padding: 8px 12px; }
+.pari__resultat p { margin: 0 0 4px; }
+.pari__podium { margin: 0; padding-left: 4px; list-style: none; display: grid; gap: 2px; }
+
+/* ---------- Escape game ---------- */
+.escape__progression { height: 6px; background: var(--surface-2); border-radius: 999px; margin-bottom: 14px; overflow: hidden; }
+.escape__progression div { height: 100%; background: linear-gradient(90deg, var(--chu-bleu-clair), var(--chu-bleu-fonce)); }
+.escape__intro { background: #1b2a52; color: #fff; border-radius: 12px; padding: 12px 14px; font-style: italic; }
+.escape__recit { font-size: 1.12rem; line-height: 1.5; background: var(--surface); border-left: 4px solid var(--chu-bleu-clair); border-radius: 0 12px 12px 0; padding: 14px 16px; }
+.escape__items { display: grid; gap: 8px; margin-bottom: 12px; }
+.escape__item { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 2px solid var(--trait); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.escape__item input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+.escape__item--ok { border-color: var(--chu-vert-fonce); background: var(--chu-vert-pastel); }
+.escape__item--non { opacity: .55; text-decoration: line-through; }
+.escape__ordre { list-style: decimal inside; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.escape__ligne { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--surface); border: 2px solid var(--trait); border-radius: 12px; padding: 8px 10px; }
+.escape__fleches { display: flex; gap: 4px; flex: none; }
+.escape__fleches button { width: 40px; height: 40px; border: 2px solid var(--trait); border-radius: 10px; background: var(--surface-2); cursor: pointer; font-size: 1rem; }
+.escape__fleches button[disabled] { opacity: .35; cursor: default; }
+.escape__indice summary { cursor: pointer; font-weight: 700; color: var(--action); }
+.escape__validation { text-align: left; }
+.escape__validation textarea { width: 100%; box-sizing: border-box; font: inherit; border: 2px solid var(--trait); border-radius: 12px; padding: 8px 10px; }
+.quiz-theme--fait { border-color: var(--chu-vert-fonce); }
+.quiz-theme .etiquette { justify-self: start; margin-top: 4px; }
+
+/* ---------- Réglages des jeux ---------- */
+.jeux__reglages { margin-top: 16px; width: 100%; }
+.reglage { margin-bottom: 12px; }
+.reglage__tete { display: flex; align-items: center; gap: 10px; }
+.reglage__tete input { width: 24px; height: 24px; }
+.reglage__tete b { flex: 1; font: 700 1.1rem Barlow, sans-serif; }
+.reglage .champ span { font-size: .9rem; color: var(--texte-doux); }
+.reglage-liste { display: grid; gap: 6px; margin: 6px 0; }
+.reglage-palier { display: grid; grid-template-columns: 64px 1fr; gap: 6px; }
+.reglage-palier input:last-child { grid-column: 1 / -1; }
+.reglage-case { display: grid; grid-template-columns: 1fr auto 44px; gap: 6px; align-items: center; }
+.reglage-case select { max-width: 150px; }
+.reglage textarea { width: 100%; box-sizing: border-box; font: inherit; border: 2px solid var(--trait); border-radius: 12px; padding: 8px 10px; }
+/* Jeux : champs de saisie */
+.nuage__saisie .bouton { width: auto; flex: none; padding-left: 18px; padding-right: 18px; }
+.nuage__saisie input, .nuage__saisie select { flex: 1 1 auto; min-width: 0; width: 100%; }
+.jeux input[type=text], .jeux input[type=number], .jeux input[type=date], .jeux input[type=datetime-local], .jeux select, .jeux textarea {
+  text-transform: none; letter-spacing: normal; font: inherit; box-sizing: border-box; min-width: 0; max-width: 100%;
+  border: 2px solid var(--trait); border-radius: 12px; padding: 10px 12px; background: var(--surface); color: var(--texte); }
+.reglage input:not([type=checkbox]), .reglage select, .reglage textarea { width: 100%; }
+.reglage .grille-2 { gap: 8px; }
+.reglage-case select { max-width: 140px; }
+.quiz-carte > *, .form-carte > * { min-width: 0; }

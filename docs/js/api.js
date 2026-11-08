@@ -62,6 +62,7 @@
               { date: '', titre: 'Exemple d\'actualité', texte: 'Les référents publient les actualités depuis le Google Sheets « Base ».', epinglee: false }
             ],
             jauge: { pourcent: 38, prets: 81, effectif: 213, parFonction: parF },
+            elan: demoElan(),
             newsletter: (function () { var l = nlDemo().filter(function (n) { return n.statut === 'publiée'; }); return l.length ? { id: l[l.length - 1].id, titre: l[l.length - 1].titre } : null; })(),
             misAJour: new Date().toISOString()
           });
@@ -76,10 +77,92 @@
         if (action.indexOf('visite') === 0) return demoVisites(action, d, ok, ko);
         if (action.indexOf('nl_') === 0) return demoNewsletters(action, d, ok, ko);
         if (action.indexOf('quiz_') === 0) return demoQuiz(action, d, ok, ko);
+        if (/^(jeux_|souvenir|nuage|qr_|paris|pronostic|pari_|escape_)/.test(action)) return demoJeux(action, d, ok, ko);
         if (action === 'ping') return ok({ ok: true });
         ko(new ErreurApi('action_inconnue'));
       }, 350);
     });
+  }
+
+  /* Jeux du mode démonstration (en mémoire, tous ouverts) */
+  var DJ = null;
+  function jpegDemo(texte, couleur, w, hh) {
+    var c = document.createElement('canvas'); c.width = w; c.height = hh; var g = c.getContext('2d');
+    var gr = g.createLinearGradient(0, 0, w, hh); gr.addColorStop(0, couleur); gr.addColorStop(1, '#223b80'); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
+    g.fillStyle = 'rgba(255,255,255,.9)'; g.font = 'bold ' + Math.round(w / 12) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(texte, w / 2, hh / 2);
+    g.font = Math.round(w / 26) + 'px sans-serif'; g.fillText('Photo de démonstration', w / 2, hh / 2 + w / 12);
+    var d = c.toDataURL('image/jpeg', 0.8); return d.slice(d.indexOf(',') + 1);
+  }
+  function jeuxDemo() {
+    if (DJ) return DJ;
+    var j = {}; ['jauge', 'souvenirs', 'concours', 'nuage', 'qr', 'escape', 'bingo', 'paris'].forEach(function (id) { j[id] = { actif: true, actifBrut: true, termine: false, ouverture: '', fermeture: '', reglages: {} }; });
+    j.jauge.reglages = { objectif: 4000, paliers: [{ pc: 10, titre: 'Échauffement', texte: 'L\'équipe est lancée !' }, { pc: 25, titre: 'Les cartons sont prêts', texte: 'Un quart du chemin.' },
+      { pc: 50, titre: 'Mi-parcours', texte: 'La moitié !' }, { pc: 75, titre: 'Dernière ligne droite', texte: 'Encore un effort.' }, { pc: 100, titre: 'Prêts pour le grand départ', texte: 'Objectif atteint !' }] };
+    j.nuage.reglages = { questions: ['Ce que j\'emporte', 'Ce que je laisse', 'Ce qui me fait envie', 'Ce qui m\'inquiète'] };
+    j.bingo.reglages = { cases: ['J\'ai visité les nouveaux locaux|visite', 'J\'ai fait le quiz du jour|quizjour', 'J\'ai trouvé un QR code caché|qr', 'J\'ai exploré 8 pièces du plan|plan', 'J\'ai lu la newsletter|newsletter',
+      'J\'ai partagé un souvenir|souvenir', 'J\'ai mis un mot dans le nuage|nuage', 'J\'ai fait un pari|pari', 'J\'ai terminé un escape game|escape', 'Je sais où est le chariot d\'urgence de mon secteur', 'J\'ai repéré les vannes de fluides',
+      'J\'ai trouvé mon vestiaire', 'J\'ai aidé un collègue à se repérer', 'Je connais mon trajet domicile – nouveau CHU', 'J\'ai rangé mon casier actuel', 'J\'ai participé à une simulation', 'Je connais les couleurs des unités',
+      'J\'ai pris une photo souvenir de l\'ancien service', 'J\'ai repéré la salle de détente', 'J\'ai parlé du déménagement avec une autre équipe'].map(function (t) { var x = t.split('|'); return x[1] ? { texte: x[0], auto: x[1] } : { texte: x[0] }; }) };
+    j.escape.reglages = { valides: { 'transfert-309': { par: 'Démo', le: '2026-11-07' }, 'premiere-garde': { par: 'Démo', le: '2026-11-07' } } };
+    j.concours.fermeture = '2026-12-15';
+    DJ = { jeux: j, points: 1240 + 380, souvenirs: [
+      { id: 'Sdemo1', type: 'souvenir', titre: 'Le pot de Noël 2012', texte: 'Toute l\'équipe de nuit déguisée en lutins, et le chef qui chantait faux. Inoubliable !', annee: 'vers 2012', lieu: 'Salle de pause', signature: 'Marie, IDE', photo: true, ratio: 0.75, statut: 'publié', coeurs: 12, depose: '2026-11-02', img: null, col: '#c2416f' },
+      { id: 'Sdemo2', type: 'souvenir', titre: '', texte: 'Ma première garde en 1998 : un patient m\'a appris à jouer aux dominos à 4 h du matin.', annee: '1998', lieu: '', signature: '', photo: false, ratio: 1, statut: 'publié', coeurs: 7, depose: '2026-11-03' },
+      { id: 'Sdemo3', type: 'souvenir', titre: 'Le couloir des box', texte: 'Combien de kilomètres parcourus ici ?', annee: '', lieu: 'Couloir', signature: 'Léo, AS', photo: true, ratio: 1.33, statut: 'publié', coeurs: 4, depose: '2026-11-04', col: '#048e39' },
+      { id: 'Sdemo4', type: 'souvenir', titre: 'En attente de validation', texte: 'Exemple de souvenir à valider par un référent.', annee: '', lieu: '', signature: '', photo: false, ratio: 1, statut: 'attente', coeurs: 0, depose: '2026-11-07' },
+      { id: 'Cdemo1', type: 'concours', titre: 'Lever de soleil sur la Soufrière', texte: '', signature: 'Anonyme', photo: true, ratio: 0.66, statut: 'publié', coeurs: 9, depose: '2026-11-05', col: '#d9600b' },
+      { id: 'Cdemo2', type: 'concours', titre: 'Le hall sous la pluie', texte: '', signature: 'Paul', photo: true, ratio: 1, statut: 'publié', coeurs: 3, depose: '2026-11-06', col: '#1f6fa8' }],
+      nuage: [[0, 'La solidarité', 5], [0, 'Les fous rires', 3], [0, 'Mes habitudes', 1], [1, 'Les fuites du toit', 4], [1, 'La chaleur', 2], [2, 'Des chambres lumineuses', 3], [2, 'Plus d\'espace', 2], [3, 'Les trajets', 2], [3, 'Se perdre', 1]].map(function (x, i) { return { id: 'Mdemo' + i, q: x[0], mot: x[1], n: x[2] }; }),
+      qr: [{ code: 'DEMOQR01', nom: 'Salle de détente', cible: '', message: 'Bravo ! Ici, on souffle entre deux soins.', actif: true }, { code: 'DEMOQR02', nom: 'Pharmacie', cible: '', message: '', actif: true }],
+      paris: [['cartons', 'Combien de cartons au total pour le déménagement ?', 'nombre', 'cartons'], ['premier', 'Jour et heure d\'arrivée du premier patient dans le nouveau service ?', 'dateheure', ''],
+        ['dernier', 'Jour et heure d\'arrivée du dernier patient ?', 'dateheure', ''], ['duree', 'Durée totale du transfert des patients (en heures) ?', 'nombre', 'heures'], ['ambulances', 'Nombre de trajets d\'ambulance ?', 'nombre', 'trajets']]
+        .map(function (x) { return { id: x[0], question: x[1], type: x[2], unite: x[3], resultat: null, prono: [] }; }) };
+    return DJ;
+  }
+  function demoElan() { var j = jeuxDemo(); if (!j.jeux.jauge.actif) return null; var o = j.jeux.jauge.reglages.objectif; return { points: j.points, objectif: o, pourcent: Math.min(100, Math.floor(100 * j.points / o)), paliers: j.jeux.jauge.reglages.paliers }; }
+  function demoJeux(action, d, ok, ko) {
+    if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_absente'));
+    var J = jeuxDemo(), admin = d.jeton === 'demo.admin', ref = d.jeton !== 'demo.agent';
+    function trouver(l, k, v) { return l.filter(function (x) { return x[k] === v; })[0]; }
+    switch (action) {
+      case 'jeux_etat': return ok({ ok: true, jeux: JSON.parse(JSON.stringify(J.jeux)), admin: admin, referent: ref, elan: demoElan() });
+      case 'jeux_reglage': if (!admin) return ko(new ErreurApi('non_autorise')); var g = J.jeux[d.id]; ['actif', 'ouverture', 'fermeture'].forEach(function (k) { if (k in d.donnees) g[k === 'actif' ? 'actifBrut' : k] = d.donnees[k]; }); g.actif = g.actifBrut;
+        if (d.donnees.reglages) { if (d.id === 'bingo' && d.donnees.reglages.cases.length < 16) return ko(new ErreurApi('bingo_cases')); Object.assign(g.reglages, d.donnees.reglages); } return ok({ ok: true });
+      case 'jeux_points': J.points += 2; return ok({ ok: true });
+      case 'souvenirs': return ok({ ok: true, peutModerer: ref, coeursVisibles: d.type !== 'concours', podium: null, ouvert: true, fermeture: d.type === 'concours' ? J.jeux.concours.fermeture : '',
+        souvenirs: J.souvenirs.filter(function (x) { return x.type === (d.type === 'concours' ? 'concours' : 'souvenir') && (x.statut === 'publié' || (ref && x.statut === 'attente')); }).slice().reverse()
+          .map(function (x) { return { id: x.id, titre: x.titre, texte: x.texte, annee: x.annee, lieu: x.lieu, signature: x.signature, photo: x.photo, ratio: x.ratio, statut: ref ? x.statut : undefined, coeurs: x.type === 'concours' ? null : x.coeurs, depose: x.depose }; }) });
+      case 'souvenir_ajouter': var n = { id: 'S' + Math.random().toString(36).slice(2, 10), type: d.donnees.type === 'concours' ? 'concours' : 'souvenir', titre: d.donnees.titre, texte: d.donnees.texte, annee: d.donnees.annee, lieu: d.donnees.lieu,
+          signature: d.donnees.signature, photo: !!d.donnees.photo, img: d.donnees.photo, mini: d.donnees.mini, ratio: d.donnees.ratio || 1, statut: 'attente', coeurs: 0, depose: '2026-11-07' }; J.souvenirs.push(n); return ok({ ok: true, id: n.id });
+      case 'souvenir_photo': var sv = trouver(J.souvenirs, 'id', d.id); if (!sv || !sv.photo) return ko(new ErreurApi('introuvable'));
+        if (!sv.img) { sv.img = jpegDemo(sv.titre || 'Souvenir', sv.col || '#5c2e9e', 1200, Math.round(1200 * sv.ratio)); sv.mini = jpegDemo(sv.titre || 'Souvenir', sv.col || '#5c2e9e', 400, Math.round(400 * sv.ratio)); }
+        return ok({ ok: true, type: 'image/jpeg', data: d.taille === 'mini' ? sv.mini : sv.img });
+      case 'souvenir_moderer': if (!ref) return ko(new ErreurApi('non_autorise')); trouver(J.souvenirs, 'id', d.id).statut = d.statut === 'publier' ? 'publié' : 'refusé'; return ok({ ok: true });
+      case 'souvenir_coeur': var sc = trouver(J.souvenirs, 'id', d.id); sc.coeurs += d.plus === false ? -1 : 1; return ok({ ok: true, coeurs: sc.type === 'concours' ? null : sc.coeurs });
+      case 'nuage': return ok({ ok: true, questions: J.jeux.nuage.reglages.questions, peutModerer: ref, mots: J.nuage.map(function (m) { return { q: m.q, mot: m.mot, n: m.n, ids: ref ? [m.id] : undefined }; }) });
+      case 'nuage_ajouter': if (/merde|putain/i.test(d.mot)) return ko(new ErreurApi('mot_refuse')); var ex = J.nuage.filter(function (m) { return m.q === d.q && m.mot.toLowerCase() === d.mot.toLowerCase(); })[0];
+        if (ex) ex.n++; else J.nuage.push({ id: 'M' + Math.random().toString(36).slice(2, 8), q: d.q, mot: d.mot, n: 1 }); return ok({ ok: true });
+      case 'nuage_retirer': J.nuage = J.nuage.filter(function (m) { return d.ids.indexOf(m.id) < 0; }); return ok({ ok: true });
+      case 'qr_liste': return ok({ ok: true, total: J.qr.filter(function (q) { return q.actif; }).length, qr: admin ? J.qr : undefined });
+      case 'qr_trouver': var q = trouver(J.qr, 'code', String(d.code).toUpperCase()); if (!q || !q.actif) return ko(new ErreurApi('qr_inconnu')); return ok({ ok: true, code: q.code, nom: q.nom, cible: q.cible, message: q.message });
+      case 'qr_enregistrer': if (!admin) return ko(new ErreurApi('non_autorise'));
+        if (d.donnees.supprimer) { J.qr = J.qr.filter(function (x) { return x.code !== d.code; }); return ok({ ok: true }); }
+        if (d.code) { Object.assign(trouver(J.qr, 'code', d.code), d.donnees); return ok({ ok: true, code: d.code }); }
+        var c = 'Q' + Math.random().toString(36).slice(2, 9).toUpperCase(); J.qr.push({ code: c, nom: d.donnees.nom, cible: d.donnees.cible || '', message: d.donnees.message || '', actif: true }); return ok({ ok: true, code: c });
+      case 'paris': return ok({ ok: true, ouvert: true, fermeture: '2027-01-03', admin: admin, paris: J.paris.map(function (p) {
+        var mien = p.prono.filter(function (x) { return x.app === d.appareil; })[0];
+        return { id: p.id, question: p.question, type: p.type, unite: p.unite, resultat: p.resultat, participants: p.prono.length, monPari: mien ? { pseudo: mien.pseudo, valeur: mien.valeur } : null,
+          podium: p.resultat == null ? undefined : p.prono.map(function (x) { return { pseudo: x.pseudo, valeur: x.valeur, ecart: Math.abs(Number(x.valeur) - Number(p.resultat)) || 0 }; }).sort(function (a, b) { return a.ecart - b.ecart; }).slice(0, 3) }; }) });
+      case 'pronostic': var pa = trouver(J.paris, 'id', d.id), autre = pa.prono.filter(function (x) { return x.pseudo.toLowerCase() === d.donnees.pseudo.toLowerCase() && x.app !== d.donnees.appareil; })[0];
+        if (autre) return ko(new ErreurApi('pseudo_pris'));
+        pa.prono = pa.prono.filter(function (x) { return x.app !== d.donnees.appareil; }); pa.prono.push({ pseudo: d.donnees.pseudo, valeur: String(d.donnees.valeur), app: d.donnees.appareil }); return ok({ ok: true });
+      case 'pari_admin': if (!admin) return ko(new ErreurApi('non_autorise'));
+        if (!d.id) { J.paris.push({ id: 'X' + Math.random().toString(36).slice(2, 8), question: d.donnees.question, type: d.donnees.type, unite: d.donnees.unite, resultat: null, prono: [] }); return ok({ ok: true }); }
+        var pp = trouver(J.paris, 'id', d.id); if ('resultat' in d.donnees) pp.resultat = d.donnees.resultat || null; if (d.donnees.actif === false) J.paris = J.paris.filter(function (x) { return x !== pp; }); return ok({ ok: true });
+      case 'escape_valider': if (!ref) return ko(new ErreurApi('non_autorise')); var v = J.jeux.escape.reglages.valides;
+        if (d.valide === true) v[d.scenario] = { par: 'Démo', le: '2026-11-07' }; else if (d.valide === false) delete v[d.scenario]; return ok({ ok: true, valides: v });
+    }
+    ko(new ErreurApi('action_inconnue'));
   }
 
   /* Quiz du mode démonstration (en mémoire) */

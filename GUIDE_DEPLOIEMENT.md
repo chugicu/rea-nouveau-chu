@@ -287,6 +287,25 @@ Quiz > **Gérer les questions** > **+ Nouvelle question** : QCM (2 à 4 réponse
 
 ---
 
+## Partie L – Version 1.7 : jeux et souvenirs
+
+### L1. Mettre à jour le moteur
+Collez `Code.gs` et `appsscript.json` (version 1.7.0), **Installer / réparer la base**, puis **Nouvelle version** du déploiement.
+L'installation crée les onglets **Jeux**, **Souvenirs**, **Nuage**, **QR codes**, **Paris** (5 paris prêts), **Pronostics** et **Retours**. **Tous les jeux sont désactivés au départ.**
+
+### L2. Activer les jeux (administrateur)
+Appli > **Jeux** > **⚙ Activer et régler les jeux** : pour chaque jeu, case *Activé*, dates d'**ouverture** et de **fermeture** facultatives (fermeture : jusqu'au soir de la date), puis **Enregistrer**.
+- **Jauge du déménagement** (en haut de l'accueil) : objectif en points (4000 par défaut) et 5 paliers modifiables. Points : 1 par réponse au quiz, 1 par newsletter lue, 1 par mot du nuage ou pari, 2 par QR code trouvé, 3 par inscription à une visite ou ligne de bingo, 5 par souvenir publié ou mission d'escape game, 10 par carton plein. Aucun nom n'est enregistré : seulement un total.
+- **Souvenirs** (tuile de l'accueil) : photos et anecdotes du CHU actuel, signature facultative. Chaque envoi est **validé par un référent** (onglet *À valider*). Règles affichées avant l'envoi d'une photo : aucun patient, collègues d'accord. Mosaïque, cœurs anonymes, **diaporama** plein écran (idéal sur un écran en salle de pause).
+- **Concours photo** : rubrique séparée, photo obligatoire, validation par un référent, un cœur par photo et par téléphone. Les cœurs restent **cachés jusqu'à la date de fermeture**, puis le **podium** s'affiche.
+- **Le nuage** : 4 questions (modifiables : une par ligne), 3 mots maximum, filtre des grossièretés, mots identiques regroupés. Les référents retirent un mot en le touchant.
+- **QR codes cachés** : Jeux > QR codes > *+ Nouveau QR code* (lieu, message, emplacement touché sur le plan) > **Imprimer la planche (PDF)** : 6 QR codes par page avec leur code écrit en dessous. Scannés avec l'appareil photo, ils ouvrent l'appli et montrent le lieu sur le plan. Badges à 5, 10 et tous les QR codes.
+- **Escape game** : 4 missions rédigées par Claude (transfert du lit 309, incident pendant le trajet, première garde, alarme incendie). **Les référents jouent chaque mission puis la valident** (ou laissent une remarque, notée dans l'onglet *Retours*). Les agents ne voient que les missions validées.
+- **Bingo** : 20 cases par défaut (modifiables, 16 minimum) ; chaque téléphone tire une grille 4 × 4 dans un ordre différent. Les cases ✦ se cochent toutes seules (visite, quiz du jour, QR code, newsletter…).
+- **Paris** : sous un **pseudo** libre ; on peut modifier son pari jusqu'à la fermeture (par défaut la **veille du jour J**). L'administrateur ajoute des paris et saisit les **résultats** : le podium des pseudos les plus proches s'affiche.
+
+---
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

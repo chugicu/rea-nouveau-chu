@@ -238,7 +238,7 @@
     var session = A.stock.lire(A.CLE.session);
     A.afficher(h('div', { class: 'page page--large quiz' },
       h('header', { class: 'entete entete--module' },
-        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: retour || accueilQuiz, text: '‹' }),
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { (retour || accueilQuiz)(); }, text: '‹' }),
         h('h1', { class: 'entete__titre', text: titre }),
         h('span', { class: 'entete__role', text: sous || (session && session.role !== 'agent' ? 'Mode référent' : 'Quiz') })),
       contenu));
@@ -459,6 +459,7 @@
   }
   function finJeu(titre, erreurs, total, rejouer, cle) {
     var s = memoire(); if (cle) { if (s.jeux[cle] == null || erreurs < s.jeux[cle]) s.jeux[cle] = erreurs; sauver(s); }
+    if (cle === 'ultime' && window.ReaJeux) window.ReaJeux.point('ultime');
     envoyerCompteur();
     var badges = verifierBadges();
     page(titre, 'Jeu', h('div', { class: 'quiz-fin' },
