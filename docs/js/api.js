@@ -69,7 +69,14 @@
         }
         if (action === 'plan') {
           if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_invalide'));
-          return ok({ ok: true, donnees: planDemo(), reglages: { pieces: {}, categories: {}, points: { Qdemo0001: { type: 'chariot', x: 450, y: 290, precision: 'Adulte' }, Qdemo0002: { type: 'echographe', x: 250, y: 530, precision: '' }, Qdemo0003: { type: 'imprimante', x: 620, y: 530, precision: 'Couleur' } } }, peutModifier: d.jeton !== 'demo.agent' });
+          return ok({ ok: true, donnees: planDemo(), reglages: { pieces: {}, categories: {}, points: { Qdemo0001: { type: 'chariot', x: 450, y: 290, precision: 'Adulte' }, Qdemo0002: { type: 'echographe', x: 250, y: 530, precision: '' }, Qdemo0003: { type: 'imprimante', x: 620, y: 530, precision: 'Couleur' } } }, peutModifier: d.jeton !== 'demo.agent',
+            gps: (function () { try { return JSON.parse(localStorage.getItem('rea.demo.gps') || 'null'); } catch (e) { return null; } })(), admin: d.jeton === 'demo.admin' });
+        }
+        if (action === 'gps_calage') {
+          if (d.jeton !== 'demo.admin') return ko(new ErreurApi('non_autorise'));
+          var cal = { points: (d.calage && d.calage.points) || [], le: new Date().toISOString() };
+          try { localStorage.setItem('rea.demo.gps', JSON.stringify(cal)); } catch (e) { /* stockage bloqué */ }
+          return ok({ ok: true, calage: cal });
         }
         if (action === 'plan_piece' || action === 'plan_categorie' || action === 'plan_point') {
           return d.jeton === 'demo.agent' ? ko(new ErreurApi('non_autorise')) : ok({ ok: true });

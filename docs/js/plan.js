@@ -400,7 +400,7 @@
       Q.marques.forEach(function (m) {
         if (m.point) { var q = R.points[m.point]; if (q) el('circle', { cx: q.x, cy: q.y, r: 44, fill: 'none', stroke: m.couleur, 'stroke-width': 10 }, g); return; }
         var p = pieceEff(m.id); if (!p) return;
-        el('path', { d: p.d, fill: m.fond || 'none', 'fill-opacity': m.fond ? 0.35 : null, stroke: m.couleur, 'stroke-width': 12 }, g);
+        el('path', { d: p.d, fill: m.fond || 'none', 'fill-opacity': m.fond ? (m.opacite || 0.35) : null, stroke: m.couleur, 'stroke-width': m.epaisseur || 12 }, g);
       });
       Q.poses.forEach(function (e) {
         var taille = e.taille || 34, w = Math.max(60, e.texte.length * taille * 0.56 + 30);

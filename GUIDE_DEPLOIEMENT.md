@@ -316,6 +316,23 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 4. Les logos restent intacts, sur fond blanc, ≥ 50 px.
 5. Les téléphones récupèrent la nouvelle version à la réouverture suivante (cache `rea-app-v1.8.0`).
 
+## Partie N – Version 1.9 : rubrique Plan, GPS, Quiz et jeux
+
+**Moteur (une fois) :** remplacez `Code.gs` par la version 1.8.0, enregistrez, puis Déployer › Gérer les déploiements › modifier › Nouvelle version. Aucune nouvelle installation n'est nécessaire.
+
+**Nouveautés :**
+1. Accueil : le message d'accueil passe au-dessus du compte à rebours, et le quiz du jour s'y trouve directement. La tuile « Quiz » disparaît.
+2. Rubrique « Plan du service » : plan interactif, puis Placer le nom des unités, Colorier les unités, Colorier les chambres (nouveau), Niveau ultime.
+3. Rubrique « Quiz et jeux » : les thèmes du quiz (Plan et équipements, Urgences et sécurité, Couleurs des unités), les badges et le défi d'équipe, puis les jeux.
+4. GPS dans le plan interactif : bouton « 📍 Ma position ». À la première activation, un message prévient que la précision dépend du téléphone et du réseau. La position reste sur le téléphone.
+
+**Calage du GPS (administrateur, sur place, une seule fois) :**
+1. Plan du service › Plan interactif › « ⚙ Caler le GPS ».
+2. Les points sont proposés à l'avance et numérotés en orange sur le plan : les 4 chambres des extrémités (près de la fenêtre), les angles des patios, les escaliers et monte-malades.
+3. Allez sur un point, touchez « Je suis ici » et ne bougez plus pendant 15 s. Recommencez sur d'autres points.
+4. Visez au moins 8 points bien répartis, en commençant par les points 1 à 4. Le panneau affiche l'écart moyen ; refaites ou retirez un point dont l'écart est nettement plus grand que les autres.
+5. Touchez « Enregistrer pour tous ». Un « Point libre » permet aussi de toucher n'importe quel endroit du plan.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

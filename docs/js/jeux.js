@@ -153,22 +153,36 @@
     { id: 'bingo', ic: '🎱', nom: 'Bingo du déménagement', desc: 'Une grille à compléter avant le départ', ouvrir: function () { ecranBingo(); } },
     { id: 'paris', ic: '🎲', nom: 'Paris', desc: 'Cartons, premier et dernier patient…', ouvrir: function () { ecranParis(); } }
   ];
+  // Section « Quiz » de la rubrique : séries par thème et écran des badges
+  function sectionQuiz() {
+    if (!window.ReaQuiz) return null;
+    function t(cle, ic, nom, desc) { return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': ic, onclick: function () { window.ReaQuiz.theme(cle, hub); } }, h('b', { text: nom }), h('span', { text: desc })); }
+    return h('section', { class: 'section' },
+      h('div', { class: 'section__tete' }, h('h2', { text: 'Quiz' }), h('span', { class: 'section__note', text: 'Les questions ratées reviennent plus souvent' })),
+      h('div', { class: 'quiz-themes' },
+        t('plan', '🧭', 'Plan et équipements', 'Où se trouve… ? Sur le plan ou en QCM'),
+        t('urgences', '🚨', 'Urgences et sécurité', 'Chariots d\'urgence, sécurité, réflexes'),
+        t('couleurs', '🎨', 'Couleurs des unités', 'Reconnaître chaque unité à sa couleur'),
+        h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏅', onclick: function () { window.ReaQuiz.ouvrir(hub); } }, h('b', { text: 'Badges et défi d\'équipe' }), h('span', { text: 'Vos badges du quiz, le compteur de l\'équipe' }))));
+  }
   function hub() {
     init();
     var s = session(); if (!s) return A.ecranConnexion();
     A.definirEcran(null);
-    page('Jeux', 'Pour tous', attente(), function () { A.ecranAccueil(); });
+    page('Quiz et jeux', 'Pour tous', h('div', null, sectionQuiz(), attente()), function () { A.ecranAccueil(); });
     chargerEtat().then(function (e) {
       var actifs = JEUX_HUB.filter(function (j) { var x = e.jeux[j.id]; return x && (x.actif || (j.id === 'paris' && x.termine) || (j.id === 'concours' && x.termine) || (j.id === 'escape' && e.referent && x.actifBrut)); });
-      page('Jeux', e.admin ? 'Administrateur' : 'Pour tous', h('div', null,
+      page('Quiz et jeux', e.admin ? 'Administrateur' : 'Pour tous', h('div', null,
         e.elan ? sectionJauge(e.elan) : null,
+        sectionQuiz(),
+        h('div', { class: 'section__tete' }, h('h2', { text: 'Jeux' })),
         actifs.length ? h('div', { class: 'quiz-themes' }, actifs.map(function (j) {
           var x = e.jeux[j.id];
           return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': j.ic, onclick: j.ouvrir }, h('b', { text: j.nom }),
             h('span', { text: x.actif ? j.desc + (x.fermeture ? ' · jusqu\'au ' + dateFr(x.fermeture) : '') : (x.termine ? 'Terminé : voir les résultats' : 'Réservé aux référents (validation)') }));
         })) : h('p', { class: 'vide', text: 'Aucun jeu ouvert pour le moment. Revenez bientôt !' }),
         e.admin ? h('button', { class: 'bouton bouton--discret jeux__reglages', type: 'button', onclick: function () { reglages(); }, text: '⚙ Activer et régler les jeux' }) : null), function () { A.ecranAccueil(); });
-    }).catch(function (e) { if (!erreurSession(e)) page('Jeux', '', messageErreur(e, hub), function () { A.ecranAccueil(); }); });
+    }).catch(function (e) { if (!erreurSession(e)) page('Quiz et jeux', '', h('div', null, sectionQuiz(), messageErreur(e, hub)), function () { A.ecranAccueil(); }); });
   }
 
   /* ---------- Photos : compression sur le téléphone ---------- */

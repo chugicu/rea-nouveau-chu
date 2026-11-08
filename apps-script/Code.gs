@@ -24,7 +24,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.7.0',
+  version: '1.8.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -109,6 +109,7 @@ function doPost(e) {
       quiz_question: function () { return quizQuestion_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       quiz_statut: function () { return quizStatut_(exigerReferent_(verifierJeton_(req.jeton)), req.ids, req.statut); },
       quiz_compteur: function () { verifierJeton_(req.jeton); return quizAjouterTotal_(req.n); },
+      gps_calage: function () { return gpsCalage_(exigerAdmin_(verifierJeton_(req.jeton)), req.calage); },
       plan_point: function () { return planPoint_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); },
       visites: function () { return visites_(verifierJeton_(req.jeton)); },
@@ -265,7 +266,27 @@ function calculerJauge_(ss) {
 // ============================================================================
 /** Géométrie (fichier JSON du Drive, jamais publié sur GitHub) + réglages des référents. */
 function plan_(session) {
-  return { ok: true, donnees: geometriePlan_(), reglages: reglagesPlan_(), peutModifier: session.r !== 'agent' };
+  return { ok: true, donnees: geometriePlan_(), reglages: reglagesPlan_(), peutModifier: session.r !== 'agent', gps: lireGpsCalage_(), admin: session.r === 'admin' };
+}
+
+/* ---------- GPS : calage du plan (admin), partagé avec tous ----------
+   Le calage relie des points GPS du bâtiment à des points du plan : ce n'est pas une donnée personnelle.
+   La position de chaque utilisateur est calculée sur son téléphone et n'est jamais envoyée. */
+function lireGpsCalage_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('gps_calage') || 'null'); } catch (e) { return null; }
+}
+function gpsCalage_(session, c) {
+  if (!c || !Array.isArray(c.points) || c.points.length > 40) throw erreurApp_('requete_invalide');
+  var points = c.points.map(function (p) {
+    var g = p && p.geo, q = p && p.plan;
+    if (!Array.isArray(g) || !Array.isArray(q) || g.length !== 2 || q.length !== 2) throw erreurApp_('requete_invalide');
+    var v = g.concat(q).map(Number);
+    if (!v.every(isFinite) || Math.abs(v[0]) > 90 || Math.abs(v[1]) > 180) throw erreurApp_('requete_invalide');
+    return { geo: [Math.round(v[0] * 1e7) / 1e7, Math.round(v[1] * 1e7) / 1e7], plan: [Math.round(v[2]), Math.round(v[3])], acc: Math.max(0, Math.min(999, Math.round(Number(p.acc) || 0))), nom: nettoyerTexte_(p.nom, 60) };
+  });
+  var val = { points: points, le: new Date().toISOString() };
+  PropertiesService.getScriptProperties().setProperty('gps_calage', JSON.stringify(val));
+  return { ok: true, calage: val };
 }
 
 function geometriePlan_() {

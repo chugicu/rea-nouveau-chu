@@ -234,27 +234,70 @@
   }
 
   /* ---------- Écrans ---------- */
+  /* Retours : la page d'où l'on vient (accueil, rubrique Plan, Quiz et jeux) ; null = écran « Quiz » */
+  var RETOUR = null, HAUT = null;
+  function retourBase(flash) { if (RETOUR) RETOUR(flash); else accueilQuiz(flash); }
   function page(titre, sous, contenu, retour) {
     var session = A.stock.lire(A.CLE.session);
     A.afficher(h('div', { class: 'page page--large quiz' },
       h('header', { class: 'entete entete--module' },
-        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { (retour || accueilQuiz)(); }, text: '‹' }),
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { (retour || retourBase)(); }, text: '‹' }),
         h('h1', { class: 'entete__titre', text: titre }),
         h('span', { class: 'entete__role', text: sous || (session && session.role !== 'agent' ? 'Mode référent' : 'Quiz') })),
       contenu));
     window.scrollTo(0, 0);
   }
-  function ouvrir() {
+  function pret(titre, retour, suite) { // charge les questions et le plan si besoin, puis lance « suite »
     A = window.ReaApp; h = A.h;
     var session = A.stock.lire(A.CLE.session);
     if (!session) return A.ecranConnexion();
-    page('Quiz', null, h('div', null, h('div', { class: 'squelette', style: 'height:160px' }), h('div', { class: 'squelette', style: 'height:220px;margin-top:12px' })), A.ecranAccueil);
     A.definirEcran(null);
-    charger(session).then(function () { accueilQuiz(); }).catch(function (e) {
+    if (CTX && CTX.session && CTX.session.jeton === session.jeton) return suite();
+    page(titre, null, h('div', null, h('div', { class: 'squelette', style: 'height:160px' }), h('div', { class: 'squelette', style: 'height:220px;margin-top:12px' })), retour);
+    charger(session).then(suite).catch(function (e) {
       if (A.ERREURS_SESSION.indexOf(e.code) >= 0) { A.stock.effacer(A.CLE.session); return A.ecranConnexion(A.message(e.code)); }
-      page('Quiz', null, h('div', null, h('p', { class: 'vide', text: e.code === 'reseau' ? 'Le quiz a besoin du plan : ouvrez-le une première fois avec du réseau.' : A.message(e.code) }),
-        h('button', { class: 'bouton', type: 'button', onclick: ouvrir, text: 'Réessayer' })), A.ecranAccueil);
+      page(titre, null, h('div', null, h('p', { class: 'vide', text: e.code === 'reseau' ? 'Il faut le plan : ouvrez-le une première fois avec du réseau.' : A.message(e.code) }),
+        h('button', { class: 'bouton', type: 'button', onclick: function () { pret(titre, retour, suite); }, text: 'Réessayer' })), retour);
     });
+  }
+  // Écran « Quiz » (badges, défi d'équipe, questions des référents), ouvert depuis « Quiz et jeux »
+  function ouvrir(depuis) { HAUT = depuis || HAUT || window.ReaApp.ecranAccueil; RETOUR = null; pret('Quiz', HAUT, function () { accueilQuiz(); }); }
+  // Une série d'un thème, directement
+  var THEMES = {
+    plan: { nom: 'Plan et équipements', filtre: function (q) { return q.theme === 'plan' && !q.sous; } },
+    urgences: { nom: 'Urgences et sécurité', filtre: function (q) { return q.theme === 'urgences'; } },
+    couleurs: { nom: 'Couleurs des unités', filtre: function (q) { return q.sous === 'couleurs'; } }
+  };
+  function theme(cle, depuis) {
+    var t = THEMES[cle]; RETOUR = depuis || null;
+    pret(t.nom, depuis, function () {
+      var l = tirer(t.filtre, TAILLE_SERIE);
+      if (!l.length) return retourBase('Pas encore de questions pour ce thème.');
+      serie(l, { titre: t.nom, filtre: t.filtre });
+    });
+  }
+  // Quiz du jour, lancé depuis l'accueil
+  function jour() {
+    RETOUR = function () { window.ReaApp.ecranAccueil(); };
+    pret('Quiz du jour', RETOUR, function () {
+      var qj = quizDuJour();
+      if (!qj.questions.length) return page('Quiz du jour', null, h('p', { class: 'vide', text: 'Pas encore de questions : le plan doit contenir des pièces nommées.' }));
+      serie(qj.questions, { jour: true, titre: 'Quiz du jour' });
+    });
+  }
+  // Jeux du plan, lancés depuis la rubrique Plan
+  var JEUX = { etiquettes: ['Placer le nom des unités', function () { return jeuEtiquettes; }], couleurs: ['Colorier les unités', function () { return jeuCouleurs; }],
+    chambres: ['Colorier les chambres', function () { return jeuChambres; }], ultime: ['Niveau ultime', function () { return jeuUltime; }] };
+  function jeu(nom, depuis) { RETOUR = depuis || null; pret(JEUX[nom][0], depuis, function () { JEUX[nom][1]()(); }); }
+  function records() { A = window.ReaApp; h = A.h; return memoire().jeux || {}; }
+  // Carte de l'accueil (sans réseau ni plan : seulement ce qui est noté sur le téléphone)
+  function carteAccueil() {
+    A = window.ReaApp; h = A.h;
+    var s = memoire(), fait = !!(s.jours && s.jours[A.aujourdhui()]);
+    return h('section', { class: 'section quiz-jour quiz-jour--accueil' + (fait ? ' quiz-jour--fait' : '') },
+      h('div', { class: 'section__tete' }, h('h2', { text: '🎯 Quiz du jour' }), h('span', { class: 'section__note', text: fait ? 'Fait ✓' : '3 questions · 2 min' })),
+      h('p', { class: 'section__note', text: fait ? 'Bravo ! Revenez demain pour une nouvelle série.' : 'Une nouvelle série chaque jour jusqu\'au déménagement.' }),
+      h('button', { class: fait ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: jour, text: fait ? 'Refaire la série du jour' : 'Commencer' }));
   }
   function sectionCompteur() {
     if (CTX.total == null) return h('div', { 'data-compteur': '1' });
@@ -267,7 +310,7 @@
   }
   function accueilQuiz(flash) {
     if (!CTX) return ouvrir();
-    A.definirEcran(null);
+    A.definirEcran(null); RETOUR = null;
     var s = memoire(), qj = quizDuJour(), p = progression(s), obtenus = A.stock.lire(A.CLE.badges) || {};
     var nb = function (f) { return CTX.pool.filter(f).length; };
     var nUrg = nb(function (q) { return q.theme === 'urgences'; }), nPlan = nb(function (q) { return q.theme === 'plan' && !q.sous; }), nCoul = nb(function (q) { return q.sous === 'couleurs'; });
@@ -287,13 +330,6 @@
           boutonTheme('Urgences et sécurité', nUrg, '🚨', function (q) { return q.theme === 'urgences'; }),
           boutonTheme('Couleurs des unités', nCoul, '🎨', function (q) { return q.sous === 'couleurs'; }))),
       h('section', { class: 'section' },
-        h('div', { class: 'section__tete' }, h('h2', { text: 'Jeux du plan' })),
-        h('div', { class: 'quiz-themes' },
-          h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏷️', onclick: jeuEtiquettes }, h('b', { text: 'Placer les étiquettes' }), h('span', { text: 'Glisser le nom de chaque unité au bon endroit' })),
-          h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🖍️', onclick: jeuCouleurs }, h('b', { text: 'Colorier les unités' }), h('span', { text: 'Glisser chaque couleur sur la bonne étiquette' })),
-          h('button', { type: 'button', class: 'quiz-theme quiz-theme--ultime', 'data-ic': '🏆', onclick: jeuUltime }, h('b', { text: 'Niveau ultime' }),
-            h('span', { text: 'Replacer toutes les pièces, zone par zone' + (s.jeux.ultime != null ? ' · record : ' + s.jeux.ultime + ' erreur' + (s.jeux.ultime > 1 ? 's' : '') : '') })))),
-      h('section', { class: 'section' },
         h('div', { class: 'section__tete' }, h('h2', { text: 'Badges du quiz' }), h('span', { class: 'section__note', text: 'Sur ce téléphone uniquement' })),
         h('ul', { class: 'quiz-badges' }, BADGES_QUIZ.map(function (b) {
           var x = p[b.id], ok = !!obtenus[b.id];
@@ -305,7 +341,7 @@
       CTX.peutGerer ? h('section', { class: 'section' },
         h('div', { class: 'section__tete' }, h('h2', { text: 'Questions rédigées' }), h('span', { class: 'section__note', text: 'Référents' })),
         h('p', { class: 'section__note', text: ecr.length + ' question(s)' + (aRev ? ' · ' + aRev + ' à revérifier' : '') + (brouillons ? ' · ' + brouillons + ' brouillon(s) à relire' : '') }),
-        h('button', { class: 'bouton', type: 'button', onclick: function () { gestion(); }, text: 'Gérer les questions' })) : null), A.ecranAccueil);
+        h('button', { class: 'bouton', type: 'button', onclick: function () { gestion(); }, text: 'Gérer les questions' })) : null), function () { (HAUT || A.ecranAccueil)(); });
   }
   function boutonTheme(nom, n, ic, filtre) {
     return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': ic, disabled: !n, onclick: function () { serie(tirer(filtre, TAILLE_SERIE), { titre: nom, filtre: filtre }); } },
@@ -330,7 +366,7 @@
         (bonnes === questions.length && window.ReaFun ? (setTimeout(function () { window.ReaFun.succes(); }, 200), null) : null),
         h('div', { class: 'quiz-actions' },
           o.filtre ? h('button', { class: 'bouton', type: 'button', onclick: function () { serie(tirer(o.filtre, TAILLE_SERIE), o); }, text: 'Continuer l\'entraînement' }) : null,
-          h('button', { class: o.filtre ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: function () { accueilQuiz(); }, text: 'Retour au quiz' }))));
+          h('button', { class: o.filtre ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: function () { retourBase(); }, text: 'Retour' }))));
     }
     suivante();
   }
@@ -372,7 +408,7 @@
       zonePlan.hidden = false;
     }
     corps.appendChild(zonePlan); corps.appendChild(retour);
-    page(o.titre, null, corps, function () { accueilQuiz(); });
+    page(o.titre, null, corps, function () { retourBase(); });
     if (q.type === 'plan') {
       var accepte = q.accepte || [], accepteP = q.acceptePoints || [];
       plan = monterPlan(zonePlan, Object.assign({}, q.vue, { surToucher: function (c) {
@@ -399,10 +435,11 @@
     var choisi = null, erreurs = 0, restants = o.jetons.slice(), zonePlan = h('div', { class: 'quiz-plan quiz-plan--jeu' });
     var bac = h('div', { class: 'quiz-bac', role: 'list' }), info = h('p', { class: 'quiz-consigne', 'aria-live': 'polite', text: o.consigne });
     var compte = h('span', { class: 'etiquette' });
-    function majCompte() { compte.textContent = (o.jetons.length - restants.length) + ' / ' + o.jetons.length + (erreurs ? ' · ' + erreurs + ' erreur' + (erreurs > 1 ? 's' : '') : ''); }
+    // o.reutilisable : les jetons restent dans le bac (couleurs) ; o.compte() → [faits, total] ; o.termine() → fin de partie
+    function majCompte() { var c = o.compte ? o.compte() : [o.jetons.length - restants.length, o.jetons.length]; compte.textContent = c[0] + ' / ' + c[1] + (erreurs ? ' · ' + erreurs + ' erreur' + (erreurs > 1 ? 's' : '') : ''); }
     page(o.titre, o.sousTitre || 'Jeu', h('div', { class: 'quiz-jeu' },
       h('div', { class: 'quiz-progression' }, h('span', { text: o.etape || '' }), compte), info, zonePlan, bac,
-      h('p', { class: 'section__note', text: 'Glissez une étiquette sur le plan, ou touchez-la puis touchez le bon endroit.' })), function () { accueilQuiz(); });
+      h('p', { class: 'section__note', text: o.aide || 'Glissez une étiquette sur le plan, ou touchez-la puis touchez le bon endroit.' })), function () { retourBase(); });
     var plan = monterPlan(zonePlan, Object.assign({}, o.vue, { surToucher: function (c) { if (choisi) deposer(choisi, c); } }));
     // marge à droite : les boutons du plan (zoom, plein écran) ne doivent cacher aucune pièce
     if (o.cadre) { var cad = o.cadre.slice(); cad[2] += (cad[2] - cad[0]) * 0.24; cad[0] -= (cad[2] - cad[0]) * 0.02; plan.voir(cad, 1.05); }
@@ -434,21 +471,22 @@
     function deposer(j, c) {
       if (!c || c.type === 'dehors') { info.textContent = 'Lâchez l\'étiquette sur le plan.'; return; }
       var r = o.verifier(j, c);
-      if (r === null) { // lâchée dans un couloir ou un espace vide : pas d'erreur comptée
-        info.textContent = o.indice || 'Rapprochez-la un peu plus de son emplacement.'; if (window.ReaFun) window.ReaFun.vibrer(15);
+      if (r === null || (r && r.indice)) { // lâchée dans un couloir ou un espace vide : pas d'erreur comptée ({ indice } : message propre au jeu)
+        info.textContent = r ? r.indice : (o.indice || 'Rapprochez-la un peu plus de son emplacement.'); if (window.ReaFun) window.ReaFun.vibrer(15);
         if (choisi !== j) { choisi = j; dessinerBac(); }
         return;
       }
       if (r) {
-        restants = restants.filter(function (x) { return x !== j; }); choisi = null;
-        o.surReussite(j, c, r, plan); info.textContent = restants.length ? 'Bien joué !' : ''; if (window.ReaFun) window.ReaFun.reponse(true);
+        if (!o.reutilisable) { restants = restants.filter(function (x) { return x !== j; }); choisi = null; }
+        o.surReussite(j, c, r, plan); var fini = o.termine ? o.termine() : !restants.length;
+        info.textContent = fini ? '' : (o.reutilisable && choisi ? 'Bien joué ! Touchez la chambre suivante, ou changez de couleur.' : 'Bien joué !'); if (window.ReaFun) window.ReaFun.reponse(true);
         var s = memoire(); s.attente++; s.okTotal++; s.okPlan++; sauver(s); verifierBadges();
       } else {
         erreurs++; info.textContent = 'Ce n\'est pas le bon endroit, essayez encore.'; if (window.ReaFun) window.ReaFun.reponse(false);
         var s2 = memoire(); s2.attente++; sauver(s2);
       }
       majCompte(); dessinerBac();
-      if (!restants.length) setTimeout(function () { o.fin(erreurs, plan); }, 500);
+      if (o.termine ? o.termine() : !restants.length) setTimeout(function () { o.fin(erreurs, plan); }, 500);
     }
     majCompte(); dessinerBac();
     return plan;
@@ -493,23 +531,23 @@
     (CTX.source.donnees.titres || []).forEach(function (t) { l.push([t.x - 150, t.y - 60, t.x + 150, t.y + 60]); });
     return bboxDe(l);
   }
-  function finJeu(titre, erreurs, total, rejouer, cle) {
+  function finJeu(titre, erreurs, total, rejouer, cle, quoi) {
     var s = memoire(); if (cle) { if (s.jeux[cle] == null || erreurs < s.jeux[cle]) s.jeux[cle] = erreurs; sauver(s); }
     if (cle === 'ultime' && window.ReaJeux) window.ReaJeux.point('ultime');
     envoyerCompteur();
     var badges = verifierBadges(); if (window.ReaFun) setTimeout(function () { window.ReaFun.succes(!erreurs); }, 200);
     page(titre, 'Jeu', h('div', { class: 'quiz-fin' },
-      h('p', { class: 'quiz-fin__score' }, h('b', { text: erreurs ? erreurs + ' erreur' + (erreurs > 1 ? 's' : '') : 'Sans faute !' }), ' · ' + total + ' étiquettes placées'),
+      h('p', { class: 'quiz-fin__score' }, h('b', { text: erreurs ? erreurs + ' erreur' + (erreurs > 1 ? 's' : '') : 'Sans faute !' }), ' · ' + total + ' ' + (quoi || 'étiquettes placées')),
       cle && s.jeux[cle] != null ? h('p', { class: 'section__note', text: 'Votre record : ' + s.jeux[cle] + ' erreur' + (s.jeux[cle] > 1 ? 's' : '') + '.' }) : null,
       badges.length ? h('p', { class: 'flash', text: 'Nouveau badge : ' + badges.join(', ') + ' !' }) : null,
       h('div', { class: 'quiz-actions' },
         h('button', { class: 'bouton', type: 'button', onclick: rejouer, text: 'Rejouer' }),
-        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { accueilQuiz(); }, text: 'Retour au quiz' }))));
+        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { retourBase(); }, text: 'Retour' }))));
   }
   // Étiquettes des unités : couleurs des chambres conservées, étiquettes grises à replacer
   function jeuEtiquettes() {
     var U = unitesDuPlan(), poses = [];
-    if (U.length < 2) return accueilQuiz('Pas assez d\'unités sur le plan pour ce jeu.');
+    if (U.length < 2) return retourBase('Pas assez d\'unités sur le plan pour ce jeu.');
     plateau({ titre: 'Placer les étiquettes', cadre: cadreUnites(), consigne: 'Glissez chaque nom d\'unité sur ses chambres (zoom possible à deux doigts).',
       vue: { textes: 'chambres', titres: 'masques', neutre: true, points: false, poses: poses },
       jetons: melanger(U.map(function (u) { return { id: u.id, texte: u.nom, u: u }; })),
@@ -521,7 +559,7 @@
   // Couleurs : chambres et étiquettes grises, ronds de couleur à glisser sur les étiquettes
   function jeuCouleurs() {
     var U = unitesDuPlan().filter(function (u) { return (CTX.source.donnees.titres || []).some(function (t) { return t.unite === u.id; }); }), faits = {};
-    if (U.length < 2) return accueilQuiz('Pas assez d\'unités sur le plan pour ce jeu.');
+    if (U.length < 2) return retourBase('Pas assez d\'unités sur le plan pour ce jeu.');
     plateau({ titre: 'Colorier les unités', cadre: cadreUnites(), consigne: 'Glissez chaque couleur sur l\'étiquette grise de son unité.',
       vue: { textes: 'chambres', titres: 'gris', grisChambres: true, neutre: true, points: false, couleursTitres: faits },
       jetons: melanger(U.map(function (u, i) { return { id: u.id, couleur: u.couleur, aria: 'Couleur ' + (i + 1) }; })),
@@ -529,6 +567,31 @@
       verifier: function (j, c) { if (c.type === 'titre') return c.unite === j.id; return jugerUnite(j.id, U, c); },
       surReussite: function (j, c, r, plan) { faits[j.id] = true; plan.quiz({ couleursTitres: faits }); },
       fin: function (err) { finJeu('Colorier les unités', err, U.length, jeuCouleurs, 'couleurs'); } });
+  }
+  // Chambres : toutes les chambres grises (numéros visibles), chaque chambre à colorier avec la couleur de son unité
+  function jeuChambres() {
+    var U = unitesDuPlan(), parId = {}, colorees = {}, marques = [];
+    var ch = CTX.source.pieces().filter(function (p) { return p.type === 'chambre' && p.unite && U.some(function (u) { return u.id === p.unite; }); });
+    if (U.length < 2 || ch.length < 2) return retourBase('Pas assez de chambres sur le plan pour ce jeu.');
+    ch.forEach(function (p) { parId[p.id] = p; });
+    var coul = {}; U.forEach(function (u) { coul[u.id] = u.couleur; });
+    plateau({ titre: 'Colorier les chambres', cadre: cadreUnites(), reutilisable: true,
+      consigne: 'Coloriez chaque chambre avec la couleur de son unité.',
+      aide: 'Touchez une couleur puis les chambres une à une (la couleur reste choisie), ou glissez-la sur chaque chambre. Zoom possible à deux doigts.',
+      vue: { textes: 'chambres', titres: 'masques', grisChambres: true, neutre: true, points: false, marques: marques },
+      jetons: melanger(U.map(function (u, i) { return { id: u.id, couleur: u.couleur, aria: 'Couleur ' + (i + 1) }; })),
+      compte: function () { return [Object.keys(colorees).length, ch.length]; },
+      termine: function () { return Object.keys(colorees).length >= ch.length; },
+      verifier: function (j, c) {
+        if (!c.xy) return null;
+        // la chambre visée : celle sous le doigt, sinon la chambre la plus proche (à moins de PRES px)
+        var cible = c.type === 'piece' && parId[c.id] ? parId[c.id] : null;
+        if (!cible) { var dmin = Infinity; ch.forEach(function (p) { var d = distRect(c.xy, p.bbox); if (d < dmin) { dmin = d; cible = p; } }); if (dmin / (c.k || 1) > PRES) return { indice: 'Touchez une chambre (zoom possible à deux doigts).' }; }
+        if (colorees[cible.id]) return { indice: 'La chambre ' + (cible.chambre || '') + ' est déjà coloriée.' };
+        return cible.unite === j.id ? cible.id : false;
+      },
+      surReussite: function (j, c, id, plan) { colorees[id] = 1; marques.push({ id: id, couleur: coul[parId[id].unite], fond: coul[parId[id].unite], opacite: 0.75, epaisseur: 5 }); plan.quiz({ marques: marques }); },
+      fin: function (err) { finJeu('Colorier les chambres', err, ch.length, jeuChambres, 'chambres', 'chambres coloriées'); } });
   }
   // Niveau ultime : contours seuls, toutes les pièces à replacer, zone par zone
   function zonesUltime() {
@@ -564,7 +627,7 @@
   function jeuUltime() {
     var zones = zonesUltime(), total = 0, erreursTot = 0, z = 0, places = {}, poses = [], marques = [];
     zones.forEach(function (g) { total += g.length; });
-    if (!total) return accueilQuiz('Le plan ne contient pas encore de pièces nommées.');
+    if (!total) return retourBase('Le plan ne contient pas encore de pièces nommées.');
     function libelle(p) { return p.type === 'chambre' ? p.chambre : p.nom; }
     function manche() {
       var g = zones[z], zoneIds = {}; g.forEach(function (p) { zoneIds[p.id] = 1; });
@@ -600,7 +663,7 @@
               h('p', { text: (total - zones.slice(z).reduce(function (s, x) { return s + x.length; }, 0)) + ' pièces placées sur ' + total + '.' }),
               h('div', { class: 'quiz-actions' },
                 h('button', { class: 'bouton', type: 'button', onclick: manche, text: 'Zone suivante' }),
-                h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { accueilQuiz(); }, text: 'Arrêter' }))), function () { accueilQuiz(); });
+                h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { retourBase(); }, text: 'Arrêter' }))), function () { retourBase(); });
           } else finJeu('Niveau ultime', erreursTot, total, jeuUltime, 'ultime');
         } });
     }
@@ -747,5 +810,5 @@
     dessinerTypes(); dessinerZone();
   }
 
-  window.ReaQuiz = { ouvrir: ouvrir, _etat: function () { return CTX; } };
+  window.ReaQuiz = { ouvrir: ouvrir, theme: theme, jour: jour, jeu: jeu, records: records, carteAccueil: carteAccueil, _etat: function () { return CTX; } };
 })();

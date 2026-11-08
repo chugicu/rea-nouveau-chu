@@ -50,7 +50,7 @@ body { background: linear-gradient(180deg, var(--ciel-1) 0, var(--ciel-2) 420px,
 /* Cartes blanches en relief : on y rétablit les couleurs de texte habituelles */
 .quiz-jour, .quiz-carte, .carte-visite, .carte-nl, .form-carte, .quiz-question, .quiz-fin, .decouverte, .nl-admin, .detail__carte,
 .actu, .message-accueil, details.detail-jauge, .quiz-badge, .connexion__carte, .export, .nuage, .qr-trouve, .bingo__case, .tuile,
-.escape__recit, .escape__item, .escape__ligne, .plan__cadre, .plan__fiche, .reglage, .quiz-liste > li, .liste-simple, .pari__resultat, .quiz-retour:not(:empty), .nl-page {
+.escape__recit, .escape__item, .escape__ligne, .gps-avert, .gps-calage, .plan__cadre, .plan__fiche, .reglage, .quiz-liste > li, .liste-simple, .pari__resultat, .quiz-retour:not(:empty), .nl-page {
   --titre-local: var(--titre); --doux-local: var(--texte-doux);
   color: var(--texte); background: var(--surface); border-radius: var(--r-carte); box-shadow: var(--clay); border: 0;
 }
@@ -243,3 +243,36 @@ details.detail-jauge summary::after { color: #1f6fa8; }
 .quiz-fantome::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 9px solid transparent; border-top: 10px solid #ff3b6b; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
 .quiz-fantome::before { content: ""; position: absolute; left: 50%; top: calc(100% + 6px); width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ff3b6b; box-shadow: 0 0 0 3px #fff; }
 .quiz-fantome.quiz-jeton--couleur::after { border-top-color: #fff; }
+
+/* ---------- v1.9 : plan avec GPS, quiz du jour sur l'accueil ---------- */
+.quiz-jour--accueil { margin-top: 18px; }
+.quiz-jour--accueil h2 { font-family: var(--condense); font-size: 1.45rem; }
+.zone-gps { margin-top: 10px; }
+.gps { display: grid; gap: 10px; }
+.gps-boutons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gps-boutons .bouton { min-height: 40px; padding: 8px 14px; }
+.gps-calque { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.gps-pastille { font-size: .85rem; font-weight: 700; padding: 5px 11px; border-radius: 999px; background: var(--verre); color: var(--sur-ciel); }
+.gps-pastille--bon { background: #dff3e6; color: #046a2c; }
+.gps-pastille--moyen { background: #fff1d6; color: #7a4a00; }
+.gps-pastille--mauvais { background: #fde3e1; color: #a1261f; }
+.gps-avert, .gps-calage { padding: 16px; display: grid; gap: 8px; }
+.gps-avert { border: 3px solid var(--soleil); }
+.gps-avert p, .gps-calage p { margin: 0; }
+.gps-note { margin: 0; color: var(--sur-ciel-doux); font-size: .9rem; }
+.gps-calage h3 { margin: 0; color: var(--titre); font-family: var(--condense); font-size: 1.3rem; }
+.gps-consigne { background: #223b80; color: #fff !important; border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+.gps-qualite { font-weight: 700; color: var(--titre); }
+.gps-liste { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+.gps-liste li { display: grid; gap: 4px; }
+.gps-liste__nom { font-weight: 700; color: var(--titre); }
+.gps-liste__etat { font-size: .88rem; color: var(--texte-doux); }
+.gps-liste__ok .gps-liste__etat { color: #048e39; font-weight: 700; }
+.gps-liste .bouton { min-height: 34px; padding: 4px 14px; font-size: .9rem; width: auto; flex: 0 0 auto; }
+.gps-liste .gps-boutons { margin-top: 2px; }
+.gps-avert .gps-boutons .bouton { width: auto; }
+.quiz-theme--plan { grid-column: 1 / -1; --t: 0deg !important; background: linear-gradient(135deg, #8e44c4, #5c2e9e) !important; color: #fff !important; }
+.quiz-theme--plan span { color: rgba(255, 255, 255, .85) !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gps-pastille--bon, :root:not([data-theme="light"]) .gps-pastille--moyen, :root:not([data-theme="light"]) .gps-pastille--mauvais { filter: brightness(.9); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gps-liste__ok .gps-liste__etat { color: #5fe39a; } }
+:root[data-theme="dark"] .gps-liste__ok .gps-liste__etat { color: #5fe39a; }

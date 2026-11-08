@@ -62,12 +62,11 @@
 
   var MODULES = [
     // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
-    { id: 'plan', c: '#8e44c4', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
+    { id: 'plan', c: '#8e44c4', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
     { id: 'visites', c: '#13a3a0', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'newsletter', c: '#223b80', e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
     { id: 'souvenirs', c: '#f5508f', e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
-    { id: 'jeux', c: '#ff7a59', e: '🎮', t: 2, nom: 'Jeux', desc: 'Concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
-    { id: 'quiz', c: '#ffb700', e: '🎯', t: -2, sombre: true, nom: 'Quiz', desc: 'Quiz du jour, entraînement et jeux sur le plan', etape: 4, ouvrir: function () { window.ReaQuiz.ouvrir(); } },
+    { id: 'jeux', c: '#ff7a59', e: '🎮', t: 2, nom: 'Quiz et jeux', desc: 'Quiz, concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
     { id: 'simulations', c: '#048e39', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', c: '#5c2e9e', e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
     { id: 'pret', c: '#1f6fa8', e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
@@ -267,9 +266,10 @@
         h('span', { class: 'entete__droite' },
           window.ReaFun && window.ReaFun.serie() ? h('span', { class: 'serie', title: 'Jours d\'affilée avec le quiz du jour', text: '🔥 ' + window.ReaFun.serie() }) : null,
           h('span', { class: 'entete__role', text: libelleRole }))),
+      d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
       horizon(d),
       d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
-      d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
+      window.ReaQuiz ? window.ReaQuiz.carteAccueil() : null,
       sectionModules(role, d),
       sectionJauge(d.jauge),
       sectionBadges(),
@@ -608,17 +608,45 @@
     if (!window.caches || !stock.lire(CLE.session)) return; // jamais après une déconnexion
     caches.open(CACHE_DONNEES).then(function (c) { return c.put('plan', new Response(JSON.stringify(d), { headers: { 'Content-Type': 'application/json' } })); }).catch(function () {});
   }
-  function ecranPlan() {
-    ecranCourant = ecranPlan;
+  /* ---------- Rubrique Plan : plan interactif (avec GPS) et jeux pour apprendre le service ---------- */
+  function ecranPlanHub(flash) {
+    ecranCourant = ecranPlanHub;
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
-    var zone = h('div', { class: 'zone-plan' }, h('div', { class: 'squelette', style: 'height:60vh' }));
+    var rec = window.ReaQuiz ? window.ReaQuiz.records() : {};
+    function record(cle) { return rec[cle] != null ? ' · record : ' + rec[cle] + ' erreur' + (rec[cle] > 1 ? 's' : '') : ''; }
+    function jeu(cle) { return function () { window.ReaQuiz.jeu(cle, ecranPlanHub); }; }
+    var tuiles = [
+      { ic: '🗺️', nom: 'Plan interactif', desc: 'Toutes les pièces, les équipements et votre position GPS', ouvrir: ecranPlan, classe: 'quiz-theme--plan' },
+      { ic: '🏷️', nom: 'Placer le nom des unités', desc: 'Glisser chaque nom d\'unité au bon endroit' + record('etiquettes'), ouvrir: jeu('etiquettes') },
+      { ic: '🖍️', nom: 'Colorier les unités', desc: 'Glisser chaque couleur sur la bonne étiquette' + record('couleurs'), ouvrir: jeu('couleurs') },
+      { ic: '🎨', nom: 'Colorier les chambres', desc: 'Chaque chambre avec la couleur de son unité' + record('chambres'), ouvrir: jeu('chambres') },
+      { ic: '🏆', nom: 'Niveau ultime', desc: 'Replacer toutes les pièces, zone par zone' + record('ultime'), ouvrir: jeu('ultime'), classe: 'quiz-theme--ultime' }
+    ];
     afficher(h('div', { class: 'page page--large' },
       h('header', { class: 'entete entete--module' },
         h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour à l\'accueil', onclick: ecranAccueil, text: '‹' }),
         h('h1', { class: 'entete__titre', text: 'Plan du service' }),
+        h('span', { class: 'entete__role', text: 'Niveau 3' })),
+      flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
+      h('div', { class: 'quiz-themes quiz-themes--plan' }, tuiles.map(function (t) {
+        return h('button', { type: 'button', class: 'quiz-theme' + (t.classe ? ' ' + t.classe : ''), 'data-ic': t.ic, onclick: function () { t.ouvrir(); } }, h('b', { text: t.nom }), h('span', { text: t.desc }));
+      })),
+      h('p', { class: 'plan-note', text: 'Les jeux suivent le plan : chaque modification du plan est prise en compte automatiquement.' })));
+    window.scrollTo(0, 0);
+  }
+
+  function ecranPlan() {
+    ecranCourant = ecranPlan;
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var zone = h('div', { class: 'zone-plan' }, h('div', { class: 'squelette', style: 'height:60vh' })), zoneGps = h('div', { class: 'zone-gps' });
+    afficher(h('div', { class: 'page page--large' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { ecranPlanHub(); }, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: 'Plan interactif' }),
         h('span', { class: 'entete__role', text: session.role === 'agent' ? 'Niveau 3' : 'Mode référent' })),
-      zone,
+      zone, zoneGps,
       h('section', { class: 'decouverte', 'aria-labelledby': 't-decouverte', hidden: true }),
       h('p', { class: 'plan-note', text: 'Touchez une pièce pour voir son nom. Le plan reste consultable sans réseau sur ce téléphone, jusqu\'à la déconnexion.' })));
     var zoneDecouverte = document.querySelector('.decouverte');
@@ -634,7 +662,7 @@
         var n = Math.min(OBJECTIF, Object.keys(vus.pieces).length), fini = n >= OBJECTIF;
         if (fini && window.ReaBadges && !(stock.lire(CLE.badges) || {}).plan) window.ReaBadges.attribuer('plan');
         zoneDecouverte.hidden = false;
-        zoneDecouverte.replaceChildren(
+        zoneDecouverte.replaceChildren.apply(zoneDecouverte, [
           h('div', { class: 'decouverte__tete' }, h('h2', { id: 't-decouverte', text: 'Pièces explorées' }), h('span', { class: 'decouverte__compte', text: n + ' / ' + OBJECTIF })),
           h('div', { class: 'remplissage', role: 'progressbar', 'aria-label': 'Pièces explorées', 'aria-valuemin': '0', 'aria-valuemax': String(OBJECTIF), 'aria-valuenow': String(n) },
             h('div', { style: 'width:' + Math.round(100 * n / OBJECTIF) + '%;background:var(--succes)' })),
@@ -645,7 +673,7 @@
               if (cible) { plan.choisir(cible.id, true); document.querySelector('.plan__cadre').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
             } }, h('span', { 'aria-hidden': 'true', text: vus.lieux[l.id] ? '✓' : '' }), l.nom));
           })),
-          fini ? h('p', { class: 'decouverte__bravo', text: 'Bravo, vous avez exploré le plan ! Badge « Plan exploré » obtenu.' }) : null);
+          fini ? h('p', { class: 'decouverte__bravo', text: 'Bravo, vous avez exploré le plan ! Badge « Plan exploré » obtenu.' }) : null].filter(function (x) { return x != null; }));
       }
       plan = window.ReaPlan.creer(zone, {
         donnees: r.donnees, reglages: r.reglages, peutModifier: !!r.peutModifier && !depuisCache,
@@ -669,8 +697,17 @@
             .then(function () { majCache(); }, function (e) { throw new Error(message(e.code)); });
         }
       });
-      function majCache() { mettrePlanEnCache({ donnees: r.donnees, reglages: plan.reglages, peutModifier: r.peutModifier }); }
+      function majCache() { mettrePlanEnCache({ donnees: r.donnees, reglages: plan.reglages, peutModifier: r.peutModifier, gps: r.gps }); }
       majDecouverte();
+      // Position GPS (calculée sur le téléphone, jamais envoyée) ; calage par un administrateur
+      zoneGps.replaceChildren();
+      if (window.ReaGps) {
+        var barre = window.ReaGps.brancher({ h: h, zone: zone, plan: plan, calage: r.gps, admin: session.role === 'admin' && !depuisCache,
+          enregistrer: function (c) {
+            return Api.appeler('gps_calage', { jeton: session.jeton, calage: c }).then(function (x) { r.gps = x.calage; majCache(); }, function (e) { throw new Error(message(e.code)); });
+          } });
+        if (barre) zoneGps.appendChild(barre);
+      }
     }
     planEnCache().then(function (c) {
       if (c) monter(c, true);
