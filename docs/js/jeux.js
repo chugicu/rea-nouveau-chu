@@ -68,7 +68,7 @@
     if (!elan) return null;
     var pc = elan.pourcent, paliers = elan.paliers || [], atteints = paliers.filter(function (p) { return pc >= p.pc; }), prochain = paliers.filter(function (p) { return pc < p.pc; })[0];
     var dernier = atteints[atteints.length - 1], vus = A.stock.lire(CLE.paliers) || {}, nouveau = dernier && !vus[dernier.pc];
-    if (nouveau) { vus[dernier.pc] = 1; A.stock.ecrire(CLE.paliers, vus); }
+    if (nouveau) { vus[dernier.pc] = 1; A.stock.ecrire(CLE.paliers, vus); if (window.ReaFun) setTimeout(function () { window.ReaFun.succes(true); }, 500); }
     var detail = h('ol', { class: 'elan__paliers', hidden: true }, paliers.map(function (p) {
       return h('li', { class: pc >= p.pc ? 'elan__palier elan__palier--ok' : 'elan__palier' }, h('b', { text: p.pc + ' % · ' + p.titre }), p.texte && pc >= p.pc ? h('span', { text: p.texte }) : null);
     }));
@@ -109,7 +109,7 @@
           h('div', { class: 'quiz-actions' }, h('button', { class: 'bouton', type: 'button', onclick: function () { ecranQr(); }, text: 'Mes QR codes' }),
             h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { A.ecranAccueil(); }, text: 'Accueil' }))), hub);
         if (r.cible) chargerPlan().then(function (p) { montrerSurPlan(zone, p, r.cible); }).catch(function () { zone.remove(); });
-        if (!deja) { drapeau('qr'); }
+        if (!deja) { drapeau('qr'); if (window.ReaFun) window.ReaFun.succes(); }
       });
     }).catch(function (e) {
       if (erreurSession(e)) return;
@@ -146,12 +146,12 @@
 
   /* ---------- Rubrique Jeux ---------- */
   var JEUX_HUB = [
-    { id: 'concours', nom: 'Concours photo', desc: 'Les plus belles photos du CHU actuel, votes anonymes', ouvrir: function () { ecranConcours(); } },
-    { id: 'nuage', nom: 'Le nuage', desc: 'Ce que j\'emporte, ce que je laisse…', ouvrir: function () { ecranNuage(); } },
-    { id: 'qr', nom: 'QR codes cachés', desc: 'Trouvez-les dans le nouveau service', ouvrir: function () { ecranQr(); } },
-    { id: 'escape', nom: 'Escape game', desc: 'Quatre missions pour préparer le jour J', ouvrir: function () { ecranEscape(); } },
-    { id: 'bingo', nom: 'Bingo du déménagement', desc: 'Une grille à compléter avant le départ', ouvrir: function () { ecranBingo(); } },
-    { id: 'paris', nom: 'Paris', desc: 'Cartons, premier et dernier patient…', ouvrir: function () { ecranParis(); } }
+    { id: 'concours', ic: '🏆', nom: 'Concours photo', desc: 'Les plus belles photos du CHU actuel, votes anonymes', ouvrir: function () { ecranConcours(); } },
+    { id: 'nuage', ic: '☁️', nom: 'Le nuage', desc: 'Ce que j\'emporte, ce que je laisse…', ouvrir: function () { ecranNuage(); } },
+    { id: 'qr', ic: '🔎', nom: 'QR codes cachés', desc: 'Trouvez-les dans le nouveau service', ouvrir: function () { ecranQr(); } },
+    { id: 'escape', ic: '🔓', nom: 'Escape game', desc: 'Quatre missions pour préparer le jour J', ouvrir: function () { ecranEscape(); } },
+    { id: 'bingo', ic: '🎱', nom: 'Bingo du déménagement', desc: 'Une grille à compléter avant le départ', ouvrir: function () { ecranBingo(); } },
+    { id: 'paris', ic: '🎲', nom: 'Paris', desc: 'Cartons, premier et dernier patient…', ouvrir: function () { ecranParis(); } }
   ];
   function hub() {
     init();
@@ -164,7 +164,7 @@
         e.elan ? sectionJauge(e.elan) : null,
         actifs.length ? h('div', { class: 'quiz-themes' }, actifs.map(function (j) {
           var x = e.jeux[j.id];
-          return h('button', { type: 'button', class: 'quiz-theme', onclick: j.ouvrir }, h('b', { text: j.nom }),
+          return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': j.ic, onclick: j.ouvrir }, h('b', { text: j.nom }),
             h('span', { text: x.actif ? j.desc + (x.fermeture ? ' · jusqu\'au ' + dateFr(x.fermeture) : '') : (x.termine ? 'Terminé : voir les résultats' : 'Réservé aux référents (validation)') }));
         })) : h('p', { class: 'vide', text: 'Aucun jeu ouvert pour le moment. Revenez bientôt !' }),
         e.admin ? h('button', { class: 'bouton bouton--discret jeux__reglages', type: 'button', onclick: function () { reglages(); }, text: '⚙ Activer et régler les jeux' }) : null), function () { A.ecranAccueil(); });
@@ -507,6 +507,7 @@
       function verifier() {
         var lignes = LIGNES.filter(function (l) { return l.every(function (k) { return coche(g.grille[k]); }); }).length, plein = g.grille.every(coche), msgs = [];
         var b = A.stock.lire(A.CLE.badges) || {};
+        if ((lignes > (g.recompenses.lignes || 0) || (plein && !g.recompenses.plein)) && window.ReaFun) window.ReaFun.succes(plein);
         if (lignes > (g.recompenses.lignes || 0)) { point('bingo_ligne'); g.recompenses.lignes = lignes; msgs.push('Bingo ! Ligne complète'); if (!b.bingo) window.ReaBadges.attribuer('bingo'); }
         if (plein && !g.recompenses.plein) { point('bingo_plein'); g.recompenses.plein = true; msgs.push('CARTON PLEIN !'); if (!b.cartonplein) window.ReaBadges.attribuer('cartonplein'); }
         A.stock.ecrire(CLE.bingo, g);
@@ -593,7 +594,7 @@
         flash ? h('p', { class: 'flash', text: flash }) : null,
         e.referent ? h('p', { class: 'section__note', text: 'Référents : jouez chaque mission, puis validez-la (ou laissez une remarque). Les agents ne voient que les missions validées.' }) : null,
         visibles.length ? h('div', { class: 'quiz-themes' }, visibles.map(function (sc) {
-          return h('button', { type: 'button', class: 'quiz-theme' + (faits[sc.id] ? ' quiz-theme--fait' : ''), onclick: function () { jouerEscape(sc, e.referent, valides); } },
+          return h('button', { type: 'button', class: 'quiz-theme' + (faits[sc.id] ? ' quiz-theme--fait' : ''), 'data-ic': sc.ic || '🔓', onclick: function () { jouerEscape(sc, e.referent, valides); } },
             h('b', { text: (faits[sc.id] ? '✓ ' : '') + sc.titre }), h('span', { text: sc.resume }),
             h('span', { class: 'etiquette', text: sc.duree + (valides[sc.id] ? '' : ' · à valider') }));
         })) : h('p', { class: 'vide', text: 'Aucune mission validée pour le moment.' })));
@@ -617,12 +618,13 @@
         var essais = 0, retour = h('div', { class: 'quiz-retour', 'aria-live': 'polite' }), corps = h('div', { class: 'quiz-question' });
         if (k === 0) corps.appendChild(h('p', { class: 'escape__intro', text: sc.resume }));
         function reussi() {
+          if (window.ReaFun) window.ReaFun.reponse(true);
           remplir(retour, h('p', { class: 'quiz-verdict quiz-verdict--ok', text: essais ? 'C\'est ça !' : 'Bravo !' }), et.explication ? h('p', { class: 'quiz-explication', text: et.explication }) : null,
             h('button', { class: 'bouton', type: 'button', onclick: suivante, text: 'Continuer' }));
           retour.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         function rate(montrer) {
-          essais++; erreursTot++;
+          essais++; erreursTot++; if (window.ReaFun) window.ReaFun.reponse(false);
           if (essais >= 2 && montrer) { montrer(); remplir(retour, h('p', { class: 'quiz-verdict quiz-verdict--ko', text: 'Voici la solution.' }), et.explication ? h('p', { class: 'quiz-explication', text: et.explication }) : null, h('button', { class: 'bouton', type: 'button', onclick: suivante, text: 'Continuer' })); return; }
           remplir(retour, h('p', { class: 'quiz-verdict quiz-verdict--ko', text: 'Pas encore… essayez à nouveau.' }), et.indice ? h('details', { class: 'escape__indice' }, h('summary', { text: '💡 Indice' }), h('p', { text: et.indice })) : null);
         }
@@ -690,6 +692,7 @@
         var b = A.stock.lire(A.CLE.badges) || {}, nouveaux = [];
         if (!b.evade) { window.ReaBadges.attribuer('evade'); nouveaux.push('Évadé'); }
         if (premier) point('escape');
+        if (window.ReaFun) setTimeout(function () { window.ReaFun.succes(true); }, 200);
         var remarque = h('textarea', { rows: '3', maxlength: '600', placeholder: 'Remarque pour améliorer la mission (facultatif)', 'aria-label': 'Remarque' });
         page(sc.titre, 'Mission accomplie', h('div', { class: 'quiz-fin' },
           h('p', { class: 'quiz-fin__score' }, h('b', { text: '🔓 Mission accomplie !' }), erreursTot ? erreursTot + ' erreur' + (erreursTot > 1 ? 's' : '') + ' en chemin.' : 'Sans aucune erreur.'),

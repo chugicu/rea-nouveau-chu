@@ -283,15 +283,15 @@
       h('section', { class: 'section' },
         h('div', { class: 'section__tete' }, h('h2', { text: 'Entraînement libre' }), h('span', { class: 'section__note', text: 'Les questions ratées reviennent plus souvent' })),
         h('div', { class: 'quiz-themes' },
-          boutonTheme('Plan et équipements', nPlan, function (q) { return q.theme === 'plan' && !q.sous; }),
-          boutonTheme('Urgences et sécurité', nUrg, function (q) { return q.theme === 'urgences'; }),
-          boutonTheme('Couleurs des unités', nCoul, function (q) { return q.sous === 'couleurs'; }))),
+          boutonTheme('Plan et équipements', nPlan, '🧭', function (q) { return q.theme === 'plan' && !q.sous; }),
+          boutonTheme('Urgences et sécurité', nUrg, '🚨', function (q) { return q.theme === 'urgences'; }),
+          boutonTheme('Couleurs des unités', nCoul, '🎨', function (q) { return q.sous === 'couleurs'; }))),
       h('section', { class: 'section' },
         h('div', { class: 'section__tete' }, h('h2', { text: 'Jeux du plan' })),
         h('div', { class: 'quiz-themes' },
-          h('button', { type: 'button', class: 'quiz-theme', onclick: jeuEtiquettes }, h('b', { text: 'Placer les étiquettes' }), h('span', { text: 'Glisser le nom de chaque unité au bon endroit' })),
-          h('button', { type: 'button', class: 'quiz-theme', onclick: jeuCouleurs }, h('b', { text: 'Colorier les unités' }), h('span', { text: 'Glisser chaque couleur sur la bonne étiquette' })),
-          h('button', { type: 'button', class: 'quiz-theme quiz-theme--ultime', onclick: jeuUltime }, h('b', { text: 'Niveau ultime' }),
+          h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏷️', onclick: jeuEtiquettes }, h('b', { text: 'Placer les étiquettes' }), h('span', { text: 'Glisser le nom de chaque unité au bon endroit' })),
+          h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🖍️', onclick: jeuCouleurs }, h('b', { text: 'Colorier les unités' }), h('span', { text: 'Glisser chaque couleur sur la bonne étiquette' })),
+          h('button', { type: 'button', class: 'quiz-theme quiz-theme--ultime', 'data-ic': '🏆', onclick: jeuUltime }, h('b', { text: 'Niveau ultime' }),
             h('span', { text: 'Replacer toutes les pièces, zone par zone' + (s.jeux.ultime != null ? ' · record : ' + s.jeux.ultime + ' erreur' + (s.jeux.ultime > 1 ? 's' : '') : '') })))),
       h('section', { class: 'section' },
         h('div', { class: 'section__tete' }, h('h2', { text: 'Badges du quiz' }), h('span', { class: 'section__note', text: 'Sur ce téléphone uniquement' })),
@@ -307,8 +307,8 @@
         h('p', { class: 'section__note', text: ecr.length + ' question(s)' + (aRev ? ' · ' + aRev + ' à revérifier' : '') + (brouillons ? ' · ' + brouillons + ' brouillon(s) à relire' : '') }),
         h('button', { class: 'bouton', type: 'button', onclick: function () { gestion(); }, text: 'Gérer les questions' })) : null), A.ecranAccueil);
   }
-  function boutonTheme(nom, n, filtre) {
-    return h('button', { type: 'button', class: 'quiz-theme', disabled: !n, onclick: function () { serie(tirer(filtre, TAILLE_SERIE), { titre: nom, filtre: filtre }); } },
+  function boutonTheme(nom, n, ic, filtre) {
+    return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': ic, disabled: !n, onclick: function () { serie(tirer(filtre, TAILLE_SERIE), { titre: nom, filtre: filtre }); } },
       h('b', { text: nom }), h('span', { text: n ? n + ' question' + (n > 1 ? 's' : '') : 'Bientôt' }));
   }
 
@@ -327,6 +327,7 @@
         h('p', { class: 'quiz-fin__score' }, h('b', { text: bonnes + ' / ' + questions.length }), ' bonne' + (bonnes > 1 ? 's' : '') + ' réponse' + (bonnes > 1 ? 's' : '')),
         h('p', { text: bonnes === questions.length ? 'Sans faute, bravo !' : 'Les questions ratées reviendront plus souvent.' }),
         badges.length ? h('p', { class: 'flash', text: 'Nouveau badge : ' + badges.join(', ') + ' !' }) : null,
+        (bonnes === questions.length && window.ReaFun ? (setTimeout(function () { window.ReaFun.succes(); }, 200), null) : null),
         h('div', { class: 'quiz-actions' },
           o.filtre ? h('button', { class: 'bouton', type: 'button', onclick: function () { serie(tirer(o.filtre, TAILLE_SERIE), o); }, text: 'Continuer l\'entraînement' }) : null,
           h('button', { class: o.filtre ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: function () { accueilQuiz(); }, text: 'Retour au quiz' }))));
@@ -341,7 +342,7 @@
       q.pastille ? h('span', { class: 'quiz-pastille', style: 'background:' + q.pastille, role: 'img', 'aria-label': 'Couleur à identifier' }) : null);
     function repondre(ok, details) {
       if (repondu) return; repondu = true;
-      var nouveaux = noter(q, ok);
+      var nouveaux = noter(q, ok); if (window.ReaFun) window.ReaFun.reponse(ok);
       remplir(retour,
         h('p', { class: 'quiz-verdict quiz-verdict--' + (ok ? 'ok' : 'ko'), text: ok ? 'Bonne réponse !' : 'Pas tout à fait.' }),
         details ? h('p', { text: details }) : null,
@@ -434,10 +435,10 @@
       var r = o.verifier(j, c);
       if (r) {
         restants = restants.filter(function (x) { return x !== j; }); choisi = null;
-        o.surReussite(j, c, r, plan); info.textContent = restants.length ? 'Bien joué !' : '';
+        o.surReussite(j, c, r, plan); info.textContent = restants.length ? 'Bien joué !' : ''; if (window.ReaFun) window.ReaFun.reponse(true);
         var s = memoire(); s.attente++; s.okTotal++; s.okPlan++; sauver(s); verifierBadges();
       } else {
-        erreurs++; info.textContent = 'Ce n\'est pas le bon endroit, essayez encore.';
+        erreurs++; info.textContent = 'Ce n\'est pas le bon endroit, essayez encore.'; if (window.ReaFun) window.ReaFun.reponse(false);
         var s2 = memoire(); s2.attente++; sauver(s2);
       }
       majCompte(); dessinerBac();
@@ -461,7 +462,7 @@
     var s = memoire(); if (cle) { if (s.jeux[cle] == null || erreurs < s.jeux[cle]) s.jeux[cle] = erreurs; sauver(s); }
     if (cle === 'ultime' && window.ReaJeux) window.ReaJeux.point('ultime');
     envoyerCompteur();
-    var badges = verifierBadges();
+    var badges = verifierBadges(); if (window.ReaFun) setTimeout(function () { window.ReaFun.succes(!erreurs); }, 200);
     page(titre, 'Jeu', h('div', { class: 'quiz-fin' },
       h('p', { class: 'quiz-fin__score' }, h('b', { text: erreurs ? erreurs + ' erreur' + (erreurs > 1 ? 's' : '') : 'Sans faute !' }), ' · ' + total + ' étiquettes placées'),
       cle && s.jeux[cle] != null ? h('p', { class: 'section__note', text: 'Votre record : ' + s.jeux[cle] + ' erreur' + (s.jeux[cle] > 1 ? 's' : '') + '.' }) : null,

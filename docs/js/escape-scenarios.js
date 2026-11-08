@@ -4,7 +4,7 @@
    plan (toucher sur le plan : équipement ou section ; étape sautée si l'élément n'est pas encore sur le plan). */
 window.REA_ESCAPE = [
   {
-    id: 'transfert-309', titre: 'Transfert du lit 309', duree: '10 min',
+    id: 'transfert-309', ic: '🛏️', titre: 'Transfert du lit 309', duree: '10 min',
     resume: 'Jour J, 7 h 30. Vous êtes chargé(e) du transfert de M. Fictif, 58 ans, intubé-ventilé, du lit 9 de l\'ancien service vers la chambre 309 de Bougainvillier.',
     etapes: [
       { type: 'recit', texte: 'Le brancardier arrive dans 20 minutes. Le médecin a validé le transfert. Il faut tout préparer : rien ne doit manquer pendant les 10 km du trajet.' },
@@ -36,7 +36,7 @@ window.REA_ESCAPE = [
     ]
   },
   {
-    id: 'incident-trajet', titre: 'Incident pendant le trajet', duree: '8 min',
+    id: 'incident-trajet', ic: '🚑', titre: 'Incident pendant le trajet', duree: '8 min',
     resume: 'Vous accompagnez Mme Exemple, 71 ans, sous noradrénaline et oxygène, dans l\'ambulance vers le nouveau CHU. Tout se passe bien… jusqu\'ici.',
     etapes: [
       { type: 'recit', texte: 'À mi-chemin, le moniteur affiche une saturation qui baisse : 89 %… 86 %…' },
@@ -61,7 +61,7 @@ window.REA_ESCAPE = [
     ]
   },
   {
-    id: 'premiere-garde', titre: 'Première garde dans les nouveaux locaux', duree: '10 min',
+    id: 'premiere-garde', ic: '🌙', titre: 'Première garde dans les nouveaux locaux', duree: '10 min',
     resume: 'Première nuit dans le nouveau service. Vous êtes de garde, et tout est encore nouveau. Retrouvez vos repères avant qu\'on ait besoin de vous.',
     etapes: [
       { type: 'recit', texte: '21 h. Avant que la nuit ne commence vraiment, vous faites le tour du service pour repérer l\'essentiel.' },
@@ -84,7 +84,7 @@ window.REA_ESCAPE = [
     ]
   },
   {
-    id: 'alarme-incendie', titre: 'Alarme incendie', duree: '8 min',
+    id: 'alarme-incendie', ic: '🔥', titre: 'Alarme incendie', duree: '8 min',
     resume: 'Une alarme incendie retentit dans le nouveau service, en pleine journée. Fumée signalée dans un local de l\'unité Hibiscus.',
     etapes: [
       { type: 'ordre', question: 'Remettez les premiers gestes dans l\'ordre.',

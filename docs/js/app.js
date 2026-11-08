@@ -39,7 +39,10 @@
   function svg(markup) { // icônes internes uniquement (constantes)
     var tpl = document.createElement('template'); tpl.innerHTML = markup.trim(); return tpl.content.firstChild;
   }
-  function afficher(noeud) { app.replaceChildren(noeud); }
+  function afficher(noeud) {
+    if (noeud && noeud.classList) noeud.classList.add('entree'); // glissement doux (désactivé si le téléphone réduit les animations)
+    app.replaceChildren(noeud);
+  }
 
   /* ---------- Icônes filaires (style des pictogrammes de la charte) ---------- */
   var I = function (d) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; };
@@ -58,15 +61,16 @@
   };
 
   var MODULES = [
-    { id: 'plan', nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
-    { id: 'visites', nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
-    { id: 'newsletter', nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
-    { id: 'souvenirs', nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
-    { id: 'jeux', nom: 'Jeux', desc: 'Concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
-    { id: 'quiz', nom: 'Quiz', desc: 'Quiz du jour, entraînement et jeux sur le plan', etape: 4, ouvrir: function () { window.ReaQuiz.ouvrir(); } },
-    { id: 'simulations', nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
-    { id: 'docs', nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
-    { id: 'pret', nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
+    // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
+    { id: 'plan', c: '#8e44c4', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Chambres, postes de soins, bureaux, garde, vestiaires…', etape: 2, ouvrir: function () { ecranPlan(); } },
+    { id: 'visites', c: '#13a3a0', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
+    { id: 'newsletter', c: '#223b80', e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
+    { id: 'souvenirs', c: '#f5508f', e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
+    { id: 'jeux', c: '#ff7a59', e: '🎮', t: 2, nom: 'Jeux', desc: 'Concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
+    { id: 'quiz', c: '#ffb700', e: '🎯', t: -2, sombre: true, nom: 'Quiz', desc: 'Quiz du jour, entraînement et jeux sur le plan', etape: 4, ouvrir: function () { window.ReaQuiz.ouvrir(); } },
+    { id: 'simulations', c: '#048e39', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
+    { id: 'docs', c: '#5c2e9e', e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
+    { id: 'pret', c: '#1f6fa8', e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
   ];
 
   var BADGES = [
@@ -227,7 +231,7 @@
     Api.appeler('home', { jeton: session.jeton }).then(function (d) {
       stock.ecrire(CLE.accueil, { donnees: d, le: new Date().toISOString() });
       majBandeaux({ horsLigne: false, depuis: null });
-      dessinerAccueil(session, d);
+      if (ecranCourant === ecranAccueil) dessinerAccueil(session, d); // on n'écrase pas un écran ouvert entre-temps
       verifierReservations().then(function (nouveau) { if (nouveau && ecranCourant === ecranAccueil) dessinerAccueil(session, d); });
     }).catch(function (e) {
       if (ERREURS_SESSION.indexOf(e.code) >= 0) {
@@ -236,7 +240,7 @@
       }
       if (e.code === 'reseau') {
         majBandeaux({ horsLigne: true, depuis: cache && cache.le });
-        if (!cache) afficher(h('div', { class: 'page' }, h('p', { class: 'vide', text: message('reseau') }),
+        if (!cache && ecranCourant === ecranAccueil) afficher(h('div', { class: 'page' }, h('p', { class: 'vide', text: message('reseau') }),
           h('button', { class: 'bouton', type: 'button', onclick: ecranAccueil, text: 'Réessayer' })));
         return;
       }
@@ -260,13 +264,15 @@
         h('span', { class: 'pastille-logo logos' },
           h('img', { class: 'logo-chu logo-chu--petit', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
           h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
-        h('span', { class: 'entete__role', text: libelleRole })),
+        h('span', { class: 'entete__droite' },
+          window.ReaFun && window.ReaFun.serie() ? h('span', { class: 'serie', title: 'Jours d\'affilée avec le quiz du jour', text: '🔥 ' + window.ReaFun.serie() }) : null,
+          h('span', { class: 'entete__role', text: libelleRole }))),
       horizon(d),
       d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
+      sectionModules(role, d),
       sectionJauge(d.jauge),
       sectionBadges(),
-      sectionModules(role, d),
       sectionActus(d.actualites),
       piedDePage()));
     app.focus({ preventScroll: true });
@@ -276,22 +282,10 @@
   function horizon(d) {
     var c = compteARebours(d.dateJ);
     var p = Math.max(0, Math.min(100, (d.jauge && d.jauge.pourcent) || 0));
-    var arc = svg(
-      '<svg class="horizon__arc" viewBox="0 0 440 236" role="img" aria-label="Jauge Service prêt : ' + p + ' %">' +
-        '<path class="horizon__piste" d="M24 220 A196 196 0 0 1 416 220" pathLength="100"/>' +
-        '<path class="horizon__progression" d="M24 220 A196 196 0 0 1 416 220" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>' +
-      '</svg>');
-    // Animation unique : l'arc se remplit à l'arrivée sur l'accueil
-    requestAnimationFrame(function () { requestAnimationFrame(function () {
-      var prog = arc.querySelector('.horizon__progression');
-      if (prog) prog.setAttribute('stroke-dashoffset', String(p > 0 ? Math.max(100 - p, 0) : 100));
-    }); });
     return h('section', { class: 'horizon', 'aria-labelledby': 'titre-horizon' },
-      h('div', { class: 'horizon__cadre' },
-        arc,
-        h('div', { class: 'horizon__centre' },
-          h('h1', { id: 'titre-horizon', class: 'horizon__j' + (c.texte ? ' horizon__j--texte' : ''), text: c.grand }))),
+      h('h1', { id: 'titre-horizon', class: 'horizon__j' + (c.texte ? ' horizon__j--texte' : ''), text: c.grand }),
       h('p', { class: 'horizon__sous' }, c.sous),
+      h('span', { class: 'horizon__bulle', 'aria-hidden': 'true', text: '🚑' }),
       h('p', { class: 'jauge-resume' }, h('strong', { text: p + ' %' }), ' du service se déclare prêt'));
   }
 
@@ -328,24 +322,20 @@
 
   function sectionModules(role, d) {
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
+    var liste = MODULES.slice();
+    if (role !== 'agent') liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: role === 'admin' ? 'Administration' : 'Espace référent', desc: 'En attendant : actualités, date J et effectifs se gèrent dans le Google Sheets « Base ».' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
-      h('ul', { class: 'modules' }, MODULES.map(function (m) {
-        var icone = h('span', { class: 'module__icone' }); icone.appendChild(svg(ICONES[m.id]));
-        var contenu = [icone,
-          h('div', { class: 'module__texte' },
-            h('div', { class: 'module__nom', text: m.nom }),
-            h('div', { class: 'module__desc', text: m.desc })),
+      h('ul', { class: 'modules' }, liste.map(function (m) {
+        var contenu = [
           m.id === 'newsletter' && nlNeuve ? h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }) : null,
-          m.ouvrir ? h('span', { class: 'module__fleche', 'aria-hidden': 'true', text: '›' }) : h('span', { class: 'module__etat', text: 'Bientôt' })];
-        return h('li', { class: 'module' + (m.ouvrir ? ' module--actif' : '') },
-          m.ouvrir ? h('button', { type: 'button', class: 'module__bouton', onclick: m.ouvrir }, contenu) : contenu);
-      }).concat(role !== 'agent' ? [h('li', { class: 'module' },
-        (function () { var i = h('span', { class: 'module__icone' }); i.appendChild(svg(ICONES.docs)); return i; })(),
-        h('div', { class: 'module__texte' },
-          h('div', { class: 'module__nom', text: role === 'admin' ? 'Administration' : 'Espace référent' }),
-          h('div', { class: 'module__desc', text: 'En attendant : actualités, date J et effectifs se gèrent dans le Google Sheets « Base ».' })),
-        h('span', { class: 'module__etat', text: 'Bientôt' }))] : [])));
+          h('span', { class: 'module__nom', text: m.nom }),
+          h('span', { class: 'module__desc', text: m.ouvrir ? m.desc : 'Bientôt' }),
+          h('span', { class: 'module__icone', 'aria-hidden': 'true', text: m.e })];
+        var style = '--c:' + m.c + ';--t:' + (m.t || 0) + 'deg';
+        return h('li', { class: 'module' + (m.ouvrir ? ' module--actif' : ' module--bientot') + (m.sombre ? ' module--clair' : ''), style: style },
+          m.ouvrir ? h('button', { type: 'button', class: 'module__bouton', onclick: m.ouvrir }, contenu) : h('div', { class: 'module__bouton' }, contenu));
+      })));
   }
 
   function sectionActus(actus) {

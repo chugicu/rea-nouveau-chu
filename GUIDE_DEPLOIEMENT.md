@@ -306,6 +306,16 @@ Appli > **Jeux** > **⚙ Activer et régler les jeux** : pour chaque jeu, case *
 
 ---
 
+## Partie M – Version 1.8 : nouveau design
+
+Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
+
+1. Remplacez le dossier `docs/` sur GitHub (nouveaux fichiers : `css/theme.css`, `js/fun.js`, polices `barlow-condensed-*`).
+2. Le design suit le réglage clair ou sombre du téléphone.
+3. Confettis, vibrations, série 🔥 et transitions restent sur le téléphone. Si le téléphone demande de réduire les animations, elles sont coupées.
+4. Les logos restent intacts, sur fond blanc, ≥ 50 px.
+5. Les téléphones récupèrent la nouvelle version à la réouverture suivante (cache `rea-app-v1.8.0`).
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

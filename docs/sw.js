@@ -1,16 +1,18 @@
 /* Service worker : rend l'application utilisable hors ligne.
    Pensez à augmenter VERSION à chaque mise en ligne d'une nouvelle version. */
-var VERSION = 'rea-app-v1.7.0';
+var VERSION = 'rea-app-v1.8.0';
 var FICHIERS = [
   './',
   'index.html',
   'css/app.css',
+  'css/theme.css',
   'js/config.js',
   'js/api.js',
   'js/app.js',
   'js/plan.js',
   'js/export.js',
   'js/pdf-images.js',
+  'js/fun.js',
   'js/quiz.js',
   'js/escape-scenarios.js',
   'js/jeux.js',
@@ -21,6 +23,8 @@ var FICHIERS = [
   'assets/icons/favicon.png',
   'assets/fonts/barlow-latin-600-normal.woff2',
   'assets/fonts/barlow-latin-700-normal.woff2',
+  'assets/fonts/barlow-condensed-latin-700-normal.woff2',
+  'assets/fonts/barlow-condensed-latin-800-normal.woff2',
   'assets/fonts/pt-sans-latin-400-normal.woff2',
   'assets/fonts/pt-sans-latin-700-normal.woff2'
 ];
