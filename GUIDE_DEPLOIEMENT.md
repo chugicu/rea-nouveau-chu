@@ -355,7 +355,7 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 **Installer le moteur commun Cap NCHUG (une seule fois, sur le compte Google dédié) :**
 1. Connecté au compte dédié, créez un Google Sheets vide nommé « Cap NCHUG – Annuaire ».
 2. Extensions › Apps Script : collez le **dernier** `Code.gs` (le même que celui de la réa) et, dans Paramètres du projet, cochez « Afficher le fichier manifeste appsscript.json » puis collez `appsscript.json` ; enregistrez.
-3. Dans l'éditeur, choisissez la fonction `installerAnnuaire` et cliquez sur Exécuter ; acceptez les autorisations.
+3. Rechargez le Google Sheets : un menu « Cap NCHUG – Installation » apparaît › « Installer l'annuaire Cap NCHUG » ; acceptez les autorisations. (Ou, dans l'éditeur Apps Script : liste des fonctions en haut › `installerAnnuaire` › Exécuter.)
 4. Rouvrez le Google Sheets : menu « Cap NCHUG – Administration › Définir le code SUPER-ADMINISTRATEUR ».
 5. Déployer › Nouveau déploiement › Application Web (Exécuter en tant que : moi ; Accès : tout le monde). Copiez l'adresse en /exec.
 6. Envoyez cette adresse à Claude (ou modifiez vous-même `docs/js/config.js` sur GitHub avec le modèle indiqué en haut du fichier) :

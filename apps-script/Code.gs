@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.3.0',
+  version: '2.3.1',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -1460,6 +1460,13 @@ function onOpen() {
       .addItem('Définir le code SUPER-ADMINISTRATEUR', 'menuCodeSuper')
       .addItem('Déconnecter le super-admin et les créateurs', 'menuInvaliderAnnuaire')
       .addItem('Effacer les inscriptions aux visites (tous les services)', 'menuPurgerVisites')
+      .addToUi();
+  }
+  var actif = SpreadsheetApp.getActiveSpreadsheet();
+  if (actif && !actif.getSheetByName(ONGLETS.parametres)) { // Google Sheets encore vide : on propose les deux installations
+    return SpreadsheetApp.getUi().createMenu('Cap NCHUG – Installation')
+      .addItem('Installer l\'annuaire Cap NCHUG (moteur commun)', 'installerAnnuaire')
+      .addItem('Installer la base d\'un service seul (comme la réa)', 'installer')
       .addToUi();
   }
   SpreadsheetApp.getUi().createMenu('Réa – Administration')
