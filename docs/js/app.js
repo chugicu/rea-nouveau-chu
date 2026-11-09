@@ -99,6 +99,7 @@
     deja_rattache: 'Ce service a déjà été rattaché à Cap NCHUG.',
     action_inconnue: 'Cette fonction attend la mise à jour du moteur (Code.gs) par l\'administrateur.',
     defi_perime: 'Un nouveau défi a commencé : rechargez le défi du jour.',
+    parcours_inactif: 'Le jeu Parcours n\'est pas encore ouvert. Les missions sont dans le Défi du jour !',
     question_invalide: 'Question incomplète.',
     service_existe: 'Un service porte déjà ce nom.',
     occupe: 'Beaucoup de monde en ce moment : réessayez dans une minute.',

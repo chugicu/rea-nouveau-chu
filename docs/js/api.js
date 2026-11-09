@@ -10,7 +10,7 @@
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
   var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1, service_rattacher: 1,
-    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, commun_jeton: 1, tableau_bord: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
+    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, defi_parcours_actif: 1, commun_jeton: 1, tableau_bord: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
     visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1 };
@@ -307,23 +307,25 @@
     var B = demoDefiBase(), aujourd = new Date().toISOString().slice(0, 10);
     function sauver() { demoEcrire('defi', B); }
     function valide(q) { return q.texte && (q.type !== 'qcm' || (q.choix.length >= 2 && q.bonne >= 0 && q.bonne < q.choix.length)) && (q.type !== 'ascenseur' || (q.bonne.entree && q.bonne.niveau !== '')); }
-    function etat() { return { ok: true, mode: B.mode, debut: B.debut, questions: B.questions.map(function (q) { return Object.assign({ valide: !!valide(q), par: 'Démo', modifie: '' }, q); }), site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'], lienSheets: '' }; }
+    function etat() { return { ok: true, mode: B.mode, debut: B.debut, parcours: !!B.parcours, questions: B.questions.map(function (q) { return Object.assign({ valide: !!valide(q), par: 'Démo', modifie: '' }, q); }), site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'], lienSheets: '' }; }
     function pool() { return B.questions.filter(function (q) { return valide(q) && (q.statut === 'validée' || (B.mode === 'test' && q.statut === 'à valider')); }); }
     function lib(e) { return /^B/.test(e) ? e : 'N° ' + e; }
-    function jourQ() {
-      var p = pool().slice(0, 5);
+    function mission(q) { return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication }; }
+    function jourQ() { // 4 questions + 2 missions du Parcours (en 3e et 6e position), comme le moteur
+      var m = pool().filter(function (q) { return q.type === 'ascenseur'; }).slice(0, 2), p = pool().filter(function (q) { return q.type !== 'ascenseur'; }).slice(0, 6 - m.length);
+      m.forEach(function (q, k) { p.splice(Math.min(p.length, k ? 5 : 2), 0, q); });
       return p.map(function (q) { var x = { id: q.id, type: q.type, theme: q.theme, texte: q.texte }; if (q.type === 'qcm') x.choix = q.choix;
-        if (q.type === 'ascenseur') { x.entrees = ['2', '5', '8', 'B3'].concat(q.bonne.entree).filter(function (v, i, t) { return t.indexOf(v) === i; }).slice(-4).map(function (e) { return { code: e, libelle: lib(e) }; }); x.niveaux = ['-1', '0', '1', '2', '3', '4']; }
+        if (q.type === 'ascenseur') x.mission = mission(q);
         return x; });
     }
     var gestion = /^cap\./.test(d.jeton || '') || /^demo\.admin/.test(d.jeton || '');
-    if (/^defi_(gestion|mode|question|statut|site|importer)$/.test(action) && !gestion) throw new ErreurApi('non_autorise');
+    if (/^defi_(gestion|mode|question|statut|site|importer|raz|parcours_actif)$/.test(action) && !gestion) throw new ErreurApi('non_autorise');
     if (!/^(cap|demo)\./.test(d.jeton || '')) throw new ErreurApi('session_invalide');
     switch (action) {
-      case 'defi_jour': return { ok: true, date: aujourd, mode: B.mode, questions: jourQ(), seuil: 30 };
+      case 'defi_jour': return { ok: true, date: aujourd, mode: B.mode, questions: jourQ(), seuil: 30, parcours: !!B.parcours, site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'] };
       case 'defi_repondre': {
         var x = d.donnees || {}, q = B.questions.filter(function (y) { return y.id === x.id; })[0]; if (!q) throw new ErreurApi('defi_perime');
-        var bon = q.type === 'qcm' ? Number(x.reponse) === q.bonne : q.type === 'vf' ? x.reponse === q.bonne : x.reponse && x.reponse.entree === q.bonne.entree && x.reponse.niveau === q.bonne.niveau;
+        var bon = q.type === 'qcm' ? Number(x.reponse) === q.bonne : q.type === 'vf' ? x.reponse === q.bonne : x.reponse && x.reponse.termine === true;
         var cle = aujourd + '|' + q.id, compte = !B.vus[cle];
         if (compte) { B.vus[cle] = 1; var sc = B.scores[B.mode] = B.scores[B.mode] || [0, 0]; sc[0]++; if (bon) sc[1]++; sauver(); }
         return { ok: true, bon: !!bon, compte: compte, bonne: q.type === 'ascenseur' ? { entree: q.bonne.entree, libelle: lib(q.bonne.entree), niveau: q.bonne.niveau } : q.bonne, explication: q.explication };
@@ -339,10 +341,11 @@
           var r = 0; l.forEach(function (x) { x.rang = x.classe ? ++r : null; }); return l;
         }
         var lu = new Date(); lu.setDate(lu.getDate() - (lu.getDay() + 6) % 7); var luIso = lu.toISOString().slice(0, 10), av = new Date(lu); av.setDate(av.getDate() - 7);
-        return { ok: true, mode: B.mode, seuil: 30, semaine: { lundi: luIso, lignes: lignes(1) }, precedente: { lundi: av.toISOString().slice(0, 10), lignes: lignes(0.9).filter(function (x) { return !x.vous; }) }, general: lignes(3), debut: B.debut };
+        return { ok: true, mode: B.mode, seuil: 30, semaine: { lundi: luIso, lignes: lignes(1) }, precedente: { lundi: av.toISOString().slice(0, 10), lignes: lignes(0.9).filter(function (x) { return !x.vous; }) }, general: lignes(3), debut: B.debut, parcours: !!B.parcours };
       }
-      case 'defi_parcours': return { ok: true, mode: B.mode, site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'],
-        missions: pool().filter(function (q) { return q.type === 'ascenseur'; }).map(function (q) { return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication }; }) };
+      case 'defi_parcours': if (!B.parcours) throw new ErreurApi('parcours_inactif');
+        return { ok: true, mode: B.mode, site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'], parcours: true, missions: pool().filter(function (q) { return q.type === 'ascenseur'; }).map(mission) };
+      case 'defi_parcours_actif': B.parcours = d.actif === true; sauver(); return etat();
       case 'defi_gestion': return etat();
       case 'defi_mode': if (d.mode === 'officiel' && B.mode !== 'officiel') { B.debut = aujourd; B.scores.officiel = [0, 0]; } B.mode = d.mode === 'officiel' ? 'officiel' : 'test'; sauver(); return etat();
       case 'defi_statut': B.questions.forEach(function (q) { if ((d.ids || []).indexOf(q.id) >= 0) q.statut = d.statut; }); sauver(); return etat();

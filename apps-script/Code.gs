@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.3.1',
+  version: '2.3.2',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -1637,7 +1637,7 @@ function genererCode_(n) {
    Mode « annuaire » (Cap NCHUG) : le Google Sheets lié est l'annuaire des services ; chaque appel indique son
    service, et le moteur travaille alors dans le Google Sheets de ce service, avec ses propres réglages. */
 var CTX_SERVICE = null, CLASSEUR_MEMO = null, MEMO_PROPS = {};
-var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1 };
+var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1, DEFI_PARCOURS: 1 };
 function cleProp_(k) { return CTX_SERVICE && !CLES_GLOBALES[k] ? 's:' + CTX_SERVICE.id + ':' + k : k; }
 /* Réglages du script, rangés par service, gardés en mémoire (cache) pour ménager le quota quotidien de lectures */
 var PROPS_ = {
@@ -1916,7 +1916,7 @@ var DEFI = {
   entetesQ: ['ID', 'Thème', 'Type', 'Question', 'Réponses (une par ligne)', 'Bonne réponse', 'Explication', 'Entrée ou bâtiment', 'Niveau', 'Source', 'Statut', 'Par', 'Modifiée le'],
   entetesSite: ['Type', 'Code', 'Nom', 'Couleur', 'Bâtiment', 'X', 'Y', 'Largeur', 'Hauteur'],
   entetesScores: ['Semaine (lundi)', 'Service', 'Nom du service', 'Réponses', 'Bonnes réponses', '% de bonnes réponses', 'Mode'],
-  parJour: 5, seuil: 30, semainesGardees: 8, niveaux: ['-1', '0', '1', '2', '3', '4'],
+  parJour: 6, missionsParJour: 2, seuil: 30, semainesGardees: 8, niveaux: ['-1', '0', '1', '2', '3', '4'],
   statuts: { 'à valider': 1, 'validée': 1, 'retirée': 1 }, types: { qcm: 1, vf: 1, ascenseur: 1 }, typesSite: { 'bâtiment': 1, 'entrée': 1, 'parking': 1 }
 };
 var ROUTES_DEFI_GESTION = {
@@ -1926,7 +1926,8 @@ var ROUTES_DEFI_GESTION = {
   defi_statut: function (req) { gestionDefi_(req); return defiStatut_(req.ids, req.statut); },
   defi_site: function (req) { gestionDefi_(req); return defiSiteEnregistrer_(req.site); },
   defi_importer: function (req) { return defiImporter_(gestionDefi_(req), req.donnees || {}); },
-  defi_raz: function (req) { gestionDefi_(req); return defiRaz_(); }
+  defi_raz: function (req) { gestionDefi_(req); return defiRaz_(); },
+  defi_parcours_actif: function (req) { gestionDefi_(req); return defiParcoursActiver_(req.actif); }
 };
 /* Qui gère le Défi : le super-admin et les créateurs (Cap NCHUG) ; l'administrateur quand le service est seul. */
 function gestionDefi_(req) {
@@ -1945,6 +1946,8 @@ function defiOnglet_(nom) {
   return sh;
 }
 function defiModeActuel_() { return PROPS_.getProperty('DEFI_MODE') === 'officiel' ? 'officiel' : 'test'; }
+// Jeu « Parcours » séparé : désactivé tant qu'un gestionnaire du Défi ne l'a pas activé (les 2 missions du Défi du jour restent jouées)
+function defiParcoursActif_() { return PROPS_.getProperty('DEFI_PARCOURS') === 'actif'; }
 function fnv_(s) { var x = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = (x * 16777619) >>> 0; } return x; }
 function aujourdhuiDefi_() { return formaterDate_(new Date()); }
 function lundi_(iso) { var d = new Date(iso + 'T12:00:00Z'), j = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - j); return d.toISOString().slice(0, 10); }
@@ -1996,38 +1999,44 @@ function defiPool_(mode) { // questions jouables : validées ; en phase de test,
   return lireDefiQuestions_().filter(function (q) { return q.valide && (q.statut === 'validée' || (mode === 'test' && q.statut === 'à valider')); });
 }
 
-/* ---------- Défi du jour : les mêmes 5 questions pour tout le CHU ---------- */
+/* ---------- Défi du jour : les mêmes 6 questions pour tout le CHU (4 questions + 2 missions du Parcours) ---------- */
 function defiTirage_(date, mode) {
-  var cle = 'defi|jour|' + date + '|' + mode, c = CacheService.getScriptCache(), t = c.get(cle);
+  var cle = 'defi|jour2|' + date + '|' + mode, c = CacheService.getScriptCache(), t = c.get(cle);
   if (t) return JSON.parse(t);
+  var site = lireDefiSite_();
   var pool = defiPool_(mode).slice().sort(function (a, b) { return fnv_(date + '|' + a.id) - fnv_(date + '|' + b.id); });
+  // Les questions « ascenseur » ne sont plus posées seules : elles deviennent des missions du Parcours (vue du ciel → rue → ascenseur)
+  var missions = pool.filter(function (q) { return q.type === 'ascenseur' && defiMissionJouable_(q, site); }).slice(0, DEFI.missionsParJour);
+  var classiques = pool.filter(function (q) { return q.type !== 'ascenseur'; }), nb = DEFI.parJour - missions.length;
   var pris = [], parTheme = {};
-  pool.forEach(function (q) { if (pris.length < DEFI.parJour && (parTheme[q.theme] || 0) < 2) { pris.push(q); parTheme[q.theme] = (parTheme[q.theme] || 0) + 1; } });
-  pool.forEach(function (q) { if (pris.length < DEFI.parJour && pris.indexOf(q) < 0) pris.push(q); });
-  var entrees = defiEntreesConnues_();
+  classiques.forEach(function (q) { if (pris.length < nb && (parTheme[q.theme] || 0) < 2) { pris.push(q); parTheme[q.theme] = (parTheme[q.theme] || 0) + 1; } });
+  classiques.forEach(function (q) { if (pris.length < nb && pris.indexOf(q) < 0) pris.push(q); });
+  // Les missions arrivent en 3e et en 6e position
+  missions.forEach(function (q, k) { pris.splice(Math.min(pris.length, k ? DEFI.parJour - 1 : 2), 0, q); });
   var r = pris.map(function (q) {
     var x = { id: q.id, type: q.type, theme: q.theme, texte: q.texte };
     if (q.type === 'qcm') x.choix = q.choix;
-    if (q.type === 'ascenseur') { // 4 entrées proposées (dont la bonne), toujours les mêmes ce jour-là
-      var autres = entrees.filter(function (e) { return e !== q.bonne.entree; }).sort(function (a, b) { return fnv_(date + q.id + a) - fnv_(date + q.id + b); }).slice(0, 3);
-      x.entrees = autres.concat([q.bonne.entree]).sort(function (a, b) { return fnv_(q.id + a) - fnv_(q.id + b); }).map(function (e) { return { code: e, libelle: libelleEntree_(e) }; });
-      x.niveaux = DEFI.niveaux;
-    }
+    if (q.type === 'ascenseur') x.mission = defiMission_(q); // toujours comptée bonne une fois terminée : la réponse peut voyager
     return x;
   });
   try { c.put(cle, JSON.stringify(r), 21600); } catch (e) { /* ignoré */ }
   return r;
 }
-function defiEntreesConnues_() {
-  var vus = {}, l = [];
-  function aj(e) { e = String(e || '').trim(); if (e && !vus[e]) { vus[e] = 1; l.push(e); } }
-  var s = lireDefiSite_(); s.entrees.forEach(function (e) { aj(e.code); }); s.batiments.forEach(function (b) { aj(b.code); });
-  lireDefiQuestions_().forEach(function (q) { if (q.type === 'ascenseur') aj(q.bonne.entree); });
-  return l;
+/* Une mission est jouable si la vue du ciel connaît son bâtiment (code B) ou son entrée (N°) et le bâtiment de celle-ci */
+function defiMissionJouable_(q, site) {
+  var cible = String(q.bonne.entree || '').toUpperCase(), bats = {};
+  site.batiments.forEach(function (b) { bats[String(b.code).toUpperCase()] = 1; });
+  if (/^B/.test(cible)) return !!bats[cible];
+  return site.entrees.some(function (e) { return String(e.code).toUpperCase() === cible && bats[String(e.batiment).toUpperCase()]; });
+}
+function defiMission_(q) {
+  return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication };
 }
 function defiJour_(session) {
-  var mode = defiModeActuel_(), date = aujourdhuiDefi_();
-  return { ok: true, date: date, mode: mode, questions: defiTirage_(date, mode), seuil: DEFI.seuil };
+  var mode = defiModeActuel_(), date = aujourdhuiDefi_(), qs = defiTirage_(date, mode);
+  var r = { ok: true, date: date, mode: mode, questions: qs, seuil: DEFI.seuil, parcours: defiParcoursActif_() };
+  if (qs.some(function (x) { return x.type === 'ascenseur'; })) { r.site = lireDefiSite_(); r.niveaux = DEFI.niveaux; }
+  return r;
 }
 function defiRepondre_(session, d) {
   d = d || {};
@@ -2037,7 +2046,7 @@ function defiRepondre_(session, d) {
   var rep = d.reponse, bon;
   if (q.type === 'qcm') bon = Number(rep) === q.bonne;
   else if (q.type === 'vf') bon = String(rep) === q.bonne;
-  else bon = !!rep && String(rep.entree) === q.bonne.entree && String(rep.niveau) === q.bonne.niveau;
+  else bon = !!rep && rep.termine === true; // mission du Parcours : bonne dès qu'elle est terminée, quelles que soient les erreurs
   // Seule la 1re réponse de ce téléphone à cette question compte (empreinte gardée quelques heures, jamais reliée à une personne)
   var empr = 'defi|vu|' + fnv_(empreinteAppareil_(d.appareil) + '|' + date + '|' + id).toString(36) + fnv_(id + '|' + d.appareil).toString(36);
   var c = CacheService.getScriptCache(), compte = !c.get(empr);
@@ -2087,21 +2096,24 @@ function defiClassement_(session) {
     return l;
   }
   return { ok: true, mode: mode, seuil: DEFI.seuil, semaine: { lundi: lu, lignes: tableau(base.semaines[lu]) },
-    precedente: { lundi: avant, lignes: tableau(base.semaines[avant]) }, general: tableau(base.general), debut: PROPS_.getProperty('DEFI_DEBUT') || '' };
+    precedente: { lundi: avant, lignes: tableau(base.semaines[avant]) }, general: tableau(base.general), debut: PROPS_.getProperty('DEFI_DEBUT') || '', parcours: defiParcoursActif_() };
 }
 
 /* ---------- Parcours : missions (questions « ascenseur ») et dessin du site ---------- */
 function defiParcours_(session) {
-  var mode = defiModeActuel_();
-  var missions = defiPool_(mode).filter(function (q) { return q.type === 'ascenseur'; }).map(function (q) {
-    return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication };
-  });
-  return { ok: true, mode: mode, site: lireDefiSite_(), missions: missions, niveaux: DEFI.niveaux };
+  if (!defiParcoursActif_()) throw erreurApp_('parcours_inactif');
+  var mode = defiModeActuel_(), site = lireDefiSite_();
+  var missions = defiPool_(mode).filter(function (q) { return q.type === 'ascenseur' && defiMissionJouable_(q, site); }).map(defiMission_);
+  return { ok: true, mode: mode, site: site, missions: missions, niveaux: DEFI.niveaux, parcours: true };
+}
+function defiParcoursActiver_(actif) {
+  PROPS_.setProperty('DEFI_PARCOURS', actif === true ? 'actif' : 'inactif');
+  return defiGestionEtat_();
 }
 
 /* ---------- Gestion (super-admin et créateurs) ---------- */
 function defiGestionEtat_() {
-  return { ok: true, mode: defiModeActuel_(), debut: PROPS_.getProperty('DEFI_DEBUT') || '',
+  return { ok: true, mode: defiModeActuel_(), debut: PROPS_.getProperty('DEFI_DEBUT') || '', parcours: defiParcoursActif_(),
     questions: lireDefiQuestions_().map(function (q) { var x = Object.assign({}, q); delete x.ligne; return x; }),
     site: lireDefiSite_(), niveaux: DEFI.niveaux,
     lienSheets: modeAnnuaire_() ? 'https://docs.google.com/spreadsheets/d/' + defiClasseur_().getId() : '' };

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var A, h, Api, O;
-  var THEMES = { chiffres: 'Chiffres clés', histoire: 'Histoire', rue: 'Rue Caraïbes', ascenseur: 'Ascenseur', ou: 'Où est… ?', voisins: 'Voisins', services: 'Services et lits', plateau: 'Plateau technique', consultations: 'Consultations', calendrier: 'Transfert : calendrier', etiquetage: 'Transfert : trier et étiqueter', cartons: 'Transfert : cartons et mobilier', regles: 'Transfert : règles à retenir', jourj: 'Transfert : jour J et rôles', divers: 'Divers' };
+  var THEMES = { chiffres: 'Chiffres clés', histoire: 'Histoire', rue: 'Rue Caraïbes', ascenseur: 'Missions du Parcours', ou: 'Où est… ?', voisins: 'Voisins', services: 'Services et lits', plateau: 'Plateau technique', consultations: 'Consultations', calendrier: 'Transfert : calendrier', etiquetage: 'Transfert : trier et étiqueter', cartons: 'Transfert : cartons et mobilier', regles: 'Transfert : règles à retenir', jourj: 'Transfert : jour J et rôles', divers: 'Divers' };
   var STATUTS = { 'à valider': 'À valider', 'validée': 'Validée', 'retirée': 'Retirée' };
   var CTX = null; // { jeton, retour, role, etat, filtre, nb }
 
@@ -39,7 +39,7 @@
     page(h('div', null,
       flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
       alerte ? h('p', { class: 'message-erreur', role: 'alert', text: alerte }) : null,
-      sectionPhase(e), sectionQuestions(e), sectionEditeur(e), sectionImport(),
+      sectionPhase(e), sectionParcours(e), sectionQuestions(e), sectionEditeur(e), sectionImport(),
       e.lienSheets ? h('p', { class: 'section__note' }, 'Tout est aussi modifiable dans le ', h('a', { href: e.lienSheets, target: '_blank', rel: 'noopener', text: 'Google Sheets de l\'annuaire' }), ' (onglets « Défi – … »). Les changements y sont pris en compte en 5 minutes.') :
         h('p', { class: 'section__note', text: 'Tout est aussi modifiable dans le Google Sheets « Base » (onglets « Défi – … ») ; les changements y sont pris en compte en 5 minutes.' })));
     window.scrollTo(0, scroll);
@@ -64,6 +64,18 @@
         ev.currentTarget.disabled = true;
         apres(appeler('defi_raz'), 'Scores du Défi remis à zéro.');
       }, text: 'Remettre les scores à zéro' }));
+  }
+  /* ---------- Jeu Parcours séparé (les 2 missions du Défi du jour sont jouées dans tous les cas) ---------- */
+  function sectionParcours(e) {
+    var actif = !!e.parcours;
+    return h('section', { class: 'section' },
+      h('div', { class: 'section__tete' }, h('h2', { text: '🧭 Jeu Parcours : ' + (actif ? 'activé' : 'désactivé') })),
+      h('p', { class: 'section__note', text: (actif ? 'Tous les agents voient le bouton « Parcours » dans le Défi CHU.' : 'Le bouton « Parcours » est caché pour tous les services.')
+        + ' Les 2 missions du Défi du jour sont jouées dans tous les cas.' }),
+      h('button', { type: 'button', class: actif ? 'bouton bouton--discret' : 'bouton', onclick: function (ev) {
+        ev.currentTarget.disabled = true;
+        apres(appeler('defi_parcours_actif', { actif: !actif }), actif ? 'Jeu Parcours désactivé.' : 'Jeu Parcours activé pour tous les services.');
+      }, text: actif ? 'Désactiver le jeu Parcours' : 'Activer le jeu Parcours' }));
   }
   function compter(qs) { var n = { 'à valider': 0, 'validée': 0, 'retirée': 0 }; qs.forEach(function (q) { n[q.statut]++; }); return n; }
 
@@ -124,7 +136,7 @@
     return li;
   }
   function formulaire(q, ouvert) {
-    var e = CTX.etat, type = h('select', { 'aria-label': 'Type' }, [['qcm', 'Choix multiple'], ['vf', 'Vrai ou faux'], ['ascenseur', 'Ascenseur (entrée + niveau)']].map(function (o) { var x = h('option', { value: o[0], text: o[1] }); if (q && q.type === o[0]) x.selected = true; return x; }));
+    var e = CTX.etat, type = h('select', { 'aria-label': 'Type' }, [['qcm', 'Choix multiple'], ['vf', 'Vrai ou faux'], ['ascenseur', 'Mission du Parcours (entrée + niveau)']].map(function (o) { var x = h('option', { value: o[0], text: o[1] }); if (q && q.type === o[0]) x.selected = true; return x; }));
     var theme = h('select', { 'aria-label': 'Thème' }, Object.keys(THEMES).map(function (t) { var x = h('option', { value: t, text: THEMES[t] }); if ((q ? q.theme : 'divers') === t) x.selected = true; return x; }));
     var texte = h('textarea', { rows: '2', maxlength: '300', required: true }); texte.value = q ? q.texte : '';
     var choix = h('textarea', { rows: '4', maxlength: '600', placeholder: 'Une réponse par ligne (2 à 6)' }); choix.value = q && q.type === 'qcm' ? q.choix.join('\n') : '';

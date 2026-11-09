@@ -1,7 +1,7 @@
 /* Défi CHU · commun à tous les services de Cap NCHUG.
-   - Défi du jour : les mêmes 5 questions pour tout le CHU ; seule la 1re réponse de chaque téléphone compte.
+   - Défi du jour : les mêmes 6 questions pour tout le CHU (dont 2 missions du Parcours) ; seule la 1re réponse de chaque téléphone compte.
    - Classement : % de bonnes réponses par service (classé à partir de 30 réponses dans la semaine), podium, général.
-   - Parcours : vue du ciel (bâtiment) → rue Caraïbes (N° d'entrée) → ascenseur (niveau) → arrivée.
+   - Parcours : vue du ciel (bâtiment) → rue Caraïbes (N° d'entrée) → ascenseur (niveau) → arrivée ; jeu séparé activable par les gestionnaires.
    - Gestion (super-admin et créateurs ; l'administrateur quand le service est seul) : phase de test, questions, vue du ciel.
    Aucune question ni aucun plan dans ce fichier : tout vient du moteur (Google Sheets privé). */
 (function () {
@@ -54,11 +54,11 @@
     init();
     var m = memoire(), j = m.jours[A.aujourdhui()], fait = j && j.fin;
     return h('section', { class: 'section defi-carte' + (fait ? ' defi-carte--fait' : '') },
-      h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' }), h('span', { class: 'section__note', text: fait ? 'Fait ✓ · ' + j.bonnes + ' / ' + j.total : '5 questions · tout le CHU' })),
+      h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' }), h('span', { class: 'section__note', text: fait ? 'Fait ✓ · ' + j.bonnes + ' / ' + j.total : '6 questions · tout le CHU' })),
       h('p', { class: 'section__note', text: fait ? 'Votre service compte sur vous demain aussi ! Le classement se joue en % de bonnes réponses.' : 'Les mêmes questions pour tous les services. Chaque réponse compte pour votre service.' }),
       h('div', { class: 'gps-boutons' },
         h('button', { class: fait ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: function () { RETOUR = function () { A.ecranAccueil(); }; fait ? classement() : jour(); }, text: fait ? 'Voir le classement' : 'Relever le défi' }),
-        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { ouvrir(function () { A.ecranAccueil(); }); }, text: 'Parcours et classement' })));
+        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { ouvrir(function () { A.ecranAccueil(); }); }, text: m.parcours ? 'Parcours et classement' : 'Classement' })));
   }
 
   /* ---------- Rubrique Défi CHU ---------- */
@@ -70,11 +70,11 @@
       bandeauTest(m.mode),
       h('div', { class: 'quiz-themes' },
         h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🎯', onclick: function () { RETOUR = function () { ouvrir(); }; jour(); } },
-          h('b', { text: 'Défi du jour' }), h('span', { text: fait ? 'Fait ✓ ' + j.bonnes + ' / ' + j.total + ' · revenez demain' : '5 questions communes à tout le CHU' })),
+          h('b', { text: 'Défi du jour' }), h('span', { text: fait ? 'Fait ✓ ' + j.bonnes + ' / ' + j.total + ' · revenez demain' : '6 questions communes à tout le CHU, dont 2 missions sur la vue du ciel' })),
         h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏆', onclick: function () { RETOUR = function () { ouvrir(); }; classement(); } },
           h('b', { text: 'Classement des services' }), h('span', { text: 'Podium de la semaine et classement général, en % de bonnes réponses' })),
-        h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🧭', onclick: function () { RETOUR = function () { ouvrir(); }; parcours(); } },
-          h('b', { text: 'Parcours' }), h('span', { text: 'Du parking au bon service : bâtiment, entrée de la rue Caraïbes, étage' + (m.recordParcours != null ? ' · record : ' + m.recordParcours + ' erreur' + (m.recordParcours > 1 ? 's' : '') : '') }))),
+        m.parcours ? h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🧭', onclick: function () { RETOUR = function () { ouvrir(); }; parcours(); } },
+          h('b', { text: 'Parcours' }), h('span', { text: 'Du parking au bon service : bâtiment, entrée de la rue Caraïbes, étage' + (m.recordParcours != null ? ' · record : ' + m.recordParcours + ' erreur' + (m.recordParcours > 1 ? 's' : '') : '') })) : null),
       h('p', { class: 'section__note', text: 'Règle du jeu : seule la première réponse de chaque téléphone compte. Un service est classé à partir de 30 réponses dans la semaine. Aucun nom n\'est enregistré : seuls les totaux par service.' })), retour);
   }
 
@@ -83,7 +83,7 @@
     init(); A.definirEcran(null);
     chargement('Défi du jour');
     appeler('defi_jour').then(function (d) {
-      var m = memoire(); m.mode = d.mode; sauver(m);
+      var m = memoire(); m.mode = d.mode; m.parcours = !!d.parcours; sauver(m);
       if (!d.questions.length) return page('Défi du jour', null, h('div', null, bandeauTest(d.mode), h('p', { class: 'vide', text: 'Pas encore de questions dans le Défi CHU. Revenez bientôt !' })));
       var deja = m.jours[d.date];
       if (deja && deja.fin) return finJour(d, deja);
@@ -104,6 +104,7 @@
     suivante();
   }
   function question(d, q, i, note, suite) {
+    if (q.type === 'ascenseur') return missionDuJour(d, q, i, note, suite);
     var retour = h('div', { class: 'quiz-retour', 'aria-live': 'polite' }), envoye = false;
     var corps = h('div', { class: 'quiz-question' },
       h('div', { class: 'quiz-progression' }, h('span', { text: 'Question ' + (i + 1) + ' / ' + d.questions.length }), h('span', { class: 'etiquette', text: 'Défi CHU' })),
@@ -143,31 +144,34 @@
         boutons.appendChild(b);
       });
       corps.appendChild(boutons);
-    } else if (q.type === 'ascenseur') { // 1. l'entrée, 2. le niveau
-      var choixE = null, choixN = null;
-      var valider = h('button', { class: 'bouton', type: 'button', disabled: true, text: 'Valider', onclick: function () {
-        if (!choixE || choixN == null) return;
-        valider.disabled = true; corps.querySelectorAll('.defi-asc button').forEach(function (x) { x.disabled = true; });
-        envoyer({ entree: choixE, niveau: choixN }, function (r) {
-          corps.querySelectorAll('[data-e]').forEach(function (x) { if (x.getAttribute('data-e') === r.bonne.entree) x.classList.add('quiz-choix__btn--ok'); else if (x.getAttribute('data-e') === choixE) x.classList.add('quiz-choix__btn--ko'); });
-          corps.querySelectorAll('[data-n]').forEach(function (x) { if (x.getAttribute('data-n') === r.bonne.niveau) x.classList.add('defi-bouton-niv--ok'); else if (x.getAttribute('data-n') === choixN) x.classList.add('defi-bouton-niv--ko'); });
-          valider.hidden = true;
-        });
-      } });
-      function maj() { valider.disabled = !(choixE && choixN != null); }
-      var entrees = h('div', { class: 'quiz-choix defi-asc' }, q.entrees.map(function (e) {
-        return h('button', { type: 'button', class: 'quiz-choix__btn', 'data-e': e.code, onclick: function (ev) {
-          choixE = e.code; entrees.querySelectorAll('button').forEach(function (x) { x.classList.remove('quiz-choix__btn--choisi'); }); ev.currentTarget.classList.add('quiz-choix__btn--choisi'); maj();
-        } }, h('span', { text: e.libelle }));
-      }));
-      var niveaux = panneauAscenseur(q.niveaux, function (n, b) { choixN = n; niveaux.querySelectorAll('button').forEach(function (x) { x.classList.remove('defi-bouton-niv--choisi'); }); b.classList.add('defi-bouton-niv--choisi'); maj(); });
-      niveaux.classList.add('defi-asc');
-      corps.appendChild(h('p', { class: 'defi-etape', text: '1. Par quelle entrée ?' })); corps.appendChild(entrees);
-      corps.appendChild(h('p', { class: 'defi-etape', text: '2. Quel niveau dans l\'ascenseur ?' })); corps.appendChild(niveaux);
-      corps.appendChild(valider);
     }
     corps.appendChild(retour);
     page('Défi du jour', null, h('div', null, bandeauTest(d.mode), corps), RETOUR);
+  }
+  /* Mission du Parcours dans le Défi du jour : vue du ciel → rue → ascenseur → arrivée ; bonne dès qu'elle est terminée */
+  function missionDuJour(d, q, i, note, suite) {
+    var mi = q.mission && d.site ? preparerMission(q.mission, d.site) : null, envoye = false, fait = false;
+    function terminer(err, bouton, zone) {
+      if (fait) return suite();
+      if (envoye) return; envoye = true; bouton.disabled = true; zone.textContent = 'Envoi…';
+      appeler('defi_repondre', { donnees: { id: q.id, reponse: { termine: true }, appareil: appareil() } }).then(function (r) {
+        note(r); fait = true; envoye = false;
+        if (r.compte) return suite();
+        zone.textContent = 'Ce téléphone avait déjà terminé cette mission : elle ne compte pas une seconde fois.'; bouton.disabled = false;
+      }).catch(function (e) {
+        envoye = false; bouton.disabled = false;
+        if (erreurSession(e)) return;
+        if (e && e.code === 'defi_perime') return jour(); // minuit est passé : nouveau défi
+        zone.textContent = e && e.code === 'reseau' ? 'Mission non envoyée : vérifiez la connexion puis touchez à nouveau le bouton.' : A.message(e && e.code);
+      });
+    }
+    if (!mi) { // vue du ciel incomplète : on ne bloque pas le défi
+      var zone = h('p', { class: 'section__note', 'aria-live': 'polite' });
+      var bouton = h('button', { class: 'bouton', type: 'button', onclick: function () { terminer(0, bouton, zone); }, text: i + 1 < d.questions.length ? 'Question suivante' : 'Voir le résultat' });
+      return page('Défi du jour', 'Question ' + (i + 1) + ' / ' + d.questions.length, h('div', null, bandeauTest(d.mode),
+        h('p', { class: 'vide', text: 'Mission : ' + ((q.mission || {}).destination || q.texte) + '. La vue du ciel n\'est pas encore prête : cette mission est comptée comme faite.' }), bouton, zone), RETOUR);
+    }
+    mission(d, mi, i, d.questions.length, null, { titre: 'Défi du jour', sous: 'Question ' + (i + 1) + ' / ' + d.questions.length + ' · mission', terminer: terminer });
   }
   function texteBonne(q, b) {
     if (q.type === 'qcm') return q.choix[b];
@@ -183,7 +187,7 @@
         h('p', { text: parfait ? 'Sans faute : votre service vous dit merci !' : 'Chaque réponse compte pour le % de votre service. Nouveau défi demain !' }),
         h('div', { class: 'quiz-actions' },
           h('button', { class: 'bouton', type: 'button', onclick: function () { classement(); }, text: 'Voir le classement' }),
-          h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { RETOUR = function () { ouvrir(); }; parcours(); }, text: 'Jouer au Parcours' })))), RETOUR);
+          memoire().parcours ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { RETOUR = function () { ouvrir(); }; parcours(); }, text: 'Jouer au Parcours' }) : null))), RETOUR);
   }
 
   /* ---------- Classement ---------- */
@@ -191,7 +195,7 @@
     init(); A.definirEcran(null);
     chargement('Classement');
     appeler('defi_classement').then(function (c) {
-      var m = memoire(); m.mode = c.mode; sauver(m);
+      var m = memoire(); m.mode = c.mode; m.parcours = !!c.parcours; sauver(m);
       dessinerClassement(c, onglet || 'semaine');
     }).catch(function (e) { echec('Classement', e, function () { classement(onglet); }); });
   }
@@ -274,12 +278,15 @@
     init(); A.definirEcran(null);
     chargement('Parcours');
     appeler('defi_parcours').then(function (d) {
-      var m = memoire(); m.mode = d.mode; sauver(m);
+      var m = memoire(); m.mode = d.mode; m.parcours = true; sauver(m);
       var jouables = d.missions.map(function (x) { return preparerMission(x, d.site); }).filter(Boolean);
       if (!jouables.length || !d.site.batiments.length) return page('Parcours', null, h('div', null, bandeauTest(d.mode), h('p', { class: 'vide', text: 'Le Parcours n\'a pas encore de missions ou de vue du ciel. Revenez bientôt !' })));
       jouables.sort(function () { return Math.random() - 0.5; });
       partie(d, jouables.slice(0, 5));
-    }).catch(function (e) { echec('Parcours', e, parcours); });
+    }).catch(function (e) {
+      if (e && e.code === 'parcours_inactif') { var m = memoire(); m.parcours = false; sauver(m); }
+      echec('Parcours', e, parcours);
+    });
   }
   function preparerMission(x, site) { // bâtiment visé, entrées acceptées
     var cible = String(x.entree || ''), bat, portes;
@@ -296,14 +303,16 @@
     }
     suivante();
   }
-  function mission(d, mi, n, total, fin) {
+  /* o (facultatif, Défi du jour) : { titre, sous, terminer(erreurs, bouton, zoneMessage) } */
+  function mission(d, mi, n, total, fin, o) {
+    o = o || {};
     var etape = 0, err = 0;
     var aide = h('p', { class: 'defi-aide', 'aria-live': 'polite' }), scene = h('div', { class: 'defi-scene' });
     var puces = h('div', { class: 'defi-puces', 'aria-hidden': 'true' });
     var bulle = h('div', { class: 'defi-mission' });
     function cadre() {
       puces.replaceChildren.apply(puces, ETAPES.map(function (t, k) { return h('span', { class: 'defi-puce' + (k === etape ? ' defi-puce--on' : k < etape ? ' defi-puce--fait' : ''), text: (k < etape ? '✓ ' : '') + t }); }));
-      page('Parcours', 'Mission ' + (n + 1) + ' / ' + total, h('div', null, bandeauTest(d.mode), bulle, scene, aide, puces), RETOUR);
+      page(o.titre || 'Parcours', o.sous || 'Mission ' + (n + 1) + ' / ' + total, h('div', null, bandeauTest(d.mode), bulle, scene, aide, puces), RETOUR);
     }
     function rate(texte) { err++; aide.textContent = texte; aide.classList.remove('defi-aide--ko'); void aide.offsetWidth; aide.classList.add('defi-aide--ko'); if (window.ReaFun) window.ReaFun.reponse(false); }
     function reussi(suite) { if (window.ReaFun) window.ReaFun.reponse(true); aide.classList.remove('defi-aide--ko'); etape++; suite(); }
@@ -354,10 +363,14 @@
     // 4. Arrivée
     function arrivee() {
       remplir(bulle, h('b', { text: err ? 'Vous y êtes !' : 'Bravo, vous y êtes !' }), h('span', { text: err ? err + ' erreur' + (err > 1 ? 's' : '') + ' pour cette mission.' : 'Parcours sans erreur.' }));
+      var zone = h('p', { class: 'section__note', 'aria-live': 'polite' });
+      var bouton = h('button', { class: 'bouton', type: 'button', onclick: function () { if (o.terminer) o.terminer(err, bouton, zone); else fin(err); },
+        text: n + 1 < total ? (o.terminer ? 'Question suivante' : 'Mission suivante') : 'Voir le résultat' });
       remplir(scene, h('div', { class: 'defi-arrivee' },
         h('p', { class: 'defi-arrivee__panneau' }, h('span', { text: libelleEntree(mi.portes.length === 1 ? mi.portes[0] : mi.bat) + ' · niveau ' + mi.niveau }), h('b', { text: mi.destination })),
         mi.explication ? h('p', { class: 'quiz-explication', text: mi.explication }) : null,
-        h('button', { class: 'bouton', type: 'button', onclick: function () { fin(err); }, text: n + 1 < total ? 'Mission suivante' : 'Voir le résultat' })));
+        o.terminer ? h('p', { class: 'section__note', text: 'Mission réussie : elle compte comme une bonne réponse pour votre service.' }) : null,
+        bouton, zone));
       aide.textContent = '';
       if (!err && window.ReaFun) setTimeout(function () { window.ReaFun.succes(); }, 150);
       cadre();
