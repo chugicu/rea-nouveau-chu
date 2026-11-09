@@ -10,7 +10,7 @@
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
   var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1, service_rattacher: 1,
-    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1 }; // gestion du Défi CHU : moteur commun
+    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1 }; // gestion du Défi CHU : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
     visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_gestion: 1 };
@@ -105,12 +105,14 @@
   function demoCodes(action, d) {
     if (!/^demo\.admin/.test(d.jeton || '')) throw new ErreurApi('non_autorise');
     var refs = demoLire('referents', [{ nom: 'Référent démo', actif: true, modifie: '2026-11-01' }]);
-    function etat() { return { ok: true, referents: refs, codeAgents: true }; }
+    var cpt = demoLire('compteurs', { quiz: 1240, jeux: 380 });
+    function etat() { return { ok: true, referents: refs, codeAgents: true, compteurs: cpt }; }
     if (action === 'codes_etat') return etat();
     var code = null;
     if (d.quoi === 'agents') code = 'DEMO'; else if (d.quoi === 'admin') code = 'ADMDEMO';
     else if (d.quoi === 'referent') { refs = refs.filter(function (r) { return r.nom !== d.nom; }); refs.push({ nom: d.nom, actif: true, modifie: new Date().toISOString().slice(0, 10) }); code = 'REFDEMO'; }
     else if (d.quoi === 'referent_off') refs.forEach(function (r) { if (r.nom === d.nom) r.actif = false; });
+    else if (d.quoi === 'raz_quiz' || d.quoi === 'raz_jeux') { cpt[d.quoi === 'raz_quiz' ? 'quiz' : 'jeux'] = 0; demoEcrire('compteurs', cpt); }
     demoEcrire('referents', refs);
     return { ok: true, code: code, etat: etat() };
   }
@@ -340,6 +342,7 @@
         sauver(); return etat();
       }
       case 'defi_site': B.site = d.site; sauver(); return etat();
+      case 'defi_raz': B.scores[B.mode] = [0, 0]; B.vus = {}; if (B.mode === 'officiel') B.debut = aujourd; sauver(); return etat();
       case 'defi_importer': {
         var aj = 0, ign = 0, ids = {}; B.questions.forEach(function (q) { ids[q.id] = 1; });
         (d.donnees.questions || []).forEach(function (q) { if (ids[q.id] || !valide(q)) { ign++; return; } ids[q.id] = 1; B.questions.push(Object.assign({}, q, { statut: q.statut || 'à valider' })); aj++; });

@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.2.0',
+  version: '2.2.1',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -1726,7 +1726,7 @@ function json_(obj) {
 function codeNeuf_() { var c; do { c = genererCode_(8); } while (codeDejaUtilise_(empreinte_(c))); return c; }
 function codesEtat_() {
   return { ok: true, referents: lireReferents_().map(function (r) { return { nom: r.nom, actif: !!r.actif, modifie: r.modifie || '' }; }),
-    codeAgents: !!props_().getProperty('CODE_SERVICE') };
+    codeAgents: !!props_().getProperty('CODE_SERVICE'), compteurs: { quiz: quizCompteur_(), jeux: Number(props_().getProperty('jeux_points') || 0) } };
 }
 function codesChanger_(session, quoi, nom) {
   var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
@@ -1741,6 +1741,8 @@ function codesChanger_(session, quoi, nom) {
       else { var t = false; liste.forEach(function (r) { if (r.nom === nom) { r.actif = false; r.modifie = formaterDate_(new Date()); t = true; } }); if (!t) throw erreurApp_('introuvable'); }
       ecrireReferents_(liste);
     } else if (quoi === 'deconnecter') { p.setProperty('VERSION_JETONS', String(versionJetons_() + 1)); }
+    else if (quoi === 'raz_quiz') p.setProperty('quiz_total', '0'); // compteur « Défi d'équipe » du quiz
+    else if (quoi === 'raz_jeux') p.setProperty('jeux_points', '0'); // points des jeux (jauge d'élan)
     else throw erreurApp_('requete_invalide');
     return { ok: true, code: code, etat: codesEtat_() };
   } finally { verrou.releaseLock(); }
@@ -1888,7 +1890,8 @@ var ROUTES_DEFI_GESTION = {
   defi_question: function (req) { return defiQuestion_(gestionDefi_(req), req.id, req.donnees || {}); },
   defi_statut: function (req) { gestionDefi_(req); return defiStatut_(req.ids, req.statut); },
   defi_site: function (req) { gestionDefi_(req); return defiSiteEnregistrer_(req.site); },
-  defi_importer: function (req) { return defiImporter_(gestionDefi_(req), req.donnees || {}); }
+  defi_importer: function (req) { return defiImporter_(gestionDefi_(req), req.donnees || {}); },
+  defi_raz: function (req) { gestionDefi_(req); return defiRaz_(); }
 };
 /* Qui gère le Défi : le super-admin et les créateurs (Cap NCHUG) ; l'administrateur quand le service est seul. */
 function gestionDefi_(req) {
@@ -2079,6 +2082,16 @@ function defiMode_(mode) {
   }
   CacheService.getScriptCache().removeAll(['defi|classement|test', 'defi|classement|officiel']);
   return defiGestionEtat_();
+}
+/* Remise à zéro des scores du Défi (phase en cours) : classements de la semaine et général repartent de zéro */
+function defiRaz_() {
+  var mode = defiModeActuel_(), p = PropertiesService.getScriptProperties(), tout = p.getProperties(), n = 0;
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try { Object.keys(tout).forEach(function (k) { if (/^DEFI_[SC]\|/.test(k) && k.split('|').indexOf(mode) > 0) { p.deleteProperty(k); n++; } }); }
+  finally { verrou.releaseLock(); }
+  if (mode === 'officiel') PROPS_.setProperty('DEFI_DEBUT', aujourdhuiDefi_());
+  CacheService.getScriptCache().removeAll(['defi|classement|test', 'defi|classement|officiel']);
+  var r = defiGestionEtat_(); r.remisAZero = n; return r;
 }
 function ligneQuestion_(q, par) {
   return [q.id, q.theme, q.type, q.texte, q.type === 'qcm' ? q.choix.join('\n') : '',

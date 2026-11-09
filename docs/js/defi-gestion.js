@@ -58,7 +58,12 @@
         if (!confirm(test ? 'Ouvrir officiellement le Défi CHU ?\n\nSeules les ' + n['validée'] + ' questions validées seront jouées et le classement repartira de zéro.' : 'Revenir en phase de test ?\n\nLes questions à valider seront de nouveau jouées et les scores ne compteront plus pour le classement officiel.')) return;
         ev.currentTarget.disabled = true;
         apres(appeler('defi_mode', { mode: test ? 'officiel' : 'test' }), test ? 'Défi ouvert officiellement : bonne chance à tous les services !' : 'Retour en phase de test.');
-      }, text: test ? 'Ouvrir officiellement le Défi' : 'Revenir en phase de test' }));
+      }, text: test ? 'Ouvrir officiellement le Défi' : 'Revenir en phase de test' }),
+      h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', onclick: function (ev) {
+        if (!confirm('Remettre à zéro les scores du Défi' + (test ? ' (phase de test)' : '') + ' pour tous les services ?\n\nLe classement de la semaine et le classement général repartent de zéro. Les questions ne changent pas.')) return;
+        ev.currentTarget.disabled = true;
+        apres(appeler('defi_raz'), 'Scores du Défi remis à zéro.');
+      }, text: 'Remettre les scores à zéro' }));
   }
   function compter(qs) { var n = { 'à valider': 0, 'validée': 0, 'retirée': 0 }; qs.forEach(function (q) { n[q.statut]++; }); return n; }
 
