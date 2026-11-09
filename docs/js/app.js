@@ -62,14 +62,14 @@
 
   var MODULES = [
     // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
-    { id: 'plan', c: '#8e44c4', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
-    { id: 'visites', c: '#13a3a0', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
-    { id: 'newsletter', c: '#223b80', e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Les lettres d\'information du service et du CHU', etape: 3, ouvrir: function () { ecranNewsletters(); } },
-    { id: 'souvenirs', c: '#f5508f', e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
-    { id: 'jeux', c: '#ff7a59', e: '🎮', t: 2, nom: 'Quiz et jeux', desc: 'Quiz, concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
-    { id: 'simulations', c: '#048e39', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
-    { id: 'docs', c: '#5c2e9e', e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, liens utiles, questions-réponses', etape: 6, ouvrir: function () { window.ReaCommuns.documents(); } },
-    { id: 'pret', c: '#1f6fa8', e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
+    { id: 'plan', c: '#223b80', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
+    { id: 'visites', c: '#048e39', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
+    { id: 'newsletter', c: '#40a8df', sombre: true, e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Les lettres d\'information du service et du CHU', etape: 3, ouvrir: function () { ecranNewsletters(); } },
+    { id: 'souvenirs', c: '#95c127', sombre: true, e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
+    { id: 'jeux', c: '#048e39', e: '🎮', t: 2, nom: 'Quiz et jeux', desc: 'Quiz, concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
+    { id: 'simulations', c: '#223b80', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
+    { id: 'docs', c: '#95c127', sombre: true, e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, liens utiles, questions-réponses', etape: 6, ouvrir: function () { window.ReaCommuns.documents(); } },
+    { id: 'pret', c: '#40a8df', sombre: true, e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
   ];
 
   var BADGES = [
@@ -347,11 +347,11 @@
     var rub = d && d.rubriques; // lot 2 : rubriques choisies par l'administrateur (null = toutes)
     var liste = MODULES.filter(function (m) { return !rub || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
     var commun = !!(window.ReaCap && window.ReaCap.enCommun());
-    if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#13a3a0', e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
-    if (role === 'admin' && window.ReaCap && !commun) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
+    if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#40a8df', sombre: true, e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
+    if (role === 'admin' && window.ReaCap && !commun) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
     // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
-    if (role === 'admin' && !Api.multi && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#c98a00', e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
-    else if (role !== 'agent' && !commun && !rub) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
+    if (role === 'admin' && !Api.multi && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#95c127', sombre: true, e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
+    else if (role !== 'agent' && !commun && !rub) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, liste.map(function (m) {

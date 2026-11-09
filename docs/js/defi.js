@@ -262,7 +262,7 @@
       svg.appendChild(g);
     });
     if (o.ici) { // « vous êtes ici » : au bout de la rue, côté parking visiteurs
-      svg.appendChild(s('circle', { cx: 160, cy: 398, r: 8, fill: '#ffd34d', stroke: '#223b80', 'stroke-width': 3 }));
+      svg.appendChild(s('circle', { cx: 160, cy: 398, r: 8, fill: '#95c127', stroke: '#223b80', 'stroke-width': 3 }));
       svg.appendChild(s('text', { x: 172, y: 402, 'font-size': 12, 'font-weight': 700, fill: '#223b80' }, 'vous êtes ici'));
     }
     return svg;

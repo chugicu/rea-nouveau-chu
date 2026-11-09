@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var calme = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var COULEURS = ['#ffd34d', '#ff7a59', '#f5508f', '#58cc02', '#8e44c4', '#40a8df', '#ffffff'];
+  var COULEURS = ['#223b80', '#40a8df', '#048e39', '#95c127', '#c9e8fb', '#e7f0d1', '#ffffff']; // charte CHU
 
   function confettis(force) {
     if (calme) return;
