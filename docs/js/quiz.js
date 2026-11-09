@@ -261,7 +261,17 @@
     });
   }
   // Écran « Quiz » (badges, défi d'équipe, questions des référents), ouvert depuis « Quiz et jeux »
-  function ouvrir(depuis) { HAUT = depuis || HAUT || window.ReaApp.ecranAccueil; RETOUR = null; pret('Quiz', HAUT, function () { accueilQuiz(); }); }
+  function ouvrir(depuis) { HAUT = depuis || HAUT || window.ReaApp.ecranAccueil; RETOUR = null; RELIRE = false; pret('Quiz', HAUT, function () { accueilQuiz(); }); }
+  // Référents et administrateur : relire et valider les questions (les brouillons d'abord pour l'administrateur)
+  var RELIRE = false;
+  function relire(depuis) {
+    HAUT = depuis || HAUT || window.ReaApp.ecranAccueil; RETOUR = null; RELIRE = true;
+    pret('Questions du quiz', HAUT, function () {
+      if (!CTX.peutGerer) return accueilQuiz();
+      var b = CTX.ecrites.filter(function (w) { return w.statut === 'brouillon'; }).length, r = CTX.ecrites.filter(function (w) { return w.aReverifier && w.statut === 'publiée'; }).length;
+      gestion(null, CTX.admin && b ? 'brouillon' : r ? 'reverifier' : 'tous');
+    });
+  }
   // Une série d'un thème, directement
   var THEMES = {
     plan: { nom: 'Plan et équipements', filtre: function (q) { return q.theme === 'plan' && !q.sous; } },
@@ -727,7 +737,7 @@
       A.Api.appeler('quiz_statut', { jeton: CTX.session.jeton, ids: ids, statut: statut }).then(recharger).then(function () { gestion(msg, filtre); })
         .catch(function (e) { bouton.disabled = false; A.alerteDouce(bouton.parentNode, A.message(e.code)); });
     }
-    page('Questions du quiz', 'Référents', zone, function () { accueilQuiz(); });
+    page('Questions du quiz', 'Référents', zone, function () { if (RELIRE) { RELIRE = false; (HAUT || A.ecranAccueil)(); } else accueilQuiz(); });
     dessiner();
   }
   function nomsCibles(ids) {
@@ -810,5 +820,5 @@
     dessinerTypes(); dessinerZone();
   }
 
-  window.ReaQuiz = { ouvrir: ouvrir, theme: theme, jour: jour, jeu: jeu, records: records, carteAccueil: carteAccueil, _etat: function () { return CTX; } };
+  window.ReaQuiz = { ouvrir: ouvrir, relire: relire, theme: theme, jour: jour, jeu: jeu, records: records, carteAccueil: carteAccueil, _etat: function () { return CTX; } };
 })();

@@ -164,7 +164,9 @@
         t('plan', '🧭', 'Plan et équipements', 'Où se trouve… ? Sur le plan ou en QCM'),
         t('urgences', '🚨', 'Urgences et sécurité', 'Chariots d\'urgence, sécurité, réflexes'),
         t('couleurs', '🎨', 'Couleurs des unités', 'Reconnaître chaque unité à sa couleur'),
-        h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏅', onclick: function () { window.ReaQuiz.ouvrir(hub); } }, h('b', { text: 'Badges et défi d\'équipe' }), h('span', { text: 'Vos badges du quiz, le compteur de l\'équipe' }))));
+        h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🏅', onclick: function () { window.ReaQuiz.ouvrir(hub); } }, h('b', { text: 'Badges et défi d\'équipe' }), h('span', { text: 'Vos badges du quiz, le compteur de l\'équipe' }))),
+      (session() || {}).role && session().role !== 'agent' && window.ReaQuiz.relire ? h('button', { type: 'button', class: 'bouton bouton--discret quiz-relire', onclick: function () { window.ReaQuiz.relire(hub); },
+        text: session().role === 'admin' ? '✍️ Relire et valider les questions du quiz' : '✍️ Relire et rédiger les questions du quiz' }) : null);
   }
   function hub() {
     init();

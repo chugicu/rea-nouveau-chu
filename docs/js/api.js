@@ -21,7 +21,7 @@
 
   function adresse(action) {
     if (!MULTI) return cfg.API_URL;
-    if (SERVICE && SERVICE.api && !ACTIONS_ANNUAIRE[action]) return SERVICE.api; // service sur son propre moteur (la réa au début)
+    if (SERVICE && SERVICE.api && (!ACTIONS_ANNUAIRE[action] || /^defi_/.test(action))) return SERVICE.api; // service sur son propre moteur (la réa au début), Défi compris
     return cfg.CAP_URL;
   }
   function appeler(action, donnees) {

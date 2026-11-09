@@ -513,3 +513,4 @@ polyline.dessin-trace { fill: none; }
 .dessin .champ input, .dessin .champ select, .dessin-unite input[type=text], .defi-gestion .champ input, .defi-gestion .champ select, .defi-filtres select, .defi-filtres input, .dessin-panneau select {
   width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid var(--trait); border-radius: 12px; background: var(--surface-2);
   color: var(--texte); font: inherit; font-size: 1rem; letter-spacing: normal; text-transform: none; min-height: 44px; }
+.quiz-relire { width: 100%; margin-top: 14px; }
