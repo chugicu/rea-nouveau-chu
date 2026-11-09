@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var A, h, Api, O;
-  var THEMES = { chiffres: 'Chiffres clés', histoire: 'Histoire', rue: 'Rue Caraïbes', ascenseur: 'Ascenseur', ou: 'Où est… ?', voisins: 'Voisins', services: 'Services et lits', plateau: 'Plateau technique', consultations: 'Consultations', divers: 'Divers' };
+  var THEMES = { chiffres: 'Chiffres clés', histoire: 'Histoire', rue: 'Rue Caraïbes', ascenseur: 'Ascenseur', ou: 'Où est… ?', voisins: 'Voisins', services: 'Services et lits', plateau: 'Plateau technique', consultations: 'Consultations', calendrier: 'Transfert : calendrier', etiquetage: 'Transfert : trier et étiqueter', cartons: 'Transfert : cartons et mobilier', regles: 'Transfert : règles à retenir', jourj: 'Transfert : jour J et rôles', divers: 'Divers' };
   var STATUTS = { 'à valider': 'À valider', 'validée': 'Validée', 'retirée': 'Retirée' };
   var CTX = null; // { jeton, retour, role, etat, filtre, nb }
 
