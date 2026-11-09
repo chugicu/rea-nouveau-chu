@@ -49,7 +49,8 @@
   function listeServices() { // services du moteur commun + services sur leur propre moteur (config.js)
     var ext = Api.externes.map(function (s) { return { id: s.id, nom: s.nom, api: s.api }; });
     return Api.appeler('services').then(function (r) {
-      var l = ext.concat(r.services.filter(function (s) { return !ext.some(function (x) { return x.id === s.id; }); }));
+      // un service présent dans l'annuaire l'emporte sur son ancien moteur (config.js) : c'est qu'il a été rattaché
+      var l = ext.filter(function (x) { return !r.services.some(function (s) { return s.id === x.id; }); }).concat(r.services);
       ecrire(CLE_LISTE, l); return l;
     }, function (e) { var c = lire(CLE_LISTE); if (c && c.length) return c; if (ext.length) return ext; throw e; });
   }
@@ -113,6 +114,7 @@
       return listeServices().then(function (l) {
         var s = l.filter(function (x) { return x.id === historique(); })[0];
         if (!s) return ecranServices();
+        if (s.api) { choisir(s); return suite(); } // la réa garde encore son moteur : la session reste valable
         A.stock.effacer(A.CLE.session); choisir(s); A.ecranConnexion('Votre appli fait maintenant partie de Cap NCHUG : saisissez votre code habituel.');
       }).catch(function () { ecranServices(); });
     }
@@ -338,6 +340,17 @@
   }
 
   // Service fermé par le super-administrateur : retour à la liste
+  // Service rattaché au moteur commun alors que le téléphone pointait encore sur son ancien moteur
+  window.addEventListener('rea:service-deplace', function () {
+    init(); var cour = serviceCourant(); if (!cour) return;
+    ecrire(CLE_LISTE, null);
+    listeServices().then(function (l) {
+      var s = l.filter(function (x) { return x.id === cour.id && !x.api; })[0];
+      if (!s) return ecranServices(A.message('service_deplace'));
+      A.stock.effacer(A.CLE.session); var x = { id: s.id, nom: s.nom, api: null }; ecrire(CLE_SERVICE, x); Api.choisirService(x);
+      A.ecranConnexion('Votre service a rejoint Cap NCHUG : saisissez votre code habituel.');
+    }).catch(function () { ecranServices(A.message('service_deplace')); });
+  });
   window.addEventListener('rea:service-ferme', function () { init(); effacerDonneesLocales(); ecrire(CLE_SERVICE, null); Api.choisirService(null); ecranServices(A.message('service_inconnu')); });
 
   window.ReaCap = { enCommun: enCommun, bandeauCommun: bandeauCommun, demarrer: demarrer, ecranServices: ecranServices, changerService: changerService, serviceCourant: serviceCourant, ecranAnnuaire: ecranAnnuaire, ecranCodes: ecranCodes, lienService: lienService };

@@ -17,5 +17,12 @@
    };
    CAP_URL: '' (vide) = démonstration de Cap NCHUG (codes SUPDEMO, CREADEMO, puis DEMO / REFDEMO / ADMDEMO). */
 window.REA_CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxqk5SwM37-xiTwznTS0vaAmo9naC_MwyjjzID1ie_LTcnY713BZYIIpfAf0bb6IAug/exec'
+  // Moteur commun Cap NCHUG (annuaire), installé le 9 novembre 2026
+  CAP_URL: 'https://script.google.com/macros/s/AKfycbwPOAG1hmYUxNsGzxHu_C2dPPDCdQT0gapCJ2U_nOHDP6NDtBPCLduKeTQvfxLkT1y9/exec',
+  // La réa garde son propre moteur tant qu'elle n'est pas rattachée (partie R du guide) ; après le rattachement, retirer ce bloc
+  SERVICES_EXTERNES: [
+    { id: 'rea', nom: 'Réanimation – USC', api: 'https://script.google.com/macros/s/AKfycbxqk5SwM37-xiTwznTS0vaAmo9naC_MwyjjzID1ie_LTcnY713BZYIIpfAf0bb6IAug/exec' }
+  ],
+  // Les téléphones qui avaient déjà l'appli de la réa y retournent directement, sans choisir de service
+  SERVICE_HISTORIQUE: 'rea'
 };

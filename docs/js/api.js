@@ -31,6 +31,7 @@
     var corps = JSON.stringify(Object.assign({ action: action }, donnees));
     return essai(adresse(action), corps, action, 0).catch(function (e) {
       if (MULTI && e && e.code === 'service_inconnu') setTimeout(function () { window.dispatchEvent(new CustomEvent('rea:service-ferme')); }, 0);
+      if (MULTI && e && e.code === 'service_deplace' && SERVICE && SERVICE.api) setTimeout(function () { window.dispatchEvent(new CustomEvent('rea:service-deplace')); }, 0); // le service a rejoint le moteur commun
       throw e;
     });
   }
