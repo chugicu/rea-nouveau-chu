@@ -348,24 +348,27 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 3. À la première ouverture du plan, les modifications, les questions du quiz et les QR codes suivent leurs pièces. Le détail est noté dans l'onglet « Suivi du plan ».
 4. Une pièce qui n'existe plus est gardée comme « pièce ajoutée » et signalée dans la colonne « À vérifier » de l'onglet Pièces : rien n'est perdu.
 
-## Partie P – Cap NCHUG : tous les services dans la même appli (moteur 2.0.0)
+## Partie P – Cap NCHUG : installer l'appli commune à tous les services (dernier moteur)
 
 **Ce qui ne change pas pour la réa :** tant que `config.js` n'est pas modifié, l'appli reste celle de la réa. Mettez quand même à jour le moteur de la réa en 2.0.0 (même procédure que d'habitude : coller `Code.gs`, Nouvelle version) : l'administrateur peut désormais gérer les codes depuis l'appli (tuile ⚙️ Administration).
 
 **Installer le moteur commun Cap NCHUG (une seule fois, sur le compte Google dédié) :**
 1. Connecté au compte dédié, créez un Google Sheets vide nommé « Cap NCHUG – Annuaire ».
-2. Extensions › Apps Script : collez `Code.gs` et `appsscript.json` (mêmes fichiers que la réa), enregistrez.
+2. Extensions › Apps Script : collez le **dernier** `Code.gs` (le même que celui de la réa) et, dans Paramètres du projet, cochez « Afficher le fichier manifeste appsscript.json » puis collez `appsscript.json` ; enregistrez.
 3. Dans l'éditeur, choisissez la fonction `installerAnnuaire` et cliquez sur Exécuter ; acceptez les autorisations.
 4. Rouvrez le Google Sheets : menu « Cap NCHUG – Administration › Définir le code SUPER-ADMINISTRATEUR ».
 5. Déployer › Nouveau déploiement › Application Web (Exécuter en tant que : moi ; Accès : tout le monde). Copiez l'adresse en /exec.
-6. Dans `docs/js/config.js` sur GitHub, remplacez le bloc par le modèle indiqué en haut du fichier : `CAP_URL` = cette adresse, et la réa dans `SERVICES_EXTERNES` avec l'adresse de son moteur actuel.
+6. Envoyez cette adresse à Claude (ou modifiez vous-même `docs/js/config.js` sur GitHub avec le modèle indiqué en haut du fichier) :
+   - si la réa garde son moteur pour l'instant : `CAP_URL` = cette adresse, et la réa dans `SERVICES_EXTERNES` avec l'adresse de son moteur actuel ;
+   - si vous rattachez la réa tout de suite (partie R) : `CAP_URL` = cette adresse et `SERVICE_HISTORIQUE: 'rea'`.
+7. Ouvrez l'appli : la liste des services apparaît ; « Espace créateurs » en bas, avec votre code super-administrateur.
 
 **Ensuite, tout se fait dans l'appli :**
 - À l'ouverture, chacun choisit son service (retenu sur le téléphone), ou arrive par le lien / QR code de son service.
 - « Espace créateurs » (en bas de la liste des services) : votre code super-administrateur permet de nommer des admins créateurs (un code chacun, montré une fois), de créer un service en un clic, de fermer ou rouvrir un service, et de refaire un code admin perdu.
 - À la création d'un service, deux codes s'affichent une seule fois (administrateur, agents) avec le lien direct et le QR code du service. Un Google Sheets privé est créé pour le service dans le dossier « Cap NCHUG – Services (privé) » du compte dédié.
 - L'administrateur du service gère ses codes et ses référents dans l'appli (tuile ⚙️ Administration).
-- Les lots suivants ajoutent : la personnalisation (logo, rubriques, unités facultatives), l'import et le dessin du plan, les contenus pour tous les services, les éléments communs.
+- Chaque administrateur personnalise ensuite son service et prépare son plan (parties S et T) ; le Défi CHU se gère depuis l'Espace créateurs (partie Q).
 
 **Mises à jour :** un seul moteur pour tous les services : collez le nouveau `Code.gs` dans le projet de l'annuaire et faites « Nouvelle version », une fois.
 
