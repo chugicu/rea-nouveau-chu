@@ -91,6 +91,7 @@
     try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignoré */ }
     return m[1];
   }
+  function dateFr(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || '?'); }
   function historique() { // config.js : SERVICE_HISTORIQUE = 'rea'
     var id = (window.REA_CONFIG || {}).SERVICE_HISTORIQUE; if (!id) return null;
     try { return Object.keys(localStorage).some(function (k) { return /^rea\./.test(k) && !/^rea\.(demo|services-liste|cap-session)/.test(k); }) ? id : null; } catch (e) { return null; }
@@ -166,7 +167,7 @@
     var services = h('section', { class: 'section' }, h('div', { class: 'section__tete' }, h('h2', { text: 'Services (' + e.services.length + ')' })),
       e.services.length ? h('ul', { class: 'liste-simple cap-admin-liste' }, e.services.map(function (s) {
         return h('li', { class: s.actif ? '' : 'cap-inactif' },
-          h('div', { class: 'cap-ligne' }, h('b', { text: s.nom }), h('span', { class: 'section__note', text: (s.actif ? '' : 'Fermé · ') + 'créé le ' + (s.cree || '?') + (s.par ? ' par ' + s.par : '') })),
+          h('div', { class: 'cap-ligne' }, h('b', { text: s.nom }), h('span', { class: 'section__note', text: (s.actif ? '' : 'Fermé · ') + 'créé le ' + dateFr(s.cree) + (s.par ? ' par ' + s.par : '') })),
           h('div', { class: 'gps-boutons' },
             h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { annuaire(sess, null, h('div', { class: 'cap-cree' }, h('h3', { text: s.nom }), blocLien(s))); }, text: 'Lien et QR' }),
             h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Créer un nouveau code ADMINISTRATEUR pour « ' + s.nom + ' » ? L\'ancien ne marchera plus.')) action('service_code', { id: s.id, quoi: 'admin' }, function (r) { annuaire(sess, null, codeAffiche('Nouveau code ADMINISTRATEUR · ' + s.nom, r.code)); }); }, text: 'Code admin perdu' }),
@@ -241,7 +242,7 @@
           h('div', null, h('b', { text: String(sansPlan) }), h('span', { text: 'sans plan' })),
           h('div', null, h('b', { text: String(defi) }), h('span', { text: 'classés au Défi cette semaine' }))),
         h('ul', { class: 'liste-simple cap-tableau' }, r.services.map(function (x) {
-          return h('li', { class: x.actif ? '' : 'cap-inactif' }, h('div', { class: 'cap-ligne' }, h('b', { text: x.nom }), h('span', { class: 'section__note', text: x.actif ? 'créé le ' + (x.cree || '?') : 'Fermé' })),
+          return h('li', { class: x.actif ? '' : 'cap-inactif' }, h('div', { class: 'cap-ligne' }, h('b', { text: x.nom }), h('span', { class: 'section__note', text: x.actif ? 'créé le ' + dateFr(x.cree) : 'Fermé' })),
             h('p', { class: 'section__note', text: [x.plan === true ? '✅ Plan installé' : x.plan === false ? '⚠️ Pas de plan' : 'Plan : ?', x.referents + ' référent' + (x.referents > 1 ? 's' : ''), 'Rubriques : ' + (x.rubriques || '?'),
               x.defi ? 'Défi : ' + x.defi.reponses + ' réponses, ' + String(x.defi.pourcent).replace('.', ',') + ' %' : 'Défi : aucune réponse cette semaine'].join(' · ') }));
         })),
