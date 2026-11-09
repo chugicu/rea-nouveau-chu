@@ -10,10 +10,10 @@
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
   var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1, service_rattacher: 1,
-    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1 }; // gestion du Défi CHU : moteur commun
+    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, commun_jeton: 1, tableau_bord: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
-    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_gestion: 1 };
+    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1 };
   var ATTENTES = [1200, 2500, 5000]; // nouveaux essais en cas d'affluence
 
   function ErreurApi(code) { this.code = code; this.message = code; }
@@ -121,6 +121,7 @@
       setTimeout(function () {
         try {
           if (/^defi_/.test(action)) return ok(demoDefi(action, d));
+          if (/^(actu_|docs_|service_reglages|logo|plan_importer|commun_jeton|tableau_bord)/.test(action)) return ok(demoLots(action, d));
           if (ACTIONS_ANNUAIRE[action]) return ok(demoAnnuaire(action, d));
           if (action === 'codes_etat' || action === 'codes_changer') return ok(demoCodes(action, d));
         } catch (e) { return ko(e); }
@@ -139,7 +140,7 @@
           var iso = j.getFullYear() + '-' + String(j.getMonth() + 1).padStart(2, '0') + '-' + String(j.getDate()).padStart(2, '0');
           var parF = [['Médecin', 30, 9], ['Interne', 25, 4], ['IDE', 100, 41], ['AS', 50, 22], ['Cadre', 2, 2], ['Secrétaire', 3, 1], ['Kinésithérapeute', 3, 2]]
             .map(function (f) { return { fonction: f[0], effectif: f[1], prets: f[2], pourcent: Math.round(100 * f[2] / f[1]) }; });
-          return ok({
+          return ok(demoAccueilPlus({
             ok: true,
             session: { role: role, libelle: role === 'agent' ? '' : (role === 'admin' ? 'Administrateur' : 'Référent démo') },
             service: (SERVICE && SERVICE.nom) || 'Réanimation – USC',
@@ -153,11 +154,11 @@
             elan: demoElan(),
             newsletter: (function () { var l = nlDemo().filter(function (n) { return n.statut === 'publiée'; }); return l.length ? { id: l[l.length - 1].id, titre: l[l.length - 1].titre } : null; })(),
             misAJour: new Date().toISOString()
-          });
+          }));
         }
         if (action === 'plan') {
           if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_invalide'));
-          return ok({ ok: true, donnees: planDemo(), reglages: { pieces: {}, categories: {}, points: { Qdemo0001: { type: 'chariot', x: 450, y: 290, precision: 'Adulte' }, Qdemo0002: { type: 'echographe', x: 250, y: 530, precision: '' }, Qdemo0003: { type: 'imprimante', x: 620, y: 530, precision: 'Couleur' } } }, peutModifier: d.jeton !== 'demo.agent',
+              return ok({ ok: true, donnees: demoLire('plan-importe', null) || planDemo(), reglages: { pieces: {}, categories: {}, points: { Qdemo0001: { type: 'chariot', x: 450, y: 290, precision: 'Adulte' }, Qdemo0002: { type: 'echographe', x: 250, y: 530, precision: '' }, Qdemo0003: { type: 'imprimante', x: 620, y: 530, precision: 'Couleur' } } }, peutModifier: d.jeton !== 'demo.agent',
             gps: (function () { try { return JSON.parse(localStorage.getItem('rea.demo.gps') || 'null'); } catch (e) { return null; } })(), admin: d.jeton === 'demo.admin' });
         }
         if (action === 'gps_calage') {
@@ -256,6 +257,15 @@
         var pp = trouver(J.paris, 'id', d.id); if ('resultat' in d.donnees) pp.resultat = d.donnees.resultat || null; if (d.donnees.actif === false) J.paris = J.paris.filter(function (x) { return x !== pp; }); return ok({ ok: true });
       case 'escape_valider': if (!ref) return ko(new ErreurApi('non_autorise')); var v = J.jeux.escape.reglages.valides;
         if (d.valide === true) v[d.scenario] = { par: 'Démo', le: '2026-11-07' }; else if (d.valide === false) delete v[d.scenario]; return ok({ ok: true, valides: v });
+      case 'escape_scenarios': return ok({ ok: true, scenarios: J.escapes || null });
+      case 'escape_enregistrer': case 'escape_retirer': {
+        if (!ref) return ko(new ErreurApi('non_autorise'));
+        if (!J.escapes) J.escapes = (d.modeles || []).map(function (m) { return Object.assign({ statut: 'actif', auteur: 'Modèle Cap NCHUG' }, JSON.parse(JSON.stringify(m))); });
+        var ve = J.jeux.escape.reglages.valides, xe = d.id ? J.escapes.filter(function (y) { return y.id === d.id; })[0] : null;
+        if (action === 'escape_retirer') { xe.statut = xe.statut === 'retiré' ? 'actif' : 'retiré'; if (xe.statut === 'retiré') delete ve[xe.id]; return ok({ ok: true, statut: xe.statut }); }
+        if (xe) { Object.assign(xe, d.scenario, { auteur: 'Référent démo' }); delete ve[xe.id]; return ok({ ok: true, id: xe.id }); }
+        var ne = Object.assign({ id: 'mission-' + Math.random().toString(36).slice(2, 6), statut: 'actif', auteur: 'Référent démo' }, d.scenario); J.escapes.push(ne); return ok({ ok: true, id: ne.id });
+      }
     }
     ko(new ErreurApi('action_inconnue'));
   }
@@ -462,6 +472,66 @@
     }
     if (action === 'visite_presence') { DV.ins.forEach(function (x) { if (x.id === d.id) x.present = d.present; }); return ok({ ok: true }); }
     ko(new ErreurApi('action_inconnue'));
+  }
+
+  /* Démonstration des lots 2 et 5 : personnalisation, actualités, documents, import du plan (tout reste sur ce téléphone) */
+  function demoAccueilPlus(o) {
+    var g = demoLire('reglages', {}), a = demoLire('actus', null);
+    if (g.nom) o.service = g.nom; if (g.message != null) o.messageAccueil = g.message; if (g.dateJ) o.dateJ = g.dateJ;
+    o.rubriques = g.rubriques && g.rubriques.length < 6 ? g.rubriques : null; if (SERVICE && SERVICE.id === '_chu') { o.rubriques = ['newsletter', 'docs']; o.service = 'Contenus communs du CHU'; } o.logo = g.logo ? String(g.logoV || 1) : null;
+    if (a) o.actualites = a.filter(function (x) { return x.publiee; }).map(function (x) { return { date: x.date, titre: x.titre, texte: x.texte, epinglee: x.epinglee }; });
+    o.actualites = [{ date: '', titre: 'Exemple d\'actualité commune au CHU', texte: 'Publiée une fois par les créateurs, visible dans tous les services.', epinglee: false, chu: true }].concat(o.actualites || []);
+    return o;
+  }
+  function demoLots(action, d) {
+    var ref = /^demo\.(referent|admin)/.test(d.jeton || ''), admin = /^demo\.admin/.test(d.jeton || '') || /^cap\./.test(d.jeton || '');
+    if (/^cap\./.test(d.jeton || '')) {
+      if (action === 'commun_jeton') return { ok: true, service: { id: '_chu', nom: 'Contenus communs du CHU' }, jeton: 'demo.admin', role: 'admin', libelle: 'Créateur démo', expiration: new Date(Date.now() + 864e5).toISOString() };
+      if (action === 'tableau_bord') return { ok: true, mode: 'test', seuil: 30, calcule: new Date().toISOString(), services: demoServices().map(function (x, i) { return { nom: x.nom, actif: x.actif, cree: x.cree, plan: i !== 2, rubriques: i ? 'plan, jeux, docs' : 'toutes', referents: Math.max(0, 3 - i), defi: i === 2 ? null : { reponses: 40 - 12 * i, pourcent: 78 - 6 * i } }; }) };
+    }
+    if (!/^demo\./.test(d.jeton || '')) throw new ErreurApi('session_invalide');
+    var defActus = [{ date: '2026-11-01', titre: 'Bienvenue dans l\'application', texte: 'Retrouvez ici toutes les informations pour préparer le déménagement.', publiee: true, epinglee: true }];
+    switch (action) {
+      case 'actu_liste': case 'actu_enregistrer': case 'actu_supprimer': {
+        if (!ref) throw new ErreurApi('non_autorise');
+        var l = demoLire('actus', defActus);
+        if (action === 'actu_enregistrer') { var x = d.donnees || {}, y = { date: x.date || new Date().toISOString().slice(0, 10), titre: x.titre, texte: x.texte || '', publiee: x.publiee !== false, epinglee: !!x.epinglee };
+          if (x.ligne) l[x.ligne - 2] = y; else l.push(y); }
+        if (action === 'actu_supprimer') l.splice(d.ligne - 2, 1);
+        l.forEach(function (q) { delete q.ligne; }); demoEcrire('actus', l);
+        return { ok: true, actualites: l.map(function (q, i) { return Object.assign({ ligne: i + 2 }, q); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }) };
+      }
+      case 'docs_liste': case 'docs_enregistrer': case 'docs_supprimer': {
+        var ld = demoLire('docs', [{ id: 'DOCdemo1', categorie: 'FAQ', titre: 'Où trouver le plan du service ?', texte: 'Dans la rubrique « Plan du service » de l\'appli.', lien: '', publie: true }]);
+        if (action !== 'docs_liste' && !ref) throw new ErreurApi('non_autorise');
+        if (action === 'docs_enregistrer') { var z = d.donnees || {}; if (z.lien && !/^https:\/\//.test(z.lien)) throw new ErreurApi('lien_invalide');
+          var nv = { id: d.id || 'DOC' + Math.random().toString(36).slice(2, 8), categorie: z.categorie || 'Divers', titre: z.titre, texte: z.texte || '', lien: z.lien || '', ordre: Number(z.ordre) || 0, publie: z.publie !== false };
+          ld = ld.filter(function (q) { return q.id !== d.id; }); ld.push(nv); }
+        if (action === 'docs_supprimer') ld = ld.filter(function (q) { return q.id !== d.id; });
+        demoEcrire('docs', ld);
+        var communs = [{ id: 'chu1', categorie: 'Accès au site', titre: 'Plan d\'accès (exemple commun au CHU)', texte: 'Document publié par les créateurs pour tous les services.', lien: '', publie: true, chu: true }];
+        return { ok: true, documents: communs.concat(ld.filter(function (q) { return q.publie || ref; })), peutModifier: ref };
+      }
+      case 'service_reglages': {
+        if (!admin) throw new ErreurApi('non_autorise');
+        var g = demoLire('reglages', {}), x2 = d.donnees;
+        if (x2) { ['nom', 'message', 'dateJ', 'rubriques'].forEach(function (k) { if (x2[k] != null) g[k] = x2[k]; }); if (x2.logo === null) g.logo = null; demoEcrire('reglages', g); }
+        return { ok: true, reglages: { nom: g.nom || (SERVICE && SERVICE.nom) || 'Réanimation – USC', message: g.message != null ? g.message : 'Bienvenue ! Préparons ensemble notre installation dans le nouveau CHU.', dateJ: g.dateJ || '', rubriques: g.rubriques || ['plan', 'visites', 'newsletter', 'souvenirs', 'jeux', 'docs'], logo: !!g.logo, plan: true }, toutes: ['plan', 'visites', 'newsletter', 'souvenirs', 'jeux', 'docs'] };
+      }
+      case 'logo_envoyer': { if (!admin) throw new ErreurApi('non_autorise'); var gl = demoLire('reglages', {}); gl.logo = { type: d.type, data: d.data }; gl.logoV = Date.now(); demoEcrire('reglages', gl); return { ok: true, version: String(gl.logoV) }; }
+      case 'logo': { var gg = demoLire('reglages', {}); return gg.logo ? { ok: true, type: gg.logo.type, data: gg.logo.data, version: String(gg.logoV) } : { ok: true, data: null }; }
+      case 'plan_importer': {
+        if (!admin) throw new ErreurApi('non_autorise');
+        var P; try { P = JSON.parse(d.texte); } catch (e) { return { ok: true, enregistre: false, rapport: { erreurs: ['Fichier illisible : ce n\'est pas du JSON valide.'], avertissements: [], stats: {} } }; }
+        var er = [], n = Array.isArray(P.pieces) ? P.pieces.length : 0;
+        if (!Array.isArray(P.viewBox) || P.viewBox.length !== 4) er.push('« viewBox » manquant ou incorrect : 4 nombres [x, y, largeur, hauteur] attendus.');
+        if (!n) er.push('Aucune pièce (« pieces ») dans le fichier.');
+        var rap = { erreurs: er, avertissements: ['Démonstration : contrôle simplifié (le moteur réel vérifie aussi les doublons, chevauchements et unités).'], stats: { pieces: n, chambres: n ? P.pieces.filter(function (p) { return p.type === 'chambre'; }).length : 0, unites: Object.keys(P.unites || {}).length } };
+        if (d.enregistrer && !er.length) { demoEcrire('plan-importe', P); return { ok: true, rapport: rap, enregistre: true }; }
+        return { ok: true, rapport: rap, enregistre: false };
+      }
+    }
+    throw new ErreurApi('action_inconnue');
   }
 
   /* Plan fictif du mode démonstration : le vrai plan n'est jamais publié sur GitHub */

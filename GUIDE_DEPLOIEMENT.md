@@ -411,6 +411,36 @@ La réa garde son Google Sheets « Base », ses fichiers Drive, ses codes et ses
 - Les quotas du compte dédié couvrent désormais la réa aussi (voir l'estimation de la partie P).
 - Pendant les quelques minutes entre l'étape 3 et l'étape 4, l'appli encore réglée sur l'ancien moteur affiche « service déplacé » : faites les deux étapes à la suite, hors des heures de pointe.
 
+## Partie S – Lots 4, 5 et 2 (moteur 2.3.0)
+
+Mise à jour : collez `Code.gs` 2.3.0, menu « 1. Installer / réparer la base » (réa) ou « Vérifier / réparer l'annuaire » (Cap NCHUG), puis « Nouvelle version » du déploiement. Les nouveaux onglets (« Escape game », « Documents et FAQ ») sont créés sans rien effacer.
+
+**Lot 4 – contenus de départ et escape game**
+- Un nouveau service reçoit des questions générales (sécurité, déménagement) et jamais celles du plan de la réa. Les questions du plan sont fabriquées automatiquement à partir de son propre plan.
+- Escape game : les référents créent et modifient les missions dans l'appli (Quiz et jeux › Escape game › « Modifier les missions »), étape par étape : récit, choix, cases à cocher, remise dans l'ordre, toucher sur le plan. Une mission modifiée doit être rejouée et validée par un référent avant d'être visible des agents. La réa garde ses 4 missions ; les autres services partent de 3 missions générales.
+- Bingo, nuage, jauge et paris restaient déjà modifiables (Quiz et jeux › Réglages des jeux).
+
+**Lot 5 – contenus communs au CHU (Cap NCHUG)**
+- Espace créateurs › « Modifier les contenus communs » : le super-admin et les créateurs publient actualités, newsletters et documents visibles dans tous les services (étiquette « CHU »). Un bandeau rappelle qu'on modifie les contenus communs ; « Quitter » ramène à l'Espace créateurs.
+- Actualités : modifiables dans l'appli par les référents et l'administrateur (bouton « ✏️ Gérer » sur l'accueil), plus besoin du Google Sheets.
+- Rubrique « Documents et FAQ » : questions-réponses et liens (https uniquement) par catégorie, avec recherche. Pas de données de santé ni de document confidentiel : des liens vers l'intranet ou des documents publics.
+- Espace créateurs › « Tableau de bord » : services ouverts, services sans plan, nombre de référents, rubriques, participation au Défi. Uniquement des totaux par service.
+
+**Lot 2 – personnaliser le service et importer son plan** (tuile 🎨 « Personnaliser le service », administrateur)
+- Nom, message d'accueil, date J ; logo du service (réduit sur le téléphone, affiché à côté du logo du CHU qui reste inchangé) ; rubriques affichées sur l'accueil.
+- Import du plan : choisissez le fichier `.json` ; l'appli affiche un aperçu et le contrôle (format, identifiants en double, formes, unités inconnues, chambres en double, chevauchements, pièces sans nom). Rien n'est enregistré tant qu'il reste une erreur. Le fichier est rangé dans le Drive privé du service. Les noms et pièces déjà modifiés suivent les pièces du nouveau plan.
+- Sans unités ni couleurs (cas de la plupart des services), les jeux de couleurs disparaissent et « Où est… ? » apparaît.
+
+**Format du fichier plan (pour les services) :**
+```json
+{ "viewBox": [0, 0, 1200, 700],
+  "unites": { "a": { "nom": "Unité A", "couleur": "#e0670f" } },
+  "pieces": [
+    { "id": "C01", "type": "chambre", "chambre": "101", "unite": "a", "r": [50, 50, 170, 220] },
+    { "id": "P01", "type": "piece", "nom": "Poste de soins", "d": "M300,0 L400,0 L400,90 L300,90 Z" } ] }
+```
+`unites` est facultatif. Chaque pièce a un `id` unique et une forme : rectangle `r` [x0, y0, x1, y1] ou contour `d` (M, L, H, V, Z). Types : `chambre`, `piece`, `couloir`, `circulation`, `technique`, `terrasse`.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

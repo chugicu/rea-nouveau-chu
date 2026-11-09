@@ -432,3 +432,39 @@ details.defi-ajout > summary { font-weight: 800; color: var(--titre); cursor: po
 .defi-couleur { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .defi-couleur input[type=color] { width: 56px; height: 40px; padding: 2px; border-radius: 10px; }
 .case { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+/* Lot 4 : éditeur de l'escape game */
+.escape-edit__etapes { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 12px; }
+.escape-edit__etape { background: var(--surface-2); border-radius: 18px; padding: 12px; display: grid; gap: 8px; }
+.escape-edit__tete { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.escape-edit__tete select { flex: 1; min-width: 160px; }
+.escape-edit__corps { display: grid; gap: 4px; }
+.escape-edit h3 { margin: 10px 0 0; color: var(--titre); font-family: var(--condense); font-size: 1.4rem; }
+.quiz-theme--retire { filter: saturate(.2); opacity: .7; }
+.escape-gestion { margin-top: 16px; }
+/* Lot 5 : contenus communs au CHU, documents et FAQ */
+.etiquette--chu { background: #c98a00; color: #fff; font-weight: 800; letter-spacing: .04em; }
+.actu--chu { box-shadow: inset 6px 0 0 #c98a00, var(--clay); }
+.actu--brouillon { opacity: .7; }
+.communs .actus { margin-top: 12px; }
+.communs input[type=search], .defi-gestion input[type=search] { width: 100%; margin: 6px 0 12px; }
+.docs { display: grid; gap: 10px; }
+.doc { --titre-local: var(--titre); --doux-local: var(--texte-doux); background: var(--surface); color: var(--texte); border-radius: 20px; box-shadow: var(--clay-petit); padding: 12px 16px; }
+.doc > summary { font-weight: 700; color: var(--titre); cursor: pointer; }
+.doc__texte { white-space: pre-line; margin: 8px 0; }
+.doc--brouillon { opacity: .7; }
+.cap-commun { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #fff3c4; color: #5b4100; border-radius: 18px; padding: 10px 14px; font-weight: 700; box-shadow: var(--clay-petit); margin: 8px 0 12px; }
+.cap-chiffres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.cap-chiffres > div { background: var(--surface); color: var(--texte); border-radius: 20px; padding: 12px; box-shadow: var(--clay-petit); display: grid; text-align: center; }
+.cap-chiffres b { font-family: var(--condense); font-size: 2rem; color: var(--titre); }
+.cap-chiffres span { font-size: .8rem; color: var(--texte-doux); }
+/* Lot 2 : personnalisation */
+.logo-service { height: 46px; width: auto; max-width: 120px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; }
+.service-logo { display: flex; gap: 12px; align-items: center; background: #fff; border-radius: 16px; padding: 10px; margin: 8px 0; }
+.service-logo .logo-service { height: 60px; }
+.service-cases { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }
+.plan-import__apercu { margin: 10px 0; max-height: 360px; overflow: hidden; border-radius: 16px; }
+.plan-import__apercu:empty { display: none; }
+.plan-import__liste { margin: 6px 0; padding-left: 20px; font-size: .9rem; }
+.plan-import__liste--ko { color: #b42318; }
+.service-perso .form-carte h2 { color: var(--titre); font-family: var(--condense); font-size: 1.6rem; margin: 0 0 6px; }
+.service-perso .form-carte { margin-bottom: 14px; }

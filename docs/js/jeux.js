@@ -599,20 +599,41 @@
   }
 
   /* ---------- Escape game ---------- */
+  function escapeDepart() { // missions de départ tant que le service n'a rien modifié
+    var sv = A.Api.multi && window.ReaCap ? window.ReaCap.serviceCourant() : null, rea = !A.Api.multi || (sv && sv.id === 'rea');
+    return (rea ? window.REA_ESCAPE : window.REA_ESCAPE_MODELES) || [];
+  }
   function ecranEscape(flash) {
     init();
     page('Escape game', 'Missions', attente());
-    chargerEtat().then(function (e) {
+    Promise.all([chargerEtat(), A.Api.appeler('escape_scenarios', { jeton: session().jeton }).catch(function (e) { if (e && e.code === 'action_inconnue') return { scenarios: null }; throw e; })]).then(function (t) {
+      var e = t[0], base = t[1].scenarios, liste = base || escapeDepart(), modeles = base ? null : escapeDepart();
       var cfg = e.jeux.escape, valides = (cfg.reglages && cfg.reglages.valides) || {}, faits = A.stock.lire(CLE.escape) || {};
-      var visibles = window.REA_ESCAPE.filter(function (sc) { return valides[sc.id] || e.referent; });
+      var visibles = liste.filter(function (sc) { return (valides[sc.id] && sc.statut !== 'retiré') || e.referent; });
+      var editer = function (sc) { window.ReaEscapeEditeur.ouvrir({ scenario: sc, modeles: modeles, jeton: session().jeton, retour: function (m) { ecranEscape(m); } }); };
       page('Escape game', 'Missions', h('div', null,
         flash ? h('p', { class: 'flash', text: flash }) : null,
-        e.referent ? h('p', { class: 'section__note', text: 'Référents : jouez chaque mission, puis validez-la (ou laissez une remarque). Les agents ne voient que les missions validées.' }) : null,
+        e.referent ? h('p', { class: 'section__note', text: 'Référents : jouez chaque mission, puis validez-la (ou laissez une remarque). Les agents ne voient que les missions validées. Une mission modifiée doit être validée de nouveau.' }) : null,
         visibles.length ? h('div', { class: 'quiz-themes' }, visibles.map(function (sc) {
-          return h('button', { type: 'button', class: 'quiz-theme' + (faits[sc.id] ? ' quiz-theme--fait' : ''), 'data-ic': sc.ic || '🔓', onclick: function () { jouerEscape(sc, e.referent, valides); } },
+          var retire = sc.statut === 'retiré';
+          return h('button', { type: 'button', class: 'quiz-theme' + (faits[sc.id] ? ' quiz-theme--fait' : '') + (retire ? ' quiz-theme--retire' : ''), 'data-ic': sc.ic || '🔓', onclick: function () { jouerEscape(sc, e.referent, valides); } },
             h('b', { text: (faits[sc.id] ? '✓ ' : '') + sc.titre }), h('span', { text: sc.resume }),
-            h('span', { class: 'etiquette', text: sc.duree + (valides[sc.id] ? '' : ' · à valider') }));
-        })) : h('p', { class: 'vide', text: 'Aucune mission validée pour le moment.' })));
+            h('span', { class: 'etiquette', text: retire ? 'Retirée' : (sc.duree || '') + (valides[sc.id] ? '' : ' · à valider') }));
+        })) : h('p', { class: 'vide', text: 'Aucune mission validée pour le moment.' }),
+        e.referent && window.ReaEscapeEditeur ? h('section', { class: 'section form-carte escape-gestion' },
+          h('h2', { text: 'Modifier les missions' }),
+          h('ul', { class: 'liste-simple' }, liste.map(function (sc) {
+            return h('li', null, h('div', { class: 'cap-ligne' }, h('b', { text: sc.titre }), h('span', { class: 'section__note', text: (sc.statut === 'retiré' ? 'Retirée' : valides[sc.id] ? 'Validée' : 'À valider') + (sc.auteur ? ' · ' + sc.auteur : '') })),
+              h('div', { class: 'gps-boutons' },
+                h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { editer(sc); }, text: 'Modifier' }),
+                h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function (ev) {
+                  var b = ev.currentTarget; if (sc.statut !== 'retiré' && !confirm('Retirer « ' + sc.titre + ' » ? Elle ne sera plus visible des agents (vous pourrez la remettre).')) return;
+                  b.disabled = true;
+                  A.Api.appeler('escape_retirer', { jeton: session().jeton, id: sc.id, modeles: modeles }).then(function (r) { ecranEscape(r.statut === 'retiré' ? 'Mission retirée.' : 'Mission remise : à valider de nouveau.'); })
+                    .catch(function (x) { b.disabled = false; A.alerteDouce(b.parentNode, A.message(x.code)); });
+                }, text: sc.statut === 'retiré' ? 'Remettre' : 'Retirer' })));
+          })),
+          h('button', { type: 'button', class: 'bouton', onclick: function () { editer(null); }, text: '+ Nouvelle mission' })) : null));
     }).catch(function (e) { if (!erreurSession(e)) page('Escape game', '', messageErreur(e, function () { ecranEscape(); })); });
   }
   function jouerEscape(sc, referent, valides) {
@@ -789,7 +810,7 @@
       lire = function () { return { cases: Array.prototype.map.call(lignes.querySelectorAll('.reglage-case'), function (l) { return { texte: l.querySelector('input').value.trim(), auto: l.querySelector('select').value || undefined }; }).filter(function (c) { return c.texte; }) }; };
     } else if (id === 'escape') {
       var v = g.valides || {};
-      remplir(extra, h('p', { class: 'section__note', text: 'Missions validées par les référents : ' + ((window.REA_ESCAPE || []).filter(function (sc) { return v[sc.id]; }).map(function (sc) { return sc.titre; }).join(', ') || 'aucune pour l\'instant') + '. Une fois le jeu activé, les référents peuvent jouer et valider les missions ; les agents ne voient que les missions validées.' }));
+      remplir(extra, h('p', { class: 'section__note', text: 'Missions validées par les référents : ' + (Object.keys(v).length || 'aucune pour l\'instant') + '. Les référents créent et modifient les missions dans l\'escape game. Une fois le jeu activé, les référents peuvent jouer et valider les missions ; les agents ne voient que les missions validées.' }));
     }
     var bouton = h('button', { class: 'bouton', type: 'button', text: 'Enregistrer', onclick: function () {
       var d = { actif: actif.checked, ouverture: ouv.value, fermeture: fer.value }, r = lire(); if (r) d.reglages = r;

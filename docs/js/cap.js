@@ -6,7 +6,7 @@
   'use strict';
   var A, h, Api;
   var CLE_SERVICE = 'rea.service', CLE_LISTE = 'rea.services-liste', CLE_CAP = 'rea.cap-session';
-  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1, 'rea.appareil': 1, 'rea.defi': 1 }; // le Défi CHU est commun : une seule réponse par téléphone, quel que soit le service
+  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1, 'rea.appareil': 1, 'rea.defi': 1, 'rea.commun-retour': 1 }; // le Défi CHU est commun : une seule réponse par téléphone, quel que soit le service
 
   function init() { A = window.ReaApp; h = A.h; Api = window.ReaApi; }
   function lire(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
@@ -97,6 +97,7 @@
   }
   function demarrer(suite) { // suite() : écran normal de l'appli (accueil ou connexion)
     init();
+    if (enCommun()) retablir(); // rechargement pendant la modification des contenus communs : on revient à son service
     var id = lireLien(), cour = serviceCourant();
     if (id && (!cour || cour.id !== id)) {
       A.afficher(h('div', { class: 'page' }, h('div', { class: 'squelette', style: 'height:240px' })));
@@ -193,12 +194,61 @@
     zone.replaceChildren.apply(zone, [
       flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
       montre || null,
+      h('section', { class: 'section defi-carte cap-communs' }, h('div', { class: 'section__tete' }, h('h2', { text: '🌴 Contenus communs au CHU' })),
+        h('p', { class: 'section__note', text: 'Actualités, newsletters et documents publiés une fois, visibles dans tous les services avec l\'étiquette « CHU ».' }),
+        h('div', { class: 'gps-boutons' },
+          h('button', { type: 'button', class: 'bouton', onclick: function (ev) { entrerCommun(sess, ev.currentTarget); }, text: 'Modifier les contenus communs' }),
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { tableauBord(sess); }, text: '📊 Tableau de bord' }))),
       window.ReaDefiGestion ? h('section', { class: 'section defi-carte' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' })),
         h('p', { class: 'section__note', text: 'Questions communes à tous les services : phase de test, validation, ajout de questions, vue du ciel du Parcours.' }),
         h('button', { type: 'button', class: 'bouton', onclick: function () { window.ReaDefiGestion.ouvrir({ jeton: sess.jeton, role: sess.libelle || '', retour: function (m) { annuaire(sess, m || null); } }); }, text: 'Gérer le Défi CHU' })) : null,
       creer, services, e.role === 'super' ? rattacher(sess) : null, createurs,
       h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { ecrire(CLE_CAP, null); ecranServices(); }, text: 'Quitter l\'espace créateurs' })].filter(Boolean));
   }
+  /* ---------- Contenus communs : le super-admin et les créateurs entrent dans le « service » caché du CHU ---------- */
+  var CLE_COMMUN = 'rea.commun-retour';
+  function enCommun() { return !!lire(CLE_COMMUN); }
+  function entrerCommun(sess, b) {
+    b.disabled = true;
+    Api.appeler('commun_jeton', { jeton: sess.jeton }).then(function (r) {
+      ecrire(CLE_COMMUN, { session: A.stock.lire(A.CLE.session), service: serviceCourant() });
+      A.stock.ecrire(A.CLE.session, { jeton: r.jeton, role: 'admin', libelle: r.libelle, expiration: r.expiration });
+      A.stock.effacer(A.CLE.accueil); Api.choisirService(r.service);
+      A.ecranAccueil();
+    }).catch(function (x) { b.disabled = false; if (A.ERREURS_SESSION.indexOf(x && x.code) >= 0) { ecrire(CLE_CAP, null); return ecranAnnuaire(erreurDe(x)); } annuaire(sess, erreurDe(x)); });
+  }
+  function retablir() {
+    var b = lire(CLE_COMMUN); if (!b) return;
+    if (b.session) A.stock.ecrire(A.CLE.session, b.session); else A.stock.effacer(A.CLE.session);
+    A.stock.effacer(A.CLE.accueil); Api.choisirService(b.service || null); ecrire(CLE_COMMUN, null);
+  }
+  function quitterCommun() { retablir(); ecranAnnuaire(); }
+  function bandeauCommun() {
+    init();
+    return h('div', { class: 'cap-commun', role: 'note' }, h('span', { text: '🌴 Vous modifiez les contenus communs à tout le CHU (actualités, newsletters, documents).' }),
+      h('button', { type: 'button', class: 'bouton bouton--discret', onclick: quitterCommun, text: 'Quitter' }));
+  }
+
+  /* ---------- Tableau de bord des créateurs (aucune donnée individuelle) ---------- */
+  function tableauBord(sess) {
+    var zone = h('div', null, h('div', { class: 'squelette', style: 'height:240px' }));
+    page('Tableau de bord', 'Cap NCHUG', zone, function () { annuaire(sess); });
+    Api.appeler('tableau_bord', { jeton: sess.jeton }).then(function (r) {
+      var actifs = r.services.filter(function (x) { return x.actif; }), sansPlan = actifs.filter(function (x) { return x.plan === false; }).length, defi = actifs.filter(function (x) { return x.defi && x.defi.reponses >= r.seuil; }).length;
+      zone.replaceChildren(
+        h('div', { class: 'cap-chiffres' },
+          h('div', null, h('b', { text: String(actifs.length) }), h('span', { text: 'services ouverts' })),
+          h('div', null, h('b', { text: String(sansPlan) }), h('span', { text: 'sans plan' })),
+          h('div', null, h('b', { text: String(defi) }), h('span', { text: 'classés au Défi cette semaine' }))),
+        h('ul', { class: 'liste-simple cap-tableau' }, r.services.map(function (x) {
+          return h('li', { class: x.actif ? '' : 'cap-inactif' }, h('div', { class: 'cap-ligne' }, h('b', { text: x.nom }), h('span', { class: 'section__note', text: x.actif ? 'créé le ' + (x.cree || '?') : 'Fermé' })),
+            h('p', { class: 'section__note', text: [x.plan === true ? '✅ Plan installé' : x.plan === false ? '⚠️ Pas de plan' : 'Plan : ?', x.referents + ' référent' + (x.referents > 1 ? 's' : ''), 'Rubriques : ' + (x.rubriques || '?'),
+              x.defi ? 'Défi : ' + x.defi.reponses + ' réponses, ' + String(x.defi.pourcent).replace('.', ',') + ' %' : 'Défi : aucune réponse cette semaine'].join(' · ') }));
+        })),
+        h('p', { class: 'section__note', text: 'Uniquement des totaux par service, mis à jour toutes les 10 minutes. Aucun nom ni aucune donnée individuelle.' }));
+    }).catch(function (x) { if (A.ERREURS_SESSION.indexOf(x && x.code) >= 0) { ecrire(CLE_CAP, null); return ecranAnnuaire(erreurDe(x)); } zone.replaceChildren(h('p', { class: 'message-erreur', text: erreurDe(x) })); });
+  }
+
   /* Rattacher un service qui a son propre moteur (la réa) : il garde ses données, ses codes et son Google Sheets */
   function rattacher(sess) {
     var lien = h('input', { type: 'url', placeholder: 'https://docs.google.com/spreadsheets/d/…', 'aria-label': 'Lien du Google Sheets du service' });
@@ -289,5 +339,5 @@
   // Service fermé par le super-administrateur : retour à la liste
   window.addEventListener('rea:service-ferme', function () { init(); effacerDonneesLocales(); ecrire(CLE_SERVICE, null); Api.choisirService(null); ecranServices(A.message('service_inconnu')); });
 
-  window.ReaCap = { demarrer: demarrer, ecranServices: ecranServices, changerService: changerService, serviceCourant: serviceCourant, ecranAnnuaire: ecranAnnuaire, ecranCodes: ecranCodes, lienService: lienService };
+  window.ReaCap = { enCommun: enCommun, bandeauCommun: bandeauCommun, demarrer: demarrer, ecranServices: ecranServices, changerService: changerService, serviceCourant: serviceCourant, ecranAnnuaire: ecranAnnuaire, ecranCodes: ecranCodes, lienService: lienService };
 })();

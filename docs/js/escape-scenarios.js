@@ -109,3 +109,58 @@ window.REA_ESCAPE = [
     ]
   }
 ];
+
+/* Cap NCHUG · missions de départ des autres services (générales : à adapter par les référents dans l'appli). */
+window.REA_ESCAPE_MODELES = [
+  {
+    id: 'jour-j', ic: '📦', titre: 'Jour J : on déménage', duree: '8 min',
+    resume: 'Le grand jour est arrivé. Votre équipe déménage ce matin vers le nouveau CHU. Tout doit être prêt, rien ne doit être oublié.',
+    etapes: [
+      { type: 'recit', texte: '6 h 45. Les cartons sont étiquetés, les déménageurs arrivent à 8 h. Dernières vérifications avant le départ.' },
+      { type: 'multi', question: 'Que vérifiez-vous avant le départ des cartons ? (cochez tout ce qui est utile)',
+        items: [{ t: 'Chaque carton porte la destination (pièce) du nouveau service', ok: true }, { t: 'Les documents confidentiels sont dans des contenants fermés', ok: true }, { t: 'Le matériel indispensable du premier jour est dans un carton « à ouvrir en premier »', ok: true }, { t: 'Les issues de secours sont encombrées pour gagner de la place', ok: false }],
+        indice: 'Pensez à ce dont vous aurez besoin dès l\'arrivée… et à ce qui ne doit jamais traîner.',
+        explication: 'Étiqueter, protéger la confidentialité, prévoir le « kit du premier jour », et ne jamais encombrer les issues de secours.' },
+      { type: 'ordre', question: 'Remettez l\'arrivée dans le nouveau service dans l\'ordre.',
+        items: ['Repérer les issues de secours et le matériel d\'urgence du secteur', 'Vérifier que les cartons sont arrivés dans les bonnes pièces', 'Installer le matériel indispensable du premier jour', 'Ranger le reste au fil de la semaine'],
+        indice: 'La sécurité d\'abord, le rangement en dernier.', explication: 'Se repérer pour la sécurité, vérifier, installer l\'essentiel, puis ranger.' },
+      { type: 'choix', question: 'Un carton manque à l\'arrivée. Que faites-vous ?',
+        choix: ['Je le signale à la personne qui coordonne le déménagement, avec son étiquette', 'Je pars le chercher seul dans l\'ancien bâtiment', 'Je laisse tomber'], bonne: 0,
+        indice: 'Quelqu\'un a la liste de tous les cartons.', explication: 'La coordination du déménagement suit chaque carton : signaler avec la référence permet de le retrouver vite.' },
+      { type: 'recit', texte: 'Fin de journée : tout est arrivé, l\'essentiel est installé. Bravo à toute l\'équipe !' }
+    ]
+  },
+  {
+    id: 'premiers-reperes', ic: '🧭', titre: 'Premiers repères', duree: '6 min',
+    resume: 'Premier jour dans le nouveau service. Avant que la journée ne s\'accélère, retrouvez l\'essentiel.',
+    etapes: [
+      { type: 'recit', texte: 'Vous arrivez un peu en avance. Le service est encore calme : c\'est le moment de faire le tour.' },
+      { type: 'plan', question: 'Touchez sur le plan le chariot d\'urgence le plus proche.', cible: { point: 'chariot' },
+        indice: 'Utilisez le plan de l\'appli : les équipements y sont signalés.', explication: 'Retenez sa place : c\'est votre premier repère en cas d\'urgence.' },
+      { type: 'multi', question: 'Que repérez-vous en priorité dans votre secteur ? (cochez tout ce qui est utile)',
+        items: [{ t: 'Les issues de secours et le plan d\'évacuation', ok: true }, { t: 'Le chariot d\'urgence et le défibrillateur', ok: true }, { t: 'Les extincteurs et le déclencheur d\'alarme', ok: true }, { t: 'La machine à café', ok: false }],
+        indice: 'Ce dont vous auriez besoin en cas d\'urgence.', explication: 'Sécurité d\'abord : issues, urgence vitale, incendie.' },
+      { type: 'choix', question: 'Un collègue d\'un autre service cherche son chemin. Que faites-vous ?',
+        choix: ['Je l\'aide avec le plan de l\'appli ou la signalétique (N° de la rue intérieure, niveau)', 'Je lui dis de demander à l\'accueil', 'Je fais semblant de ne pas le voir'], bonne: 0,
+        indice: 'Les numéros d\'entrée et les niveaux sont faits pour ça.', explication: 'S\'entraider à se repérer fait gagner du temps à tout le monde les premières semaines.' },
+      { type: 'recit', texte: 'Vos repères sont pris. Bonne première journée dans le nouveau CHU !' }
+    ]
+  },
+  {
+    id: 'alarme-incendie', ic: '🔥', titre: 'Alarme incendie', duree: '6 min',
+    resume: 'Une alarme incendie retentit dans le nouveau service. De la fumée est signalée dans un local.',
+    etapes: [
+      { type: 'ordre', question: 'Remettez les premiers gestes dans l\'ordre.',
+        items: ['Donner l\'alerte selon la procédure du CHU', 'Mettre à l\'abri les personnes les plus menacées', 'Fermer les portes pour confiner la fumée', 'Attaquer le feu avec un extincteur si c\'est sans risque'],
+        indice: 'Alerter d\'abord : personne ne doit lutter seul sans que les secours soient prévenus.',
+        explication: 'Alerter, protéger, confiner, puis attaquer le feu seulement si c\'est sans danger (à adapter aux consignes incendie du CHU).' },
+      { type: 'choix', question: 'Peut-on prendre l\'ascenseur pour évacuer ?',
+        choix: ['Non, sauf consigne contraire des secours', 'Oui, c\'est plus rapide', 'Oui, s\'il n\'y a pas de fumée dans le couloir'], bonne: 0,
+        indice: 'Un ascenseur peut s\'arrêter à l\'étage du feu.', explication: 'On n\'utilise pas les ascenseurs en cas d\'incendie, sauf consigne des secours.' },
+      { type: 'multi', question: 'Une fois à l\'abri, que faites-vous ? (cochez tout ce qui est utile)',
+        items: [{ t: 'Compter les personnes présentes', ok: true }, { t: 'Informer les secours à leur arrivée', ok: true }, { t: 'Retourner chercher ses affaires', ok: false }],
+        indice: 'On ne retourne jamais dans la fumée.', explication: 'Compter, informer les secours, ne jamais retourner dans une zone enfumée.' },
+      { type: 'recit', texte: 'Les secours maîtrisent la situation. Retenez : alerter, protéger, confiner.' }
+    ]
+  }
+];

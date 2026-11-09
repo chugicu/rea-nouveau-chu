@@ -64,11 +64,11 @@
     // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
     { id: 'plan', c: '#8e44c4', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
     { id: 'visites', c: '#13a3a0', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
-    { id: 'newsletter', c: '#223b80', e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Actu Réa : les lettres d\'information du service', etape: 3, ouvrir: function () { ecranNewsletters(); } },
+    { id: 'newsletter', c: '#223b80', e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Les lettres d\'information du service et du CHU', etape: 3, ouvrir: function () { ecranNewsletters(); } },
     { id: 'souvenirs', c: '#f5508f', e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
     { id: 'jeux', c: '#ff7a59', e: '🎮', t: 2, nom: 'Quiz et jeux', desc: 'Quiz, concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
     { id: 'simulations', c: '#048e39', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
-    { id: 'docs', c: '#5c2e9e', e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, annuaire, questions-réponses', etape: 6 },
+    { id: 'docs', c: '#5c2e9e', e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, liens utiles, questions-réponses', etape: 6, ouvrir: function () { window.ReaCommuns.documents(); } },
     { id: 'pret', c: '#1f6fa8', e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
   ];
 
@@ -274,26 +274,28 @@
 
   function dessinerAccueil(session, d) {
     var role = session.role;
+    var commun = !!(window.ReaCap && window.ReaCap.enCommun()); // contenus communs au CHU : seulement actualités, newsletters, documents
     var libelleRole = role === 'admin' ? 'Administrateur' : role === 'referent' ? 'Référent : ' + (session.libelle || '') : 'Équipe réa';
 
     afficher(h('div', { class: 'page' },
       h('header', { class: 'entete' },
         h('span', { class: 'pastille-logo logos' },
           h('img', { class: 'logo-chu logo-chu--petit', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
-          estRea() ? h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' }) : null),
+          d.logo && window.ReaService ? window.ReaService.logo(d.logo, d.service) : estRea() ? h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' }) : null),
         h('span', { class: 'entete__droite' },
           window.ReaFun && window.ReaFun.serie() ? h('span', { class: 'serie', title: 'Jours d\'affilée avec le quiz du jour', text: '🔥 ' + window.ReaFun.serie() }) : null,
           h('span', { class: 'entete__role', text: libelleRole }))),
+      window.ReaCap && window.ReaCap.enCommun() ? window.ReaCap.bandeauCommun() : null,
       Api.multi ? h('p', { class: 'cap-entete' }, h('span', { text: 'Cap NCHUG' }), h('b', { text: d.service || '' })) : null,
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
-      horizon(d),
-      d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
-      window.ReaQuiz ? window.ReaQuiz.carteAccueil() : null,
-      window.ReaDefi ? window.ReaDefi.carteAccueil() : null,
+      commun ? null : horizon(d),
+      !commun && d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
+      !commun && window.ReaQuiz ? window.ReaQuiz.carteAccueil() : null,
+      !commun && window.ReaDefi ? window.ReaDefi.carteAccueil() : null,
       sectionModules(role, d),
-      sectionJauge(d.jauge),
-      sectionBadges(),
-      sectionActus(d.actualites),
+      commun ? null : sectionJauge(d.jauge),
+      commun ? null : sectionBadges(),
+      sectionActus(d.actualites, role),
       piedDePage(d)));
     app.focus({ preventScroll: true });
     if (window.ReaJeux) window.ReaJeux.apresAccueil(); // QR code scanné en attente
@@ -342,11 +344,14 @@
 
   function sectionModules(role, d) {
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
-    var liste = MODULES.slice();
-    if (role === 'admin' && window.ReaCap) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
+    var rub = d && d.rubriques; // lot 2 : rubriques choisies par l'administrateur (null = toutes)
+    var liste = MODULES.filter(function (m) { return !rub || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
+    var commun = !!(window.ReaCap && window.ReaCap.enCommun());
+    if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#13a3a0', e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
+    if (role === 'admin' && window.ReaCap && !commun) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
     // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
     if (role === 'admin' && !Api.multi && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#c98a00', e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
-    else if (role !== 'agent') liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
+    else if (role !== 'agent' && !commun && !rub) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, liste.map(function (m) {
@@ -361,14 +366,15 @@
       })));
   }
 
-  function sectionActus(actus) {
+  function sectionActus(actus, role) {
     actus = actus || [];
     return h('section', { class: 'section', 'aria-labelledby': 'titre-actus' },
-      h('div', { class: 'section__tete' }, h('h2', { id: 'titre-actus', text: 'Actualités' })),
+      h('div', { class: 'section__tete' }, h('h2', { id: 'titre-actus', text: 'Actualités' }),
+        role && role !== 'agent' && window.ReaCommuns ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { window.ReaCommuns.actus(); }, text: '✏️ Gérer' }) : null),
       actus.length
         ? h('ul', { class: 'actus' }, actus.map(function (a) {
-            return h('li', { class: 'actu' + (a.epinglee ? ' actu--epinglee' : '') },
-              a.date ? h('p', { class: 'actu__date', text: (a.epinglee ? 'Épinglée, ' : '') + dateCourte(a.date) }) : null,
+            return h('li', { class: 'actu' + (a.epinglee ? ' actu--epinglee' : '') + (a.chu ? ' actu--chu' : '') },
+              a.chu || a.date ? h('p', { class: 'actu__date' }, a.chu ? h('span', { class: 'etiquette etiquette--chu', text: 'CHU' }) : null, a.date ? (a.epinglee ? ' Épinglée, ' : ' ') + dateCourte(a.date) : null) : null,
               h('h3', { class: 'actu__titre', text: a.titre }),
               a.texte ? h('p', { class: 'actu__texte', text: a.texte }) : null);
           }))
@@ -633,8 +639,14 @@
     caches.open(CACHE_DONNEES).then(function (c) { return c.put('plan', new Response(JSON.stringify(d), { headers: { 'Content-Type': 'application/json' } })); }).catch(function () {});
   }
   /* ---------- Rubrique Plan : plan interactif (avec GPS) et jeux pour apprendre le service ---------- */
+  var sansUnites = false; // plan sans unités ni couleurs (la plupart des services) : jeux de couleurs masqués
+  function verifierUnites(d) { var n = d && d.donnees ? Object.keys(d.donnees.unites || {}).length : 2, avant = sansUnites; sansUnites = n < 2; return avant !== sansUnites; }
   function ecranPlanHub(flash) {
     ecranCourant = ecranPlanHub;
+    planEnCache().then(function (c) {
+      if (c) { if (verifierUnites(c) && ecranCourant === ecranPlanHub) ecranPlanHub(flash); return; }
+      Api.appeler('plan', { jeton: (stock.lire(CLE.session) || {}).jeton }).then(function (d) { mettrePlanEnCache(d); if (verifierUnites(d) && ecranCourant === ecranPlanHub) ecranPlanHub(flash); }).catch(function () {});
+    });
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
     var rec = window.ReaQuiz ? window.ReaQuiz.records() : {};
@@ -642,9 +654,10 @@
     function jeu(cle) { return function () { window.ReaQuiz.jeu(cle, ecranPlanHub); }; }
     var tuiles = [
       { ic: '🗺️', nom: 'Plan interactif', desc: 'Toutes les pièces, les équipements et votre position GPS', ouvrir: ecranPlan, classe: 'quiz-theme--plan' },
-      { ic: '🏷️', nom: 'Placer le nom des unités', desc: 'Glisser chaque nom d\'unité au bon endroit' + record('etiquettes'), ouvrir: jeu('etiquettes') },
-      { ic: '🖍️', nom: 'Colorier les unités', desc: 'Glisser chaque couleur sur la bonne étiquette' + record('couleurs'), ouvrir: jeu('couleurs') },
-      { ic: '🎨', nom: 'Colorier les chambres', desc: 'Chaque chambre avec la couleur de son unité' + record('chambres'), ouvrir: jeu('chambres') },
+      { ic: '🏷️', nom: 'Placer le nom des unités', desc: 'Glisser chaque nom d\'unité au bon endroit' + record('etiquettes'), ouvrir: jeu('etiquettes'), unites: true },
+      { ic: '🖍️', nom: 'Colorier les unités', desc: 'Glisser chaque couleur sur la bonne étiquette' + record('couleurs'), ouvrir: jeu('couleurs'), unites: true },
+      { ic: '🎨', nom: 'Colorier les chambres', desc: 'Chaque chambre avec la couleur de son unité' + record('chambres'), ouvrir: jeu('chambres'), unites: true },
+      sansUnites ? { ic: '📍', nom: 'Où est… ?', desc: 'Retrouver les pièces du service sur le plan ou en QCM', ouvrir: function () { window.ReaQuiz.theme('plan', ecranPlanHub); } } : null,
       { ic: '🏆', nom: 'Niveau ultime', desc: 'Replacer toutes les pièces, zone par zone' + record('ultime'), ouvrir: jeu('ultime'), classe: 'quiz-theme--ultime' }
     ];
     afficher(h('div', { class: 'page page--large' },
@@ -653,7 +666,7 @@
         h('h1', { class: 'entete__titre', text: 'Plan du service' }),
         h('span', { class: 'entete__role', text: 'Niveau 3' })),
       flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
-      h('div', { class: 'quiz-themes quiz-themes--plan' }, tuiles.map(function (t) {
+      h('div', { class: 'quiz-themes quiz-themes--plan' }, tuiles.filter(Boolean).filter(function (t) { return !(sansUnites && t.unites); }).map(function (t) {
         return h('button', { type: 'button', class: 'quiz-theme' + (t.classe ? ' ' + t.classe : ''), 'data-ic': t.ic, onclick: function () { t.ouvrir(); } }, h('b', { text: t.nom }), h('span', { text: t.desc }));
       })),
       h('p', { class: 'plan-note', text: 'Les jeux suivent le plan : chaque modification du plan est prise en compte automatiquement.' })));
@@ -784,7 +797,7 @@
       h('header', { class: 'entete entete--module' },
         h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour à l\'accueil', onclick: ecranAccueil, text: '‹' }),
         h('h1', { class: 'entete__titre', text: 'Newsletter' }),
-        h('span', { class: 'entete__role', text: session.role === 'admin' ? 'Administrateur' : 'Actu Réa' })),
+        h('span', { class: 'entete__role', text: session.role === 'admin' ? 'Administrateur' : 'Lettres d\'information' })),
       messageFlash ? h('p', { class: 'flash', role: 'status', text: messageFlash }) : null,
       zone));
     window.scrollTo(0, 0);
@@ -800,7 +813,7 @@
               h('span', { class: 'carte-nl__vignette', 'data-id': n.id, style: 'aspect-ratio:1/' + (n.ratio || 1.414) }),
               h('span', { class: 'carte-nl__texte' },
                 !lu ? h('span', { class: 'etiquette etiquette--nouveau', text: 'Nouveau' }) : (i === 0 ? h('span', { class: 'etiquette', text: 'Dernier numéro' }) : null),
-                h('b', { class: 'carte-nl__titre', text: n.titre }),
+                h('b', { class: 'carte-nl__titre' }, n.chu ? h('span', { class: 'etiquette etiquette--chu', text: 'CHU' }) : null, n.chu ? ' ' : null, n.titre),
                 h('span', { class: 'carte-nl__info', text: (n.parution ? n.parution + ' · ' : '') + n.pages + ' page' + (n.pages > 1 ? 's' : '') }),
                 h('span', { class: 'carte-nl__lire', text: 'Lire ›' }))),
             d.peutGerer && !depuisCache ? h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger carte-nl__retirer', onclick: function (ev) {
@@ -954,7 +967,7 @@
     ecranAccueil: function () { ecranAccueil(); }, ecranConnexion: function (m) { ecranConnexion(m); },
     majBandeaux: function (c) { majBandeaux(c); }, definirEcran: function (f) { ecranCourant = f; },
     planEnCache: planEnCache, mettrePlanEnCache: mettrePlanEnCache, CACHE_DONNEES: CACHE_DONNEES, alerteDouce: alerteDouce,
-    aujourdhui: aujourdhuiIso
+    aujourdhui: aujourdhuiIso, dateCourte: dateCourte
   };
   window.ReaBadges = {
     attribuer: function (id) { var b = stock.lire(CLE.badges) || {}; b[id] = new Date().toISOString(); stock.ecrire(CLE.badges, b); }

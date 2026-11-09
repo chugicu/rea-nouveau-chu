@@ -120,6 +120,9 @@
   /* ---------- Composant ---------- */
   function creer(racine, opt) {
     var D = opt.donnees, R = opt.reglages || { pieces: {}, categories: {} };
+    // Plan d'un autre service (Cap NCHUG) : pas de bâtiment ni d'aile réa ; unités et couleurs facultatives
+    var GEN = !D.batiment; D.unites = D.unites || {}; D.patios = D.patios || [];
+    Object.keys(D.unites).forEach(function (k) { var u = D.unites[k]; u.trait = u.trait || u.couleur || '#8e9ab0'; u.fond = u.fond || melange(u.trait, 0.25); u.pastille = u.pastille || u.trait; u.info = u.info || ''; });
     R.pieces = R.pieces || {}; R.categories = R.categories || {}; R.points = R.points || {};
     // Format compact : rectangle « r » à la place du chemin « d » ; boîte et centre recalculés si absents
     D.pieces.forEach(function (p) {
@@ -152,7 +155,7 @@
     recalculer();
     var VB0 = D.viewBox.slice();
     // Vue de départ : l'aile réanimation (moitié nord), titres compris
-    var VUE_REA = [VB0[0], VB0[1], VB0[2], Math.min(VB0[3], (D.batiment[1] + 1500) - VB0[1])];
+    var VUE_REA = GEN ? VB0.slice() : [VB0[0], VB0[1], VB0[2], Math.min(VB0[3], (D.batiment[1] + 1500) - VB0[1])];
     var etat = { mode: opt.mode === 'icones' ? 'icones' : 'texte', filtre: 'tout', choix: null, vb: null,
                  edition: null,   // { id, r: [x0,y0,x1,y1] } : forme en cours de modification
                  ajout: false,    // mode « dessiner une nouvelle pièce »
@@ -187,7 +190,7 @@
       return { nom: nom || null, precision: precision || '', categorie: cat, icone: icone, couleur: r.couleur || (cat && R.categories[cat] && R.categories[cat].couleur) || null,
                complet: r.nom ? r.nom : p.libelle_complet, modifie: !!R.pieces[p.id] };
     }
-    function estRea(p) { return p.type === 'piece' || p.type === 'chambre' && p.unite || p.type === 'terrasse' || p.type === 'chambre' && !p.unite && p.bbox[1] < 1390; }
+    function estRea(p) { if (GEN) return p.type !== 'couloir' && p.type !== 'circulation' && p.type !== 'technique'; return p.type === 'piece' || p.type === 'chambre' && p.unite || p.type === 'terrasse' || p.type === 'chambre' && !p.unite && p.bbox[1] < 1390; }
 
     /* ----- Structure ----- */
     racine.classList.add('plan');
@@ -297,7 +300,7 @@
       });
       (D.acces || []).forEach(function (a) { var g = icone(calqueTexte, a.cat, a.X, a.Y, 1.8, '#223b80'); if (filtre) g.setAttribute('opacity', '0.35'); });
       svg.appendChild(calqueTexte);
-      el('rect', { x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], rx: 10, fill: 'none', stroke: '#223b80', 'stroke-width': 10, 'pointer-events': 'none' }, svg);
+      if (b) el('rect', { x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], rx: 10, fill: 'none', stroke: '#223b80', 'stroke-width': 10, 'pointer-events': 'none' }, svg);
       titres();
       if (!Q || Q.points) dessinerPoints();
       if (Q) dessinerMarques();
@@ -700,7 +703,7 @@
       LISTE.forEach(function (p) {
         if (p.supprimee) return;
         var inf = infos(p);
-        if (p.type === 'chambre' && p.chambre && estRea(p)) l.push({ id: p.id, titre: 'Chambre ' + p.chambre, sous: p.unite ? D.unites[p.unite].nom : 'Brûlés ambu.', cle: p.chambre + ' chambre ' + (p.unite ? D.unites[p.unite].nom : ''), icone: null });
+        if (p.type === 'chambre' && p.chambre && estRea(p)) l.push({ id: p.id, titre: 'Chambre ' + p.chambre, sous: p.unite && D.unites[p.unite] ? D.unites[p.unite].nom : (GEN ? '' : 'Brûlés ambu.'), cle: p.chambre + ' chambre ' + (p.unite && D.unites[p.unite] ? D.unites[p.unite].nom : ''), icone: null });
         else if (p.type === 'piece' && inf.nom) l.push({ id: p.id, titre: inf.nom, sous: inf.precision || (inf.categorie && CAT[inf.categorie] ? CAT[inf.categorie].nom : ''), cle: inf.nom + ' ' + inf.precision + ' ' + (inf.complet || ''), icone: inf.icone, couleur: inf.couleur || (inf.categorie ? couleurCat(inf.categorie) : null) });
       });
       listePoints().forEach(function (q) {
@@ -736,7 +739,7 @@
     }
     function afficherFiche(p) {
       var inf = infos(p), titre, sous = '';
-      if (p.type === 'chambre') { titre = 'Chambre ' + p.chambre; sous = p.unite ? 'Unité ' + D.unites[p.unite].nom + ', ' + D.unites[p.unite].info.replace(' · ', ', ').toLowerCase() : 'Brûlés ambulatoires'; }
+      if (p.type === 'chambre') { titre = 'Chambre ' + p.chambre; sous = p.unite && D.unites[p.unite] ? 'Unité ' + D.unites[p.unite].nom + (D.unites[p.unite].info ? ', ' + D.unites[p.unite].info.replace(' · ', ', ').toLowerCase() : '') : (GEN ? (infos(p).nom || '') : 'Brûlés ambulatoires'); }
       else if (p.type === 'terrasse') { titre = 'Terrasse'; sous = 'Extérieur'; }
       else { titre = inf.nom || 'Pièce à désigner'; sous = [inf.precision, inf.categorie && CAT[inf.categorie] ? CAT[inf.categorie].nom : ''].filter(Boolean).join(', '); }
       var coul = inf.couleur || (inf.categorie ? couleurCat(inf.categorie) : '#6b7586');

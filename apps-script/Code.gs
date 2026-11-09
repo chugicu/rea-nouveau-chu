@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.2.1',
+  version: '2.3.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -47,7 +47,8 @@ var ONGLETS = {
   newsletters: 'Newsletters',
   points: 'Équipements',
   quiz: 'Quiz',
-  jeux: 'Jeux', souvenirs: 'Souvenirs', nuage: 'Nuage', qr: 'QR codes', paris: 'Paris', pronostics: 'Pronostics', retours: 'Retours'
+  jeux: 'Jeux', souvenirs: 'Souvenirs', nuage: 'Nuage', qr: 'QR codes', paris: 'Paris', pronostics: 'Pronostics', retours: 'Retours',
+  escape: 'Escape game', documents: 'Documents et FAQ'
 };
 
 var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
@@ -110,6 +111,9 @@ function doPost(e) {
       paris: function () { return parisListe_(verifierJeton_(req.jeton), req.appareil); },
       pronostic: function () { verifierJeton_(req.jeton); return pronostic_(req.id, req.donnees); },
       pari_admin: function () { exigerAdmin_(verifierJeton_(req.jeton)); return pariAdmin_(req.id, req.donnees); },
+      escape_scenarios: function () { return escapeScenarios_(verifierJeton_(req.jeton)); },
+      escape_enregistrer: function () { return escapeEnregistrer_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.scenario, req.modeles); },
+      escape_retirer: function () { return escapeRetirer_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.modeles); },
       escape_valider: function () { return escapeValider_(exigerReferent_(verifierJeton_(req.jeton)), req.scenario, req.valide, req.remarque); },
       quiz_liste: function () { return quizListe_(verifierJeton_(req.jeton)); },
       quiz_question: function () { return quizQuestion_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
@@ -124,8 +128,18 @@ function doPost(e) {
       visite_annuler: function () { verifierJeton_(req.jeton); return visiteAnnuler_(req.id, req.code); },
       visite_creneau: function () { return visiteCreneau_(exigerReferent_(verifierJeton_(req.jeton)), req.donnees); },
       visite_presence: function () { exigerReferent_(verifierJeton_(req.jeton)); return visitePresence_(req.id, req.present); },
-      nl_liste: function () { return nlListe_(verifierJeton_(req.jeton)); },
-      nl_page: function () { return nlPage_(verifierJeton_(req.jeton), req.id, req.page); },
+      nl_liste: function () { var r = nlListe_(verifierJeton_(req.jeton)); r.newsletters = communNewsletters_().concat(r.newsletters); return r; },
+      nl_page: function () { var se = verifierJeton_(req.jeton), id = String(req.id || ''); if (id.indexOf('chu:') === 0) return avecCommun_(function () { return nlPage_({ r: 'agent' }, id.slice(4), req.page); }) || { ok: false, erreur: 'newsletter_introuvable' }; return nlPage_(se, id, req.page); },
+      actu_liste: function () { exigerReferent_(verifierJeton_(req.jeton)); return actuListe_(); },
+      actu_enregistrer: function () { return actuEnregistrer_(exigerReferent_(verifierJeton_(req.jeton)), req.donnees || {}); },
+      actu_supprimer: function () { exigerReferent_(verifierJeton_(req.jeton)); return actuSupprimer_(req.ligne, req.titre); },
+      service_reglages: function () { exigerAdmin_(verifierJeton_(req.jeton)); return serviceReglages_(req.donnees); },
+      logo: function () { verifierJeton_(req.jeton); return logoLire_(); },
+      logo_envoyer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return logoEnvoyer_(req.data, req.type); },
+      plan_importer: function () { return planImporter_(exigerAdmin_(verifierJeton_(req.jeton)), req.texte, req.enregistrer === true); },
+      docs_liste: function () { return docsListe_(verifierJeton_(req.jeton)); },
+      docs_enregistrer: function () { return docsEnregistrer_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees || {}); },
+      docs_supprimer: function () { exigerReferent_(verifierJeton_(req.jeton)); return docsSupprimer_(req.id); },
       nl_ajouter: function () { return nlAjouter_(exigerAdmin_(verifierJeton_(req.jeton)), req.donnees); },
       nl_envoyer_page: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlEnvoyerPage_(req.id, req.page, req.data); },
       nl_publier: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlPublier_(req.id); },
@@ -212,9 +226,11 @@ function home_(session) {
     session: { role: session.r, libelle: session.n },
     service: params['Nom du service'] || 'Réanimation – USC',
     messageAccueil: params["Message d'accueil"] || '',
+    rubriques: rubriquesActives_(params),
+    logo: params['Logo du service (ID Drive)'] ? String(props_().getProperty('LOGO_VERSION') || '1') : null,
     dateJ: dateJIso,
-    actualites: lireActualites_(ss),
-    newsletter: derniereNewsletter_(ss),
+    actualites: communActus_().concat(lireActualites_(ss)),
+    newsletter: derniereNewsletterTout_(ss),
     jauge: calculerJauge_(ss),
     elan: calculerElan_(ss),
     misAJour: new Date().toISOString()
@@ -534,10 +550,10 @@ function remplacerIds_(ss, corresp) { // dans les questions du quiz (pièces li�
 }
 
 /** À lancer après avoir remplacé le fichier du plan dans le Drive. */
-function viderCachePlan() {
+function viderCachePlan() { viderCachePlan_(); alerte_('Le plan sera relu depuis le Drive au prochain affichage.'); }
+function viderCachePlan_() {
   var cache = cache_(), n = Number(cache.get('plan_n') || 0);
   cache.removeAll(['plan_n'].concat(Array.apply(null, Array(n)).map(function (_, i) { return 'plan_' + i; })));
-  alerte_('Le plan sera relu depuis le Drive au prochain affichage.');
 }
 
 // ============================================================================
@@ -820,6 +836,13 @@ var QUIZ_BANQUE = [
   ['urgences', 'qcm', 'La bouteille d\'oxygène de transport se vérifie…', ['Avant chaque transfert (pression, autonomie)', 'Une fois par mois', 'Seulement si une alarme sonne', 'Uniquement par le brancardier'], 0, 'L\'autonomie doit couvrir tout le trajet, avec une marge.'],
   ['urgences', 'vf', 'Lors d\'une alarme incendie, on ferme les portes des chambres et des locaux.', null, 'vrai', 'Fermer les portes limite la propagation de la fumée.']
 ];
+// Questions générales valables pour tous les services (ajoutées aux questions « urgences » à la création d'un service)
+var QUIZ_GENERIQUE = [
+  ['urgences', 'vf', 'Dans les nouveaux locaux, les numéros d\'appel d\'urgence internes peuvent changer : on les vérifie dès le premier jour.', null, 'vrai', 'Numéros d\'urgence, alerte incendie, sécurité : à vérifier sur les affichages du nouveau service (à adapter aux consignes du CHU).'],
+  ['urgences', 'qcm', 'Le jour du déménagement, une issue de secours est encombrée par des cartons. Que faites-vous ?', ['Je la dégage tout de suite et je préviens l\'encadrement', 'J\'attends la fin du déménagement', 'Je mets un panneau « attention »', 'Rien, ce n\'est pas mon secteur'], 0, 'Les issues de secours restent libres en permanence, même pendant un déménagement.'],
+  ['urgences', 'qcm', 'Où trouver le plan d\'évacuation de votre secteur ?', ['Affiché près des sorties et des circulations', 'Uniquement chez la direction', 'Il n\'y en a pas dans un bâtiment neuf', 'Sur demande au standard'], 0, 'Les plans d\'évacuation sont affichés dans les circulations : repérez-les dès votre arrivée.'],
+  ['urgences', 'vf', 'Avant le déménagement, il est utile de repérer son trajet domicile – nouveau site et les accès réservés au personnel.', null, 'vrai', 'Repérer les accès, les parkings et le trajet évite le stress du premier jour.']
+];
 
 function quizDatesModif_(ss) { // id pièce ou équipement → date de dernière modification ; équipements existants
   var m = {}, existe = {};
@@ -931,10 +954,11 @@ function quizAjouterTotal_(n) {
     return { ok: true, total: t };
   } finally { verrou.releaseLock(); }
 }
-function installerBanqueQuiz_(ss) { // seulement si l'onglet est vide
+function installerBanqueQuiz_(ss, generique) { // seulement si l'onglet est vide ; un nouveau service n'a pas les questions du plan de la réa
   var sh = ss.getSheetByName(ONGLETS.quiz);
   if (!sh || sh.getLastRow() > 1) return 0;
-  var maintenant = new Date(), lignes = QUIZ_BANQUE.map(function (b, i) {
+  var banque = generique ? QUIZ_BANQUE.filter(function (b) { return b[0] !== 'plan'; }).concat(QUIZ_GENERIQUE) : QUIZ_BANQUE;
+  var maintenant = new Date(), lignes = banque.map(function (b, i) {
     return ['QZclaude' + ('0' + (i + 1)).slice(-2), b[0], b[1], b[2], b[3] ? JSON.stringify(b[3]) : '', String(b[4]), b[5], '', 'brouillon', 'Claude (à relire)', maintenant, maintenant];
   });
   sh.getRange(2, 1, lignes.length, QUIZ.entetes.length).setValues(lignes);
@@ -968,7 +992,7 @@ var JEUX_DEFAUTS = {
     { texte: 'J\'ai terminé un escape game', auto: 'escape' }, { texte: 'Je sais où est le chariot d\'urgence de mon secteur' },
     { texte: 'J\'ai repéré les vannes de fluides' }, { texte: 'J\'ai trouvé mon vestiaire' }, { texte: 'J\'ai aidé un collègue à se repérer' },
     { texte: 'Je connais mon trajet domicile – nouveau CHU' }, { texte: 'J\'ai rangé mon casier actuel' }, { texte: 'J\'ai participé à une simulation' },
-    { texte: 'Je connais les couleurs des unités' }, { texte: 'J\'ai pris une photo souvenir de l\'ancien service' }, { texte: 'J\'ai repéré la salle de détente' },
+    { texte: 'Je connais les repères de mon nouveau service' }, { texte: 'J\'ai pris une photo souvenir de l\'ancien service' }, { texte: 'J\'ai repéré la salle de détente' },
     { texte: 'J\'ai parlé du déménagement avec un collègue d\'une autre équipe' }] },
   escape: { valides: {} }
 };
@@ -1497,7 +1521,9 @@ function installerBase_(ss, nomService) {
   creerOnglet_(ss, ONGLETS.points, ['ID équipement', 'Type', 'X', 'Y', 'Précision', 'Modifié le', 'Par'], []);
   creerOnglet_(ss, ONGLETS.quiz, QUIZ.entetes, []);
   installerJeux_(ss);
-  installerBanqueQuiz_(ss);
+  installerBanqueQuiz_(ss, !!nomService);
+  creerOnglet_(ss, ONGLETS.escape, ESCAPE.entetes, []);
+  creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []);
   ajouterParametre_(ss, 'Objectif quiz équipe', 'Nombre total de réponses visé par l\'équipe (compteur anonyme). Par défaut : 3000.');
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
   creerOnglet_(ss, ONGLETS.newsletters, NL.entetes, []);
@@ -1753,13 +1779,15 @@ function codesChanger_(session, quoi, nom) {
 // ============================================================================
 var ANNUAIRE = { onglet: 'Services', entetes: ['ID', 'Nom', 'Google Sheets (ID)', 'Actif', 'Créé le', 'Créé par'] };
 var ROUTES_ANNUAIRE = {
-  services: function () { return { ok: true, services: lireServices_().filter(function (s) { return s.actif; }).map(function (s) { return { id: s.id, nom: s.nom }; }) }; },
+  services: function () { return { ok: true, services: lireServices_().filter(function (s) { return s.actif && s.id.charAt(0) !== '_'; }).map(function (s) { return { id: s.id, nom: s.nom }; }) }; },
   annuaire_login: function (req) { return annuaireLogin_(req.code); },
   annuaire_etat: function (req) { return annuaireEtat_(verifierJetonAnnuaire_(req.jeton)); },
   service_creer: function (req) { return serviceCreer_(verifierJetonAnnuaire_(req.jeton), req.donnees || {}); },
   service_modifier: function (req) { return serviceModifier_(verifierJetonAnnuaire_(req.jeton), req.id, req.donnees || {}); },
   service_code: function (req) { return serviceCode_(verifierJetonAnnuaire_(req.jeton), req.id, req.quoi); },
   createur: function (req) { return createurGerer_(exigerSuper_(verifierJetonAnnuaire_(req.jeton)), req.nom, req.actif); },
+  commun_jeton: function (req) { return communJeton_(verifierJetonAnnuaire_(req.jeton)); },
+  tableau_bord: function (req) { return tableauBord_(verifierJetonAnnuaire_(req.jeton)); },
   service_rattacher: function (req) { return serviceRattacher_(verifierJetonAnnuaire_(req.jeton), req.donnees); }
 };
 function lireCreateurs_() { try { return JSON.parse(props_().getProperty('CREATEURS') || '[]'); } catch (e) { return []; } }
@@ -1784,7 +1812,7 @@ function verifierJetonAnnuaire_(jeton) {
 function exigerSuper_(session) { if (session.r !== 'super') throw erreurApp_('non_autorise'); return session; }
 function annuaireEtat_(session) {
   return { ok: true, role: session.r, libelle: session.n,
-    services: lireServices_().map(function (s) { return { id: s.id, nom: s.nom, actif: s.actif, cree: s.cree, par: s.par, lienSheets: session.r === 'super' && s.ss ? 'https://docs.google.com/spreadsheets/d/' + s.ss : '' }; }),
+    services: lireServices_().filter(function (s) { return s.id.charAt(0) !== '_'; }).map(function (s) { return { id: s.id, nom: s.nom, actif: s.actif, cree: s.cree, par: s.par, lienSheets: session.r === 'super' && s.ss ? 'https://docs.google.com/spreadsheets/d/' + s.ss : '' }; }),
     createurs: session.r === 'super' ? lireCreateurs_().map(function (c) { return { nom: c.nom, actif: !!c.actif, modifie: c.modifie || '' }; }) : null };
 }
 function idService_(t) {
@@ -2309,4 +2337,358 @@ function defiReprendre_(ssService) {
   });
   defiViderCache_();
   return r.length ? 'Défi CHU repris : ' + r.join(', ') + '.' : '';
+}
+
+
+// ============================================================================
+// Lot 4 : escape game modifiable par chaque service (missions rangées dans l'onglet « Escape game »)
+// Tant que l'onglet est vide, l'appli propose ses missions de départ (la réa : les siennes ; les autres : des modèles
+// généraux). Dès la première modification, les missions de départ sont recopiées dans l'onglet, puis modifiées.
+// Toute mission modifiée doit de nouveau être validée par un référent avant d'être visible des agents.
+// ============================================================================
+var ESCAPE = { entetes: ['ID', 'Titre', 'Icône', 'Durée', 'Résumé', 'Étapes (JSON)', 'Statut', 'Auteur', 'Modifié le'], types: { recit: 1, choix: 1, multi: 1, ordre: 1, plan: 1 }, max: 30 };
+function ongletEscape_(ss) { return ss.getSheetByName(ONGLETS.escape) || creerOnglet_(ss, ONGLETS.escape, ESCAPE.entetes, []); }
+function lireEscape_(ss) {
+  var sh = ongletEscape_(ss), v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id) continue;
+    var et = []; try { et = JSON.parse(v[i][5] || '[]'); } catch (e) { et = []; }
+    l.push({ id: id, titre: String(v[i][1] || ''), ic: String(v[i][2] || '🔓'), duree: String(v[i][3] || ''), resume: String(v[i][4] || ''), etapes: et,
+      statut: String(v[i][6] || 'actif'), auteur: String(v[i][7] || ''), modifie: v[i][8] instanceof Date ? formaterDate_(v[i][8]) : '', ligne: i + 1 });
+  }
+  return l;
+}
+function escapeScenarios_(session) {
+  var l = lireEscape_(classeur_());
+  if (!l.length) return { ok: true, scenarios: null }; // l'appli utilise ses missions de départ
+  var ref = session.r === 'admin' || session.r === 'referent';
+  return { ok: true, scenarios: l.filter(function (x) { return x.statut !== 'retiré' || ref; }).map(function (x) { var y = Object.assign({}, x); delete y.ligne; return y; }) };
+}
+function nettoyerScenario_(sc) {
+  sc = sc || {};
+  var t = function (v, m) { return nettoyerTexte_(v, m); };
+  var x = { titre: t(sc.titre, 80), ic: t(sc.ic, 4) || '🔓', duree: t(sc.duree, 20), resume: t(sc.resume, 400), etapes: [] };
+  if (x.titre.length < 3 || !Array.isArray(sc.etapes) || !sc.etapes.length || sc.etapes.length > ESCAPE.max) throw erreurApp_('scenario_invalide');
+  sc.etapes.forEach(function (e) {
+    e = e || {}; if (!ESCAPE.types[e.type]) throw erreurApp_('scenario_invalide');
+    var y = { type: e.type };
+    if (e.type === 'recit') { y.texte = t(e.texte, 600); if (!y.texte) throw erreurApp_('scenario_invalide'); x.etapes.push(y); return; }
+    y.question = t(e.question, 300); if (!y.question) throw erreurApp_('scenario_invalide');
+    if (e.indice) y.indice = t(e.indice, 300); if (e.explication) y.explication = t(e.explication, 500);
+    if (e.type === 'choix') {
+      y.choix = (e.choix || []).map(function (c) { return t(c, 200); }).filter(String); y.bonne = Number(e.bonne);
+      if (y.choix.length < 2 || y.choix.length > 6 || !(y.bonne >= 0 && y.bonne < y.choix.length)) throw erreurApp_('scenario_invalide');
+    } else if (e.type === 'multi') {
+      y.items = (e.items || []).map(function (c) { return { t: t(c && c.t, 200), ok: !!(c && c.ok) }; }).filter(function (c) { return c.t; });
+      if (y.items.length < 2 || y.items.length > 10 || !y.items.some(function (c) { return c.ok; })) throw erreurApp_('scenario_invalide');
+    } else if (e.type === 'ordre') {
+      y.items = (e.items || []).map(function (c) { return t(c, 200); }).filter(String);
+      if (y.items.length < 2 || y.items.length > 8) throw erreurApp_('scenario_invalide');
+    } else if (e.type === 'plan') {
+      var c = e.cible || {}, z = {};
+      if (c.chambre) z.chambre = t(c.chambre, 20); else if (c.section) z.section = t(c.section, 40); else if (c.point) { z.point = t(c.point, 40); if (c.proche) z.proche = t(c.proche, 20); }
+      if (!Object.keys(z).length) throw erreurApp_('scenario_invalide');
+      y.cible = z;
+    }
+    x.etapes.push(y);
+  });
+  return x;
+}
+function ligneEscape_(id, x, statut, auteur) { return [id, x.titre, x.ic, x.duree, x.resume, JSON.stringify(x.etapes), statut || 'actif', auteur || '', new Date()]; }
+/* modeles : missions de départ envoyées par l'appli, recopiées une seule fois quand l'onglet est encore vide */
+function escapeAmorcer_(ss, modeles, auteur) {
+  var sh = ongletEscape_(ss); if (sh.getLastRow() > 1 || !Array.isArray(modeles)) return;
+  var lignes = []; modeles.slice(0, ESCAPE.max).forEach(function (m) {
+    var id = String(m && m.id || ''); if (!/^[a-z0-9-]{3,30}$/.test(id)) return;
+    try { lignes.push(ligneEscape_(id, nettoyerScenario_(m), 'actif', 'Modèle Cap NCHUG')); } catch (e) { /* modèle ignoré */ }
+  });
+  if (lignes.length) sh.getRange(2, 1, lignes.length, ESCAPE.entetes.length).setValues(lignes);
+}
+function escapeOterValidation_(ss, id) {
+  var c = jeuxConfig_(ss).escape; if (!c || !c.ligne) return;
+  var g = c.reglages || {}; g.valides = g.valides || {};
+  if (g.valides[id]) { delete g.valides[id]; ss.getSheetByName(ONGLETS.jeux).getRange(c.ligne, 6).setValue(JSON.stringify({ valides: g.valides })); }
+}
+function escapeEnregistrer_(session, id, scenario, modeles) {
+  var x = nettoyerScenario_(scenario), ss = classeur_(), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    escapeAmorcer_(ss, modeles, session.n);
+    var sh = ongletEscape_(ss), l = lireEscape_(ss), y = id ? l.filter(function (z) { return z.id === String(id); })[0] : null;
+    if (id && !y) throw erreurApp_('introuvable');
+    if (y) { sh.getRange(y.ligne, 1, 1, ESCAPE.entetes.length).setValues([ligneEscape_(y.id, x, 'actif', session.n || 'Référent')]); escapeOterValidation_(ss, y.id); return { ok: true, id: y.id }; }
+    if (l.length >= ESCAPE.max) throw erreurApp_('trop_de_missions');
+    var nid = (idService_(x.titre).slice(0, 20) || 'mission') + '-' + Utilities.getUuid().slice(0, 4);
+    sh.appendRow(ligneEscape_(nid, x, 'actif', session.n || 'Référent'));
+    return { ok: true, id: nid };
+  } finally { verrou.releaseLock(); }
+}
+function escapeRetirer_(session, id, modeles) {
+  var ss = classeur_(), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    escapeAmorcer_(ss, modeles, session.n);
+    var y = lireEscape_(ss).filter(function (z) { return z.id === String(id || ''); })[0]; if (!y) throw erreurApp_('introuvable');
+    var sh = ongletEscape_(ss), retire = y.statut !== 'retiré';
+    sh.getRange(y.ligne, 7).setValue(retire ? 'retiré' : 'actif'); sh.getRange(y.ligne, 9).setValue(new Date());
+    if (retire) escapeOterValidation_(ss, y.id);
+    return { ok: true, statut: retire ? 'retiré' : 'actif' };
+  } finally { verrou.releaseLock(); }
+}
+
+
+// ============================================================================
+// Lot 5 : contenus communs à tout le CHU (Cap NCHUG)
+// Un « service » caché, « _chu », porte les actualités, newsletters et documents communs. Le super-admin et les créateurs
+// y entrent comme administrateurs (jeton du jour) et utilisent les écrans habituels. Chaque service les voit avec les siens.
+// ============================================================================
+var COMMUN = { id: '_chu', nom: 'Contenus communs du CHU' };
+function communService_() { return modeAnnuaire_() ? (lireServices_().filter(function (s) { return s.id === COMMUN.id && s.ss; })[0] || null) : null; }
+function avecCommun_(fn) { // exécute fn dans les contenus communs, puis revient au service en cours
+  var c = communService_(); if (!c || (CTX_SERVICE && CTX_SERVICE.id === COMMUN.id)) return null;
+  var ctx = CTX_SERVICE, memo = CLASSEUR_MEMO;
+  CTX_SERVICE = { id: c.id, ssId: c.ss, nom: c.nom }; CLASSEUR_MEMO = null;
+  try { return fn(); } catch (e) { console.error('commun : ' + e); return null; } finally { CTX_SERVICE = ctx; CLASSEUR_MEMO = memo; }
+}
+function communMemo_(cle, fn) {
+  if (!CTX_SERVICE || CTX_SERVICE.id === COMMUN.id || !modeAnnuaire_()) return [];
+  var c = CacheService.getScriptCache(), t = c.get('commun|' + cle); if (t) return JSON.parse(t);
+  var v = avecCommun_(fn) || []; try { c.put('commun|' + cle, JSON.stringify(v), 120); } catch (e) { /* ignoré */ }
+  return v;
+}
+function communActus_() { return communMemo_('actus', function () { return lireActualites_(classeur_()).map(function (a) { a.chu = true; return a; }); }); }
+function communNewsletters_() {
+  return communMemo_('nl', function () { return lireNewsletters_(classeur_()).filter(publieeNl_).reverse().map(function (n) { return { id: 'chu:' + n.id, titre: n.titre, parution: n.parution, pages: n.pages, ratio: n.ratio, ajout: n.ajout, chu: true }; }); });
+}
+function derniereNewsletterTout_(ss) {
+  var a = derniereNewsletter_(ss), l = lireNewsletters_(ss).filter(publieeNl_), dateA = l.length ? l[l.length - 1].ajout : '';
+  var c = communNewsletters_()[0];
+  if (c && (!a || c.ajout > dateA)) return { id: c.id, titre: c.titre, chu: true };
+  return a;
+}
+function communJeton_(session) {
+  var verrou = LockService.getScriptLock(), c; verrou.waitLock(20000);
+  try {
+    viderCacheServices_(); c = communService_();
+    if (!c) { // première fois : création du Google Sheets des contenus communs
+      var ss = SpreadsheetApp.create('Cap NCHUG – ' + COMMUN.nom);
+      try { DriveApp.getFileById(ss.getId()).moveTo(dossierServices_()); } catch (e) { console.error('déplacement : ' + e); }
+      CTX_SERVICE = { id: COMMUN.id, ssId: ss.getId(), nom: COMMUN.nom }; CLASSEUR_MEMO = ss;
+      installerBase_(ss, COMMUN.nom);
+      var act = ss.getSheetByName(ONGLETS.actualites); if (act.getLastRow() > 1) act.deleteRows(2, act.getLastRow() - 1); // pas d'actualité d'accueil en double
+      ecrireParametre_(ss, 'Rubriques actives', 'newsletter, docs'); ecrireParametre_(ss, "Message d'accueil", 'Espace des contenus communs : ce que vous publiez ici apparaît dans tous les services.');
+      props_().setProperty('VERSION_JETONS', '1');
+      sortirService_();
+      annuaireClasseur_().getSheetByName(ANNUAIRE.onglet).appendRow([COMMUN.id, COMMUN.nom, ss.getId(), true, new Date(), session.n]);
+      viderCacheServices_(); c = communService_();
+    }
+    CTX_SERVICE = { id: c.id, ssId: c.ss, nom: c.nom };
+    var exp = Date.now() + 86400000;
+    return { ok: true, service: { id: c.id, nom: c.nom }, jeton: signerJeton_({ r: 'admin', n: session.n, v: versionJetons_(), exp: exp, s: c.id }), role: 'admin', libelle: session.n, expiration: new Date(exp).toISOString() };
+  } finally { sortirService_(); verrou.releaseLock(); }
+}
+
+/* ---------- Actualités modifiables dans l'appli (référents et administrateur) ---------- */
+function actuListe_() {
+  var v = classeur_().getSheetByName(ONGLETS.actualites).getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) { if (!v[i][1]) continue; l.push({ ligne: i + 1, date: v[i][0] instanceof Date ? formaterDate_(v[i][0]) : '', titre: String(v[i][1]), texte: String(v[i][2] || ''), publiee: v[i][3] === true, epinglee: v[i][4] === true }); }
+  l.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  return { ok: true, actualites: l };
+}
+function actuEnregistrer_(session, d) {
+  var titre = nettoyerTexte_(d.titre, 120), texte = String(d.texte == null ? '' : d.texte).replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim().slice(0, 2000);
+  if (titre.length < 2) throw erreurApp_('requete_invalide');
+  var sh = classeur_().getSheetByName(ONGLETS.actualites), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? new Date(+d.date.slice(0, 4), +d.date.slice(5, 7) - 1, +d.date.slice(8, 10), 12) : new Date();
+    var ligne = [date, titre, texte, d.publiee !== false, !!d.epinglee];
+    if (d.ligne) { var n = Number(d.ligne); if (!(n >= 2 && n <= sh.getLastRow()) || String(sh.getRange(n, 2).getValue()) !== String(d.titreAvant || '')) throw erreurApp_('introuvable'); sh.getRange(n, 1, 1, 5).setValues([ligne]); }
+    else sh.appendRow(ligne);
+  } finally { verrou.releaseLock(); }
+  CacheService.getScriptCache().remove('commun|actus');
+  return actuListe_();
+}
+function actuSupprimer_(n, titre) {
+  var sh = classeur_().getSheetByName(ONGLETS.actualites); n = Number(n);
+  if (!(n >= 2 && n <= sh.getLastRow()) || String(sh.getRange(n, 2).getValue()) !== String(titre || '')) throw erreurApp_('introuvable');
+  sh.deleteRow(n); CacheService.getScriptCache().remove('commun|actus');
+  return actuListe_();
+}
+
+/* ---------- Documents et FAQ (service + communs) ---------- */
+var DOCS = { entetes: ['ID', 'Catégorie', 'Titre ou question', 'Texte ou réponse', 'Lien (https)', 'Ordre', 'Publié', 'Par', 'Modifié le'] };
+function lireDocs_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.documents) || creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []), v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!id || !v[i][2]) continue;
+    var lien = String(v[i][4] || '').trim(); if (lien && !/^https:\/\/[^\s<>"]+$/.test(lien)) lien = '';
+    l.push({ id: id, categorie: String(v[i][1] || 'Divers'), titre: String(v[i][2]), texte: String(v[i][3] || ''), lien: lien, ordre: Number(v[i][5]) || 0, publie: v[i][6] !== false, par: String(v[i][7] || ''), ligne: i + 1 });
+  }
+  return l.sort(function (a, b) { return a.categorie.localeCompare(b.categorie) || a.ordre - b.ordre || a.titre.localeCompare(b.titre); });
+}
+function docsListe_(session) {
+  var ref = session.r === 'admin' || session.r === 'referent';
+  var propres = lireDocs_(classeur_()).filter(function (d) { return d.publie || ref; }).map(function (d) { delete d.ligne; return d; });
+  var communs = communMemo_('docs', function () { return lireDocs_(classeur_()).filter(function (d) { return d.publie; }).map(function (d) { delete d.ligne; d.chu = true; return d; }); });
+  return { ok: true, documents: communs.concat(propres), peutModifier: ref };
+}
+function docsEnregistrer_(session, id, d) {
+  var titre = nettoyerTexte_(d.titre, 160), texte = String(d.texte == null ? '' : d.texte).replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim().slice(0, 4000);
+  var lien = String(d.lien || '').trim(); if (lien && !/^https:\/\/[^\s<>"]{4,500}$/.test(lien)) throw erreurApp_('lien_invalide');
+  if (titre.length < 2 || (!texte && !lien)) throw erreurApp_('requete_invalide');
+  var ss = classeur_(), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var l = lireDocs_(ss), sh = ss.getSheetByName(ONGLETS.documents);
+    var ligne = [null, nettoyerTexte_(d.categorie, 40) || 'Divers', titre, texte, lien, Math.round(Number(d.ordre) || 0), d.publie !== false, session.n || 'Administrateur', new Date()];
+    if (id) { var x = l.filter(function (y) { return y.id === String(id); })[0]; if (!x) throw erreurApp_('introuvable'); ligne[0] = x.id; sh.getRange(x.ligne, 1, 1, 9).setValues([ligne]); }
+    else { ligne[0] = 'DOC' + Utilities.getUuid().replace(/-/g, '').slice(0, 8); sh.appendRow(ligne); }
+  } finally { verrou.releaseLock(); }
+  CacheService.getScriptCache().remove('commun|docs');
+  return docsListe_(session);
+}
+function docsSupprimer_(id) {
+  var ss = classeur_(), x = lireDocs_(ss).filter(function (y) { return y.id === String(id || ''); })[0]; if (!x) throw erreurApp_('introuvable');
+  ss.getSheetByName(ONGLETS.documents).deleteRow(x.ligne); CacheService.getScriptCache().remove('commun|docs');
+  return { ok: true };
+}
+
+/* ---------- Tableau de bord des créateurs (aucune donnée individuelle) ---------- */
+function tableauBord_(session) {
+  var c = CacheService.getScriptCache(), t = c.get('annuaire|tableau'); if (t) return JSON.parse(t);
+  var tout = PropertiesService.getScriptProperties().getProperties(), mode = defiModeActuel_(), lu = lundi_(aujourdhuiDefi_()), lignes = [];
+  lireServices_().forEach(function (sv) {
+    if (sv.id.charAt(0) === '_') return;
+    var x = { nom: sv.nom, actif: sv.actif, cree: sv.cree, plan: null, rubriques: null, referents: 0, defi: null };
+    try { x.referents = JSON.parse(tout['s:' + sv.id + ':REFERENTS'] || '[]').filter(function (r) { return r.actif; }).length; } catch (e) { /* ignoré */ }
+    var d = String(tout['DEFI_S|' + lu + '|' + mode + '|' + sv.id] || '').split(',');
+    if (d[0]) x.defi = { reponses: Number(d[0]), pourcent: Number(d[0]) ? Math.round(1000 * Number(d[1]) / Number(d[0])) / 10 : 0 };
+    if (sv.actif && sv.ss) try {
+      var p = lireParametres_(SpreadsheetApp.openById(sv.ss));
+      x.plan = !!String(p['Fichier du plan (ID Drive)'] || '').trim();
+      x.rubriques = String(p['Rubriques actives'] || '').trim() || 'toutes';
+    } catch (e) { x.plan = null; }
+    lignes.push(x);
+  });
+  var r = { ok: true, services: lignes, mode: mode, seuil: DEFI.seuil, calcule: new Date().toISOString() };
+  try { c.put('annuaire|tableau', JSON.stringify(r), 600); } catch (e) { /* ignoré */ }
+  return r;
+}
+
+
+// ============================================================================
+// Lot 2 : personnalisation du service (dans l'appli, par son administrateur) et import du plan avec contrôle
+// ============================================================================
+var RUBRIQUES = ['plan', 'visites', 'newsletter', 'souvenirs', 'jeux', 'docs'];
+function rubriquesActives_(params) { // null = toutes
+  var t = String(params['Rubriques actives'] || '').trim(); if (!t) return null;
+  return t.split(/[,;\s]+/).filter(function (x) { return RUBRIQUES.indexOf(x) >= 0; });
+}
+function ecrireParametre_(ss, nom, valeur, aide) {
+  var sh = ss.getSheetByName(ONGLETS.parametres), v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) if (String(v[i][0]).trim() === nom) { sh.getRange(i + 1, 2).setValue(valeur); return; }
+  sh.appendRow([nom, valeur, aide || '']);
+}
+function serviceReglages_(d) {
+  var ss = classeur_(), p = lireParametres_(ss);
+  if (d && typeof d === 'object') {
+    if (d.nom != null) { var nom = nettoyerTexte_(d.nom, 60); if (nom.length < 2) throw erreurApp_('requete_invalide'); ecrireParametre_(ss, 'Nom du service', nom);
+      if (CTX_SERVICE && CTX_SERVICE.id.charAt(0) !== '_') { var sv = lireServices_().filter(function (x) { return x.id === CTX_SERVICE.id; })[0]; if (sv) { annuaireClasseur_().getSheetByName(ANNUAIRE.onglet).getRange(sv.ligne, 2).setValue(nom); viderCacheServices_(); } } }
+    if (d.message != null) ecrireParametre_(ss, "Message d'accueil", nettoyerTexte_(d.message, 300));
+    if (d.dateJ != null) { if (d.dateJ && !/^\d{4}-\d{2}-\d{2}$/.test(d.dateJ)) throw erreurApp_('requete_invalide'); ecrireParametre_(ss, 'Date J', d.dateJ ? new Date(+d.dateJ.slice(0, 4), +d.dateJ.slice(5, 7) - 1, +d.dateJ.slice(8, 10), 12) : ''); }
+    if (d.rubriques != null) {
+      var r = (Array.isArray(d.rubriques) ? d.rubriques : []).filter(function (x) { return RUBRIQUES.indexOf(x) >= 0; });
+      ecrireParametre_(ss, 'Rubriques actives', r.length === RUBRIQUES.length ? '' : r.join(', '), 'Rubriques affichées sur l\'accueil (vide = toutes) : ' + RUBRIQUES.join(', '));
+    }
+    if (d.logo === null) { ecrireParametre_(ss, 'Logo du service (ID Drive)', ''); props_().setProperty('LOGO_VERSION', String(Date.now())); cache_().remove('logo'); }
+    p = lireParametres_(ss);
+  }
+  var dj = p['Date J'];
+  return { ok: true, reglages: { nom: String(p['Nom du service'] || ''), message: String(p["Message d'accueil"] || ''), dateJ: dj instanceof Date && !isNaN(dj) ? formaterDate_(dj) : '',
+    rubriques: rubriquesActives_(p) || RUBRIQUES.slice(), logo: !!p['Logo du service (ID Drive)'], plan: !!String(p['Fichier du plan (ID Drive)'] || '').trim() }, toutes: RUBRIQUES };
+}
+function dossierService_(ss) { var parents = DriveApp.getFileById(ss.getId()).getParents(); return parents.hasNext() ? parents.next() : DriveApp.getRootFolder(); }
+function logoEnvoyer_(data, type) {
+  if (type !== 'image/png' && type !== 'image/jpeg') throw erreurApp_('requete_invalide');
+  var octets; try { octets = Utilities.base64Decode(String(data || '')); } catch (e) { throw erreurApp_('requete_invalide'); }
+  if (!octets.length || octets.length > 200 * 1024) throw erreurApp_('image_trop_lourde');
+  var png = (octets[0] & 255) === 0x89 && (octets[1] & 255) === 0x50, jpg = (octets[0] & 255) === 0xff && (octets[1] & 255) === 0xd8;
+  if (!(png || jpg)) throw erreurApp_('requete_invalide');
+  var ss = classeur_(), ancien = String(lireParametres_(ss)['Logo du service (ID Drive)'] || '').trim();
+  var f = dossierService_(ss).createFile(Utilities.newBlob(octets, png ? 'image/png' : 'image/jpeg', 'logo-service.' + (png ? 'png' : 'jpg')));
+  ecrireParametre_(ss, 'Logo du service (ID Drive)', f.getId(), 'Envoyé depuis l\'appli (Personnaliser le service).');
+  if (ancien) try { DriveApp.getFileById(ancien).setTrashed(true); } catch (e) { /* ignoré */ }
+  props_().setProperty('LOGO_VERSION', String(Date.now())); cache_().remove('logo');
+  return { ok: true, version: props_().getProperty('LOGO_VERSION') };
+}
+function logoLire_() {
+  var c = cache_(), t = c.get('logo'); if (t) return JSON.parse(t);
+  var id = String(lireParametres_(classeur_())['Logo du service (ID Drive)'] || '').trim(); if (!id) return { ok: true, data: null };
+  var b; try { b = DriveApp.getFileById(id).getBlob(); } catch (e) { return { ok: true, data: null }; }
+  var r = { ok: true, type: b.getContentType(), data: Utilities.base64Encode(b.getBytes()), version: String(props_().getProperty('LOGO_VERSION') || '1') };
+  try { c.put('logo', JSON.stringify(r), 21600); } catch (e) { /* trop gros */ }
+  return r;
+}
+
+/* ---------- Import du plan : contrôle avant enregistrement ---------- */
+var PLAN_TYPES = { piece: 1, chambre: 1, couloir: 1, terrasse: 1, usic: 1, usinv: 1, circulation: 1, technique: 1 };
+function validerPlan_(D) {
+  var err = [], av = [], st = { pieces: 0, chambres: 0, nommees: 0, unites: 0 };
+  function nb(x) { return typeof x === 'number' && isFinite(x); }
+  if (!D || typeof D !== 'object' || Array.isArray(D)) return { erreurs: ['Le fichier ne contient pas un plan (objet JSON attendu).'], avertissements: [], stats: st };
+  var vb = D.viewBox;
+  if (!Array.isArray(vb) || vb.length !== 4 || !vb.every(nb) || vb[2] <= 0 || vb[3] <= 0) err.push('« viewBox » manquant ou incorrect : 4 nombres [x, y, largeur, hauteur] attendus.');
+  if (!Array.isArray(D.pieces) || !D.pieces.length) { err.push('Aucune pièce (« pieces ») dans le fichier.'); return { erreurs: err, avertissements: av, stats: st }; }
+  if (D.pieces.length > 6000) err.push('Trop de pièces (' + D.pieces.length + ', 6000 au plus).');
+  var unites = D.unites && typeof D.unites === 'object' ? D.unites : {}, ids = {}, chambres = {}, boites = [];
+  Object.keys(unites).forEach(function (k) { var u = unites[k]; st.unites++;
+    if (!u || !String(u.nom || '').trim()) err.push('Unité « ' + k + ' » sans nom.');
+    var c = u && (u.couleur || u.trait); if (c && !/^#[0-9a-fA-F]{6}$/.test(c)) err.push('Unité « ' + k + ' » : couleur « ' + c + ' » incorrecte (format #RRGGBB).'); });
+  var horsCadre = 0, sansGeo = [], typesInconnus = {}, sansNumero = 0;
+  D.pieces.forEach(function (p, i) {
+    var nom = 'Pièce n° ' + (i + 1) + (p && p.id ? ' (' + p.id + ')' : '');
+    if (!p || typeof p !== 'object') { err.push(nom + ' : illisible.'); return; }
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(p.id || ''))) { err.push(nom + ' : identifiant « id » manquant ou incorrect (lettres, chiffres, - et _).'); return; }
+    if (ids[p.id]) { err.push('Identifiant en double : ' + p.id + '.'); return; } ids[p.id] = 1;
+    var t = String(p.type || 'piece'); if (!PLAN_TYPES[t]) typesInconnus[t] = 1;
+    var b = null;
+    if (Array.isArray(p.r)) { if (p.r.length === 4 && p.r.every(nb) && p.r[2] > p.r[0] && p.r[3] > p.r[1]) b = p.r; else { err.push(nom + ' : rectangle « r » incorrect ([x0, y0, x1, y1] avec x1 > x0 et y1 > y0).'); return; } }
+    else if (typeof p.d === 'string') {
+      if (!/^[MLHVZmlhvz0-9.,\s-]+$/.test(p.d) || !/^\s*M/i.test(p.d)) { err.push(nom + ' : contour « d » incorrect (commandes M, L, H, V, Z uniquement).'); return; }
+      var n = (p.d.match(/-?\d+(\.\d+)?/g) || []).map(Number); if (n.length < 6) { err.push(nom + ' : contour trop court (au moins 3 points).'); return; }
+      if (!/[HVhv]/.test(p.d)) { var xs = [], ys = []; for (var k = 0; k + 1 < n.length; k += 2) { xs.push(n[k]); ys.push(n[k + 1]); } b = [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)]; }
+      if (!/[Zz]\s*$/.test(p.d)) av.push(nom + ' : contour non fermé (pas de « Z » final) : vérifiez la forme.');
+    } else { sansGeo.push(p.id); return; }
+    st.pieces++;
+    if (t === 'chambre') { st.chambres++; if (p.chambre == null || p.chambre === '') sansNumero++; else { var c = String(p.chambre); if (chambres[c]) av.push('Chambre ' + c + ' en double (' + chambres[c] + ' et ' + p.id + ').'); chambres[c] = p.id; } }
+    if (p.nom) st.nommees++;
+    if (p.unite != null && p.unite !== '' && !unites[p.unite]) err.push(nom + ' : unité « ' + p.unite + ' » inconnue (absente de « unites »).');
+    if (b) { if (Array.isArray(vb) && vb.length === 4 && (b[0] < vb[0] - 1 || b[1] < vb[1] - 1 || b[2] > vb[0] + vb[2] + 1 || b[3] > vb[1] + vb[3] + 1)) horsCadre++; boites.push({ id: p.id, b: b }); }
+  });
+  if (sansGeo.length) err.push(sansGeo.length + ' pièce(s) sans forme (« r » ou « d ») : ' + sansGeo.slice(0, 8).join(', ') + (sansGeo.length > 8 ? '…' : '') + '.');
+  if (horsCadre) av.push(horsCadre + ' pièce(s) dépassent du cadre « viewBox » : elles risquent d\'être coupées.');
+  if (Object.keys(typesInconnus).length) av.push('Types de pièce inconnus, affichés comme des pièces : ' + Object.keys(typesInconnus).join(', ') + '.');
+  if (sansNumero) av.push(sansNumero + ' chambre(s) sans numéro.');
+  // Chevauchements (rectangles englobants qui se recouvrent nettement)
+  if (boites.length <= 2500) {
+    var chev = [], tri = boites.slice().sort(function (a, b) { return a.b[0] - b.b[0]; });
+    for (var i = 0; i < tri.length && chev.length < 20; i++) for (var j = i + 1; j < tri.length && tri[j].b[0] < tri[i].b[2]; j++) {
+      var A = tri[i].b, B = tri[j].b, w = Math.min(A[2], B[2]) - Math.max(A[0], B[0]), hh = Math.min(A[3], B[3]) - Math.max(A[1], B[1]);
+      if (w > 0 && hh > 0) { var s1 = (A[2] - A[0]) * (A[3] - A[1]), s2 = (B[2] - B[0]) * (B[3] - B[1]); if (w * hh > 0.3 * Math.min(s1, s2)) chev.push(tri[i].id + ' / ' + tri[j].id); }
+    }
+    if (chev.length) av.push('Pièces qui se chevauchent : ' + chev.slice(0, 10).join(', ') + (chev.length > 10 ? '…' : '') + '.');
+  }
+  var aNommer = st.pieces - st.nommees - st.chambres; if (aNommer > 0) av.push(aNommer + ' pièce(s) sans nom : elles pourront être nommées dans l\'appli (rubrique Plan).');
+  if (!st.unites) av.push('Aucune unité : les jeux de couleurs seront masqués, les autres jeux du plan restent disponibles.');
+  return { erreurs: err.slice(0, 40), avertissements: av.slice(0, 40), stats: st };
+}
+function planImporter_(session, texte, enregistrer) {
+  texte = String(texte || ''); if (!texte || texte.length > 20 * 1024 * 1024) throw erreurApp_('requete_invalide');
+  var D; try { D = JSON.parse(texte); } catch (e) { return { ok: true, rapport: { erreurs: ['Fichier illisible : ce n\'est pas du JSON valide.'], avertissements: [], stats: {} }, enregistre: false }; }
+  var rapport = validerPlan_(D);
+  if (!enregistrer || rapport.erreurs.length) return { ok: true, rapport: rapport, enregistre: false };
+  var ss = classeur_(), ancien = String(lireParametres_(ss)['Fichier du plan (ID Drive)'] || '').trim();
+  var f = dossierService_(ss).createFile(Utilities.newBlob(texte, 'application/json', 'plan-donnees.json'));
+  ecrireParametre_(ss, 'Fichier du plan (ID Drive)', f.getId());
+  if (ancien) try { DriveApp.getFileById(ancien).setName('plan-donnees (remplacé le ' + formaterDate_(new Date()) + ').json'); } catch (e) { /* ignoré */ }
+  viderCachePlan_();
+  try { synchroniserPlan_(ss); } catch (e) { console.error('synchronisation : ' + e); } // les modifications déjà faites suivent les pièces
+  return { ok: true, rapport: rapport, enregistre: true, par: session.n || 'Administrateur' };
 }
