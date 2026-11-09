@@ -25,6 +25,14 @@ Règles :
 - Pas de chevauchement entre pièces, rien hors du cadre viewBox, pas de légende ni de cartouche.
 - Aucune donnée de santé et aucun nom de personne : uniquement des pièces.
 
+SI VOUS AVEZ DEUX PLANS (un plan simplifié avec la numérotation des chambres, un plan détaillé avec
+l'utilisation des pièces) : joignez les deux et ajoutez cette phrase :
+« Le premier plan est le plan simplifié : garde ses formes et ses numéros de chambre. Le second est le plan
+détaillé : n'en prends que l'utilisation de chaque pièce (Poste de soins, Pharmacie…), et range chaque
+utilisation dans la pièce correspondante du plan simplifié après avoir recalé les deux plans (même échelle,
+même cadrage) grâce aux numéros de chambre présents sur les deux. Signale les pièces du plan simplifié qui
+recouvrent plusieurs pièces du plan détaillé. »
+
 Méthode : mets le plan en image (pdftoppm pour un PDF), détecte les zones claires fermées par les murs
 (seuil + étiquetage des zones, en fermant les ouvertures de porte), récupère les textes du PDF avec
 pdfplumber pour nommer les pièces, puis vérifie : identifiants uniques, rectangles corrects, pièces dans le

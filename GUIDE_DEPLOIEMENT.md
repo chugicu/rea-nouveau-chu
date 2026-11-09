@@ -455,7 +455,8 @@ Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique
 
 **2. Faire convertir par Claude**, sur le compte Claude de chacun :
 - « Télécharger le skill » (`plan-cap-nchug.zip`) : dans Claude, Paramètres › Fonctionnalités › Skills › ajouter le fichier .zip. Ensuite : « Convertis ce plan pour Cap NCHUG » avec le PDF ou la photo. Le skill détecte les pièces, lit les numéros et noms d'un PDF, vérifie le fichier avec les mêmes règles que l'appli et montre un aperçu avant de rendre `plan-donnees.json`.
-- Sans skill : « Consigne à copier », à coller dans Claude avec le plan.
+- **Deux plans** : donnez à Claude le plan simplifié (numérotation des chambres) et le plan détaillé (utilisation des pièces). Le rendu garde les formes et les numéros du plan simplifié et y ajoute les utilisations lues sur le plan détaillé ; les deux plans sont recalés automatiquement grâce aux numéros de chambre communs (sinon par quelques repères). Les conflits (une pièce du plan simplifié qui en recouvre plusieurs du plan détaillé) sont signalés pour être tranchés.
+- Sans skill : « Consigne à copier », à coller dans Claude avec le plan (ou les deux plans).
 - Le plan reste dans la conversation Claude de la personne ; rien ne passe par GitHub.
 
 **3. Importer un fichier** `.json` au format Cap NCHUG (partie S).

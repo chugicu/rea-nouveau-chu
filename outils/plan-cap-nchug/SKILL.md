@@ -1,6 +1,6 @@
 ---
 name: plan-cap-nchug
-description: Convertit le plan d'un service hospitalier (PDF, image ou photo) en fichier plan-donnees.json au format Cap NCHUG, prêt à importer dans l'appli (Personnaliser le service › Importer un fichier). À utiliser quand quelqu'un demande de convertir, numériser ou dessiner un plan de service pour Cap NCHUG.
+description: Convertit le plan d'un service hospitalier (PDF, image ou photo) en fichier plan-donnees.json au format Cap NCHUG, prêt à importer dans l'appli. Accepte deux plans : un simplifié (formes, numéros de chambres) et un détaillé (utilisation des pièces), fusionnés. À utiliser pour convertir, numériser ou fusionner des plans de service pour Cap NCHUG.
 ---
 
 # Plan de service → fichier Cap NCHUG
@@ -45,6 +45,38 @@ travail est de lui donner un fichier propre du premier coup.
   la clé doit exister dans `unites`.
 - Les pièces ne doivent pas se chevaucher et doivent rester dans le cadre `viewBox`.
 
+## Deux plans : simplifié + détaillé (cas fréquent)
+
+Souvent, le service a **deux plans** du même étage :
+- un **plan simplifié**, lisible, avec la **numérotation des chambres** mais sans détail sur les autres pièces ;
+- un **plan détaillé** (plan d'architecte), trop chargé pour l'appli, mais qui indique **l'utilisation de
+  chaque pièce** (Poste de soins, Pharmacie, Vestiaires…).
+
+Le rendu attendu est **le plan simplifié** (ses formes, ses numéros de chambre) **+ les utilisations lues
+sur le plan détaillé**. Ne reprends jamais les formes du plan détaillé. Demande à la personne lequel est
+lequel si ce n'est pas évident. Méthode :
+
+1. Fais les étapes 2 à 4 ci-dessous **sur le plan simplifié seulement** → `brouillon.json` relu
+   (chambres numérotées, autres pièces sans nom, couloirs).
+2. Récupère les textes du plan détaillé :
+   - PDF vectoriel : rien à faire, le script les lit (`--detaille-pdf`) ;
+   - image ou scan : lis le plan et écris `etiquettes.json` : `[{"texte": "Poste de soins", "x": 812, "y": 455}, …]`
+     (x, y = centre du texte, en pixels de l'image du plan détaillé ; n'oublie pas les numéros de chambre
+     visibles, ils servent au recalage).
+3. Lance la fusion :
+   `python scripts/fusionner_plans.py --brouillon brouillon.json --detaille-pdf detaille.pdf --simplifie simple-1.png --sortie plan-donnees.json --apercu fusion.png`
+   - le **recalage** (échelle, décalage, rotation entre les deux plans) se fait tout seul grâce aux numéros
+     de chambre présents sur les deux plans (3 au moins) ;
+   - sinon, donne 2 à 4 repères communs (angles du bâtiment, cage d'escalier) dans `reperes.json` :
+     `[{"detaille": [x, y], "simplifie": [x, y]}, …]` et ajoute `--reperes reperes.json` ;
+   - en dernier recours `--cadre --detaille detaille.png` aligne les contours extérieurs (approximatif).
+4. Lis le rapport : précision du recalage (écart en px), pièces nommées, **conflits** (une pièce du plan
+   simplifié qui couvre plusieurs pièces du plan détaillé : demande à la personne quel nom garder),
+   chambres portant une autre utilisation sur le plan détaillé, textes hors des pièces, pièces restées
+   sans nom. Regarde `fusion.png` (points rouges = textes du plan détaillé recalés) : s'ils tombent à côté
+   des pièces, le recalage est faux → repères à la main.
+5. Termine par l'étape 5 (vérification) et l'étape 6 (livraison) ci-dessous.
+
 ## Méthode
 
 1. **Regarde le plan** et fais l'inventaire : combien d'étages ou de zones ? Si le document en a
@@ -79,3 +111,5 @@ travail est de lui donner un fichier propre du premier coup.
 - Numéros de chambre en nombre (`101`) au lieu de texte (`"101"`) : accepté, mais garde du texte pour `"101 bis"`.
 - Légende et cartouche du plan détectés comme des pièces : supprime-les.
 - Chambres doubles coupées en deux par une cloison légère : une seule pièce si c'est une seule chambre.
+- Deux plans : surfaces (« 12,5 m² »), cotes, « Lit », codes de porte du plan détaillé ne sont pas des
+  utilisations ; le script les ignore, ne les remets pas à la main.

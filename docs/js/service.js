@@ -156,7 +156,7 @@
       h('div', { class: 'plan-methodes' },
         h('div', { class: 'plan-methode' }, h('b', { text: '1. Dessiner dans l\'appli' }), h('span', { class: 'section__note', text: 'Sur une image ou un PDF du plan : rectangles, formes libres, baguette magique.' }),
           window.ReaDessin ? h('button', { class: 'bouton', type: 'button', onclick: function () { window.ReaDessin.ouvrir({ retour: retourDuDessin }); }, text: '✏️ Dessiner le plan' }) : null),
-        h('div', { class: 'plan-methode' }, h('b', { text: '2. Faire convertir par Claude' }), h('span', { class: 'section__note', text: 'Sur votre propre compte Claude : ajoutez le skill, donnez-lui le plan (PDF ou photo), il rend le fichier .json à importer ici.' }),
+        h('div', { class: 'plan-methode' }, h('b', { text: '2. Faire convertir par Claude' }), h('span', { class: 'section__note', text: 'Sur votre propre compte Claude : ajoutez le skill, donnez-lui le plan (PDF ou photo), il rend le fichier .json à importer ici. Deux plans ? Donnez le plan simplifié (numéros des chambres) et le plan détaillé (utilisation des pièces) : il garde le simplifié et y ajoute les utilisations.' }),
           h('a', { class: 'bouton bouton--discret', href: 'outils/plan-cap-nchug.zip', download: 'plan-cap-nchug.zip', text: '⬇️ Télécharger le skill' }),
           h('a', { class: 'bouton bouton--discret', href: 'outils/consigne-plan-claude.txt', target: '_blank', rel: 'noopener', text: 'Consigne à copier (sans skill)' })),
         h('div', { class: 'plan-methode' }, h('b', { text: '3. Importer un fichier' }), h('span', { class: 'section__note', text: 'Un fichier .json au format Cap NCHUG (par exemple préparé avec Claude).' }), fichier)),
