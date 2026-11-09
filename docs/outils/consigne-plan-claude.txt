@@ -1,0 +1,32 @@
+Consigne à coller dans Claude (sur votre propre compte), avec le plan du service en pièce jointe (PDF ou image).
+Le plan reste dans votre conversation : il n'est publié nulle part.
+------------------------------------------------------------------------------------------------
+
+Convertis le plan joint en un fichier « plan-donnees.json » au format Cap NCHUG, pour l'importer dans
+l'appli du service (Personnaliser le service › Importer un fichier).
+
+Format :
+{
+  "viewBox": [0, 0, LARGEUR, HAUTEUR],
+  "pieces": [
+    { "id": "C001", "type": "chambre", "chambre": "101", "r": [x0, y0, x1, y1] },
+    { "id": "P001", "type": "piece", "nom": "Poste de soins", "d": "M300,0 L400,0 L400,90 L300,90 Z" }
+  ]
+}
+
+Règles :
+- Coordonnées en pixels de l'image du plan ramenée à 1600 px de grand côté ; viewBox = [0, 0, largeur, hauteur].
+- Chaque pièce : un "id" unique (C001… pour les chambres, P001… pour le reste) et UNE forme :
+  "r" = rectangle [x0, y0, x1, y1] avec x1 > x0 et y1 > y0, ou "d" = contour avec seulement M, L, H, V et un Z final.
+- "type" : chambre (avec "chambre" = numéro en texte), piece, couloir, circulation (escalier, ascenseur), technique, terrasse.
+- "nom" pour les pièces autres que les chambres, si le plan l'indique. N'invente rien : sans nom lisible, pas de nom.
+- Pas de "unites" sauf si le service est vraiment découpé en unités de couleur : "unites": { "a": { "nom": "Unité A", "couleur": "#e0670f" } }
+  et "unite": "a" sur les pièces concernées.
+- Pas de chevauchement entre pièces, rien hors du cadre viewBox, pas de légende ni de cartouche.
+- Aucune donnée de santé et aucun nom de personne : uniquement des pièces.
+
+Méthode : mets le plan en image (pdftoppm pour un PDF), détecte les zones claires fermées par les murs
+(seuil + étiquetage des zones, en fermant les ouvertures de porte), récupère les textes du PDF avec
+pdfplumber pour nommer les pièces, puis vérifie : identifiants uniques, rectangles corrects, pièces dans le
+cadre, pas de chevauchement. Montre-moi un aperçu (les pièces dessinées par-dessus le plan) avant de me
+donner le fichier final, et résume : nombre de pièces, de chambres, pièces sans nom.

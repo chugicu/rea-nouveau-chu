@@ -53,5 +53,18 @@
       return page(1).then(function () { doc.destroy(); return { pages: pages, ratio: ratio, apercus: apercus }; });
     });
   }
-  window.ReaPdf = { convertir: convertir, MAX_PAGES: MAX_PAGES };
+  /** Première page d'un PDF en image (dataURL PNG), côté appareil : fond de l'outil de dessin du plan */
+  function premierePage(fichier, cote) {
+    return chargerPdfJs().then(function (pdfjs) {
+      return fichier.arrayBuffer().then(function (buf) { return pdfjs.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise; });
+    }).then(function (doc) {
+      return doc.getPage(1).then(function (p) {
+        var v1 = p.getViewport({ scale: 1 }), v = p.getViewport({ scale: Math.min(4, (cote || 1600) / Math.max(v1.width, v1.height)) });
+        var c = document.createElement('canvas'); c.width = Math.round(v.width); c.height = Math.round(v.height);
+        var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        return p.render({ canvasContext: g, viewport: v, background: '#ffffff' }).promise.then(function () { var u = c.toDataURL('image/png'); doc.destroy(); return u; });
+      });
+    });
+  }
+  window.ReaPdf = { convertir: convertir, premierePage: premierePage, MAX_PAGES: MAX_PAGES };
 })();

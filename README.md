@@ -15,6 +15,7 @@ docs/            Application (hébergée par GitHub Pages)
   css/theme.css  Design « Lagon » (v1.8) : ciel, cartes en relief, mode sombre
   js/fun.js      Confettis, vibrations, série 🔥
   js/cap.js      Cap NCHUG : choix du service, espace créateurs, codes gérés dans l'appli
+  js/dessin.js   Outil de dessin du plan (fond image/PDF, rectangles, formes libres, baguette magique)
   js/defi.js     Défi CHU : défi du jour, classement des services, jeu Parcours
   js/communs.js  actualités modifiables dans l'appli, Documents et FAQ (service + CHU)
   js/service.js  personnaliser le service : nom, logo, rubriques, import du plan avec contrôle
@@ -57,3 +58,6 @@ GUIDE_DEPLOIEMENT.md
 
 Polices Barlow et PT Sans : SIL Open Font License (licences dans `docs/assets/fonts`).
 Logos : CHU de la Guadeloupe et Réanimation Guadeloupe, usage interne au service.
+
+## Skill Claude « plan-cap-nchug »
+`outils/plan-cap-nchug/` (SKILL.md + scripts de détection et de vérification), empaqueté dans `docs/outils/plan-cap-nchug.zip`. Il ne contient aucun plan. Après modification : `cd outils && zip -qr ../docs/outils/plan-cap-nchug.zip plan-cap-nchug -x '*/__pycache__/*'`.

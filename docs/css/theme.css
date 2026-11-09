@@ -468,3 +468,48 @@ details.defi-ajout > summary { font-weight: 800; color: var(--titre); cursor: po
 .plan-import__liste--ko { color: #b42318; }
 .service-perso .form-carte h2 { color: var(--titre); font-family: var(--condense); font-size: 1.6rem; margin: 0 0 6px; }
 .service-perso .form-carte { margin-bottom: 14px; }
+
+/* ---------- Outil de dessin du plan (lot 3) ---------- */
+.dessin .form-carte, .dessin-panneau, .dessin-details, .plan-methode { color: var(--texte); }
+.dessin-outils { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; position: sticky; top: 0; z-index: 5; padding: 6px; border-radius: 20px; background: var(--surface); box-shadow: var(--clay); }
+.dessin-outil { border: 0; border-radius: 14px; background: transparent; color: var(--texte); display: grid; justify-items: center; gap: 2px; padding: 6px 2px; min-height: 56px; }
+.dessin-outil span { font-size: 1.35rem; line-height: 1; }
+.dessin-outil small { font-size: .66rem; font-weight: 700; line-height: 1.1; text-align: center; }
+.dessin-outil--actif { background: var(--soleil); color: #223b80; }
+.dessin-outil:disabled { opacity: .35; }
+.dessin-reglages { display: grid; gap: 8px; margin: 10px 0 0; }
+.dessin-reglages:empty { display: none; }
+.dessin-curseur { display: grid; gap: 2px; color: var(--sur-ciel); font-weight: 600; font-size: .9rem; }
+.dessin-reglages .case { color: var(--sur-ciel); }
+.dessin-info { color: var(--sur-ciel); font-weight: 600; min-height: 1.3em; margin: 8px 4px; }
+.dessin-cadre { overflow: auto; max-height: 68vh; border-radius: 18px; background: #fff; box-shadow: var(--clay); -webkit-overflow-scrolling: touch; }
+.dessin-svg { display: block; font-family: var(--condense); user-select: none; -webkit-user-select: none; }
+.dessin-svg--main { touch-action: pan-x pan-y pinch-zoom; }
+.dessin-svg--rect, .dessin-svg--libre, .dessin-svg--baguette { touch-action: none; cursor: crosshair; }
+.dessin-piece--sel, .dessin-coin { touch-action: none; }
+.dessin-piece { cursor: pointer; }
+.dessin-piece--sel polygon { stroke: #ff7a00; stroke-width: 3; }
+.dessin-piece--anonyme polygon { stroke-dasharray: 6 4; }
+.dessin-coin { fill: #fff; stroke: #ff7a00; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
+.dessin-trace { fill: rgba(255, 183, 0, .25); stroke: #ff7a00; stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+polyline.dessin-trace { fill: none; }
+.dessin-point { fill: #ff7a00; } .dessin-point--premier { fill: #fff; stroke: #ff7a00; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.dessin-panneau { margin-top: 12px; padding: 14px 16px; border-radius: var(--r-carte); background: var(--surface); box-shadow: var(--clay); display: grid; gap: 8px; }
+.dessin-panneau h3 { margin: 0; font-family: var(--condense); color: var(--titre); font-size: 1.35rem; }
+.dessin-details { padding: 12px 16px; margin-top: 12px; border-radius: var(--r-carte); background: var(--surface); box-shadow: var(--clay); }
+.dessin-details > summary { font-weight: 800; color: var(--titre); cursor: pointer; }
+.dessin-unite { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; margin: 8px 0; }
+.dessin-unite input[type=color] { width: 52px; height: 40px; padding: 2px; border-radius: 10px; }
+.dessin-liste { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; max-height: 280px; overflow: auto; }
+.dessin-liste__item { width: 100%; text-align: left; border: 0; background: var(--surface-2); color: var(--texte); border-radius: 10px; padding: 8px 10px; }
+.dessin-liste__item--sel { outline: 3px solid var(--soleil); }
+.dessin-aide { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.dessin-barre { position: sticky; bottom: 0; display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--ciel-3, rgba(0,0,0,.08)) 40%); }
+.plan-methodes { display: grid; gap: 10px; margin: 10px 0; }
+.plan-methode { display: grid; gap: 6px; padding: 12px; border-radius: 16px; background: var(--surface-2); }
+.plan-methode b { color: var(--titre); }
+.plan-methode .bouton { text-align: center; text-decoration: none; }
+/* Champs de saisie des écrans de gestion hors « form-carte » : texte normal (la majuscule est réservée aux codes) */
+.dessin .champ input, .dessin .champ select, .dessin-unite input[type=text], .defi-gestion .champ input, .defi-gestion .champ select, .defi-filtres select, .defi-filtres input, .dessin-panneau select {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid var(--trait); border-radius: 12px; background: var(--surface-2);
+  color: var(--texte); font: inherit; font-size: 1rem; letter-spacing: normal; text-transform: none; min-height: 44px; }

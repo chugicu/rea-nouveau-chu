@@ -33,13 +33,13 @@
   }
 
   /* ---------- Écran ---------- */
-  function ouvrir(flash) {
+  function ouvrir(flash, texteDessin) {
     init(); A.definirEcran(null);
     page(h('div', { class: 'squelette', style: 'height:300px;margin-top:16px' }));
-    appeler('service_reglages').then(function (r) { dessiner(r, flash); })
+    appeler('service_reglages').then(function (r) { dessiner(r, flash, texteDessin); })
       .catch(function (e) { if (!erreurSession(e)) page(h('p', { class: 'vide', text: A.message(e.code) })); });
   }
-  function dessiner(r, flash) {
+  function dessiner(r, flash, texteDessin) {
     var g = r.reglages;
     var nom = h('input', { type: 'text', maxlength: '60', value: g.nom }), msg = h('textarea', { rows: '2', maxlength: '300' }), dj = h('input', { type: 'date', value: g.dateJ || '' });
     msg.value = g.message;
@@ -58,7 +58,9 @@
     } }, h('h2', { text: 'Rubriques' }), h('p', { class: 'section__note', text: 'Choisissez ce qui s\'affiche sur l\'accueil. Un petit service peut n\'en garder que deux ou trois ; le Défi CHU et les actualités restent toujours visibles.' }),
       h('div', { class: 'service-cases' }, cases), h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer' }));
 
-    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, identite, sectionLogo(g), rubriques, sectionPlan(g)));
+    var plan = sectionPlan(g, texteDessin);
+    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, texteDessin ? null : identite, texteDessin ? null : sectionLogo(g), texteDessin ? null : rubriques, plan));
+    if (texteDessin) plan.scrollIntoView({ block: 'start' });
   }
   function envoyer(d, flash, form) {
     var b = form.querySelector('[type=submit]'); if (b) b.disabled = true;
@@ -112,7 +114,7 @@
   }
 
   /* ---------- Import du plan : contrôle, aperçu, puis enregistrement ---------- */
-  function sectionPlan(g) {
+  function sectionPlan(g, texteDessin) {
     var fichier = h('input', { type: 'file', accept: '.json,.gz,application/json', 'aria-label': 'Choisir le fichier du plan' });
     var rapport = h('div', { class: 'plan-import__rapport', 'aria-live': 'polite' }), apercu = h('div', { class: 'plan-import__apercu' }), texte = null;
     var enreg = h('button', { class: 'bouton', type: 'button', hidden: true, text: 'Enregistrer ce plan', onclick: function () {
@@ -127,17 +129,16 @@
     } });
     function montrer(rp) {
       var st = rp.stats || {};
-      rapport.replaceChildren(
+      rapport.replaceChildren.apply(rapport, [
         h('p', { class: rp.erreurs.length ? 'message-erreur' : 'flash', text: rp.erreurs.length ? '❌ ' + rp.erreurs.length + ' problème(s) à corriger avant l\'import.' : '✅ Plan lisible : ' + (st.pieces || 0) + ' pièces dont ' + (st.chambres || 0) + ' chambres, ' + (st.unites || 0) + ' unité(s).' }),
         rp.erreurs.length ? h('ul', { class: 'plan-import__liste plan-import__liste--ko' }, rp.erreurs.map(function (x) { return h('li', { text: x }); })) : null,
         rp.avertissements.length ? h('details', { open: !rp.erreurs.length }, h('summary', { text: rp.avertissements.length + ' point(s) à vérifier (n\'empêchent pas l\'import)' }),
-          h('ul', { class: 'plan-import__liste' }, rp.avertissements.map(function (x) { return h('li', { text: x }); }))) : null);
+          h('ul', { class: 'plan-import__liste' }, rp.avertissements.map(function (x) { return h('li', { text: x }); }))) : null].filter(Boolean));
       enreg.hidden = !!rp.erreurs.length;
     }
-    fichier.addEventListener('change', function () {
-      var f = fichier.files && fichier.files[0]; if (!f) return;
+    function analyser(lecture) {
       rapport.replaceChildren(h('p', { class: 'section__note', text: 'Lecture et contrôle…' })); apercu.replaceChildren(); enreg.hidden = true; texte = null;
-      lireFichier(f).then(function (t) {
+      lecture.then(function (t) {
         texte = t; var D = null; try { D = JSON.parse(t); } catch (e) { /* le moteur le dira */ }
         if (D && Array.isArray(D.pieces) && Array.isArray(D.viewBox) && window.ReaPlan) {
           try { window.ReaPlan.creer(apercu, { donnees: JSON.parse(t), reglages: {}, mode: 'texte' }); } catch (e) { apercu.replaceChildren(h('p', { class: 'section__note', text: 'Aperçu impossible : voir les problèmes ci-dessous.' })); }
@@ -145,11 +146,23 @@
         return appeler('plan_importer', { texte: t });
       }).then(function (r) { if (r) montrer(r.rapport); })
         .catch(function (e) { if (!erreurSession(e)) rapport.replaceChildren(h('p', { class: 'message-erreur', text: e && e.code ? A.message(e.code) : 'Fichier illisible.' })); });
-    });
+    }
+    fichier.addEventListener('change', function () { var f = fichier.files && fichier.files[0]; if (f) analyser(lireFichier(f)); });
+    if (texteDessin) setTimeout(function () { analyser(Promise.resolve(texteDessin)); }, 0);
+    var retourDessin = texteDessin ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { window.ReaDessin.ouvrir({ retour: retourDuDessin }); }, text: '✏️ Revenir au dessin' }) : null;
     return h('section', { class: 'form-carte' }, h('h2', { text: 'Plan du service' }),
-      h('p', { class: 'section__note', text: (g.plan ? 'Un plan est en place. ' : 'Pas encore de plan. ') + 'Importez le fichier du plan (.json, préparé avec Claude ou l\'outil de dessin). Il est contrôlé et affiché en aperçu avant d\'être enregistré dans le Drive privé du service : jamais sur GitHub.' }),
-      fichier, apercu, rapport, enreg);
+      h('p', { class: 'section__note', text: (g.plan ? 'Un plan est en place. ' : 'Pas encore de plan. ') + 'Trois façons de le préparer ; dans tous les cas, il est contrôlé et affiché en aperçu avant d\'être enregistré dans le Drive privé du service : jamais sur GitHub.' }),
+      texteDessin ? h('p', { class: 'flash', text: '✏️ Plan dessiné dans l\'appli : contrôle ci-dessous.' }) : null,
+      h('div', { class: 'plan-methodes' },
+        h('div', { class: 'plan-methode' }, h('b', { text: '1. Dessiner dans l\'appli' }), h('span', { class: 'section__note', text: 'Sur une image ou un PDF du plan : rectangles, formes libres, baguette magique.' }),
+          window.ReaDessin ? h('button', { class: 'bouton', type: 'button', onclick: function () { window.ReaDessin.ouvrir({ retour: retourDuDessin }); }, text: '✏️ Dessiner le plan' }) : null),
+        h('div', { class: 'plan-methode' }, h('b', { text: '2. Faire convertir par Claude' }), h('span', { class: 'section__note', text: 'Sur votre propre compte Claude : ajoutez le skill, donnez-lui le plan (PDF ou photo), il rend le fichier .json à importer ici.' }),
+          h('a', { class: 'bouton bouton--discret', href: 'outils/plan-cap-nchug.zip', download: 'plan-cap-nchug.zip', text: '⬇️ Télécharger le skill' }),
+          h('a', { class: 'bouton bouton--discret', href: 'outils/consigne-plan-claude.txt', target: '_blank', rel: 'noopener', text: 'Consigne à copier (sans skill)' })),
+        h('div', { class: 'plan-methode' }, h('b', { text: '3. Importer un fichier' }), h('span', { class: 'section__note', text: 'Un fichier .json au format Cap NCHUG (par exemple préparé avec Claude).' }), fichier)),
+      apercu, rapport, enreg, retourDessin);
   }
+  function retourDuDessin(texte) { if (texte) ouvrir(null, texte); else ouvrir(); }
   function lireFichier(f) {
     if (/\.gz$/i.test(f.name) && typeof DecompressionStream !== 'undefined') return new Response(f.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     return f.text();

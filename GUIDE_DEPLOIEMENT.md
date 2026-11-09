@@ -441,6 +441,25 @@ Mise à jour : collez `Code.gs` 2.3.0, menu « 1. Installer / réparer la base �
 ```
 `unites` est facultatif. Chaque pièce a un `id` unique et une forme : rectangle `r` [x0, y0, x1, y1] ou contour `d` (M, L, H, V, Z). Types : `chambre`, `piece`, `couloir`, `circulation`, `technique`, `terrasse`.
 
+## Partie T – Lot 3 : fabriquer son plan (appli 2.4.0, moteur inchangé)
+
+Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique). Dans la tuile 🎨 « Personnaliser le service » › Plan du service, trois façons de préparer le plan :
+
+**1. Dessiner dans l'appli** (« ✏️ Dessiner le plan ») – sur ordinateur de préférence, possible sur tablette ou téléphone.
+- Fond : une image (PNG, JPEG) ou un PDF du plan (1re page). Il reste sur l'appareil : il n'est jamais envoyé. On peut aussi dessiner sans fond (quadrillage) ou partir du plan actuel du service.
+- 🪄 Baguette magique : touchez l'intérieur d'une pièce, le contour est tracé. Si elle déborde par une porte ouverte, augmentez « Fermer les ouvertures » ; « Tolérance des couleurs » pour les plans colorés ou scannés. Une pièce déjà tracée n'est jamais recouverte.
+- ▭ Rectangle (glisser d'un coin à l'autre), ✏️ Forme libre (toucher chaque coin, « Angles droits » pour des murs bien droits), 👆 Choisir (nommer, type, n° de chambre, unité ; déplacer la pièce ou ses coins ; rendre rectangulaire ; dupliquer ; supprimer). ↶ Annuler.
+- Unités et couleurs : facultatives.
+- Le brouillon (sans le fond) est gardé sur l'appareil : on peut s'arrêter et reprendre.
+- « Contrôler et importer » : le plan passe par le même contrôle qu'un fichier, puis « Enregistrer ce plan ».
+
+**2. Faire convertir par Claude**, sur le compte Claude de chacun :
+- « Télécharger le skill » (`plan-cap-nchug.zip`) : dans Claude, Paramètres › Fonctionnalités › Skills › ajouter le fichier .zip. Ensuite : « Convertis ce plan pour Cap NCHUG » avec le PDF ou la photo. Le skill détecte les pièces, lit les numéros et noms d'un PDF, vérifie le fichier avec les mêmes règles que l'appli et montre un aperçu avant de rendre `plan-donnees.json`.
+- Sans skill : « Consigne à copier », à coller dans Claude avec le plan.
+- Le plan reste dans la conversation Claude de la personne ; rien ne passe par GitHub.
+
+**3. Importer un fichier** `.json` au format Cap NCHUG (partie S).
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |
