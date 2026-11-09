@@ -3,10 +3,10 @@
 Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questions ici.
 
 ## Le projet
-PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.3.2) + Google Sheets/Drive. Compte : chugicu@gmail.com.
+PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.3.3) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.5.4`).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.5.5`).
 - Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans).
 
 ## Règles à ne jamais enfreindre
@@ -27,9 +27,13 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 - Questions corrigées le 9/11/2026 (25 questions D024–D112, confusions entrées/bâtiments et pièges retirés), directement dans « Réa – Base » › « Défi – Questions » ; fichier `defi-chu-import.json` corrigé remis à l'utilisateur. Rien à corriger dans le Transfert.
 - Missions « à vérifier » : D040–D046, D049–D051 (entrée du B50 : 32 ou 40 selon le niveau ?) en statut « retirée », source « À VÉRIFIER – … ». Les missions du B40 passent directement du bâtiment à l'étage.
 
+- Accueil (2.5.5) : plus de carte « Quiz du jour » du service (le quiz reste dans « Quiz et jeux ») ; carte « 🏆 Quiz du jour – Défi CHU » ; tuile « 🏥 Plans du CHU » en 2e position, toujours visible, rubrique « Plan virtuel » (promenade libre, étages renseignés seulement).
+- Onglet « Plan – Services » (Bâtiment, Niveau, Services) rempli le 9/11/2026 dans « Réa – Base » d'après le synoptique du Directoire (juin 2025) et le synoptique consult-explo : 28 étages, sans internat ni HAD. Modifiable dans la Gestion du Défi.
+- Infos générales (Cap NCHUG) : bouton sur l'écran de choix, code commun choisi dans l'Espace créateurs (`INFOS_CODE`, global), jeton `visiteur` limité à la lecture (liste `INFOS_ACTIONS` dans le moteur), Défi en entraînement, retour à l'écran de choix à chaque ouverture.
+
 ## Reste à faire côté utilisateur
-1. Coller `Code.gs` 2.3.2 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
-2. Questions : déjà importées et corrigées dans la réa. Pour Cap NCHUG (Espace créateurs), importer les fichiers corrigés, puis relire et valider. Activer le jeu Parcours quand on le souhaite.
+1. Coller `Code.gs` 2.3.3 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
+2. Questions : déjà importées et corrigées dans la réa. Pour Cap NCHUG (Espace créateurs), importer les fichiers corrigés, puis relire et valider. Activer le jeu Parcours quand on le souhaite. Dans Cap NCHUG : recopier l'onglet « Plan – Services », entrer une fois dans « Modifier les contenus communs », puis choisir le code Infos générales.
 3. Vérifier que Cap NCHUG répond (Espace créateurs, code super-admin ; déploiement « Exécuter en tant que : moi », « Accès : tout le monde »).
 4. Créer un service test, puis rattacher la réa (partie R du guide) et retirer `SERVICES_EXTERNES` de `config.js`.
 5. Validation DSI / DPO (mentionner le compte Google partagé).

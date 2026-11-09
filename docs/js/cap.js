@@ -1,12 +1,15 @@
 /* Cap NCHUG · plusieurs services dans une seule appli.
    - Choix du service (liste retenue sur le téléphone, ou lien direct ?s=identifiant / QR code du service).
    - Espace créateurs : super-administrateur et admins créateurs (créer un service, codes perdus, créateurs).
-   - Codes d'accès du service, gérés dans l'appli par son administrateur (aucun accès Google nécessaire). */
+   - Codes d'accès du service, gérés dans l'appli par son administrateur (aucun accès Google nécessaire).
+   - Infos générales : contenus communs en lecture avec un code commun (choisi dans l'Espace créateurs) ; le téléphone revient à l'écran de choix à chaque ouverture. */
 (function () {
   'use strict';
   var A, h, Api;
   var CLE_SERVICE = 'rea.service', CLE_LISTE = 'rea.services-liste', CLE_CAP = 'rea.cap-session';
-  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1, 'rea.appareil': 1, 'rea.defi': 1, 'rea.commun-retour': 1 }; // le Défi CHU est commun : une seule réponse par téléphone, quel que soit le service
+  var CLE_INFOS = 'rea.infos', CLE_INFOS_RETOUR = 'rea.infos-retour', CLE_INFOS_OUVERT = 'rea.infos-ouvert';
+  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1, 'rea.appareil': 1, 'rea.defi': 1, 'rea.commun-retour': 1,
+    'rea.infos': 1, 'rea.infos-retour': 1, 'rea.infos-ouvert': 1, 'rea.defi-infos': 1 }; // le Défi CHU est commun : une seule réponse par téléphone, quel que soit le service
 
   function init() { A = window.ReaApp; h = A.h; Api = window.ReaApi; }
   function lire(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
@@ -51,7 +54,7 @@
     return Api.appeler('services').then(function (r) {
       // un service présent dans l'annuaire l'emporte sur son ancien moteur (config.js) : c'est qu'il a été rattaché
       var l = ext.filter(function (x) { return !r.services.some(function (s) { return s.id === x.id; }); }).concat(r.services);
-      ecrire(CLE_LISTE, l); return l;
+      ecrire(CLE_LISTE, l); ecrire(CLE_INFOS_OUVERT, !!r.infos); return l;
     }, function (e) { var c = lire(CLE_LISTE); if (c && c.length) return c; if (ext.length) return ext; throw e; });
   }
 
@@ -59,16 +62,23 @@
   function ecranServices(flash) {
     init(); A.definirEcran(null);
     var zone = h('div', { class: 'cap-services' }, h('div', { class: 'squelette', style: 'height:220px' }));
+    var ouvert = lire(CLE_INFOS_OUVERT) !== false;
+    var infos = h('button', { type: 'button', class: 'cap-infos', disabled: !ouvert, onclick: function () { entrerInfos(); } },
+      h('b', { text: 'ℹ️ Infos générales' }), h('span', { text: ouvert ? 'Les informations communes à tout le CHU : plans, Quiz du jour – Défi CHU, actualités, newsletters, documents.' : 'Bientôt' }));
     A.afficher(h('section', { class: 'connexion cap-accueil', 'aria-labelledby': 'titre-cap' },
       h('div', { class: 'connexion__carte' },
         h('div', { class: 'logos logos--connexion' }, h('img', { class: 'logo-chu', src: 'assets/logos/chu-guadeloupe.png', alt: 'CHU de la Guadeloupe', width: '360', height: '279' })),
         h('p', { class: 'cap-marque', text: 'Cap NCHUG' }),
-        h('h1', { id: 'titre-cap', text: 'Choisissez votre service' }),
-        h('p', { class: 'connexion__intro', text: 'Plan, quiz, visites et jeux pour préparer l\'installation dans le nouveau CHU. Votre choix est retenu sur ce téléphone.' }),
+        h('h1', { id: 'titre-cap', text: 'Bienvenue' }),
+        h('p', { class: 'connexion__intro', text: 'Plan, quiz, visites et jeux pour préparer l\'installation dans le nouveau CHU.' }),
         flash ? h('p', { class: 'message-erreur', role: 'alert', text: flash }) : null,
+        infos,
+        h('h2', { class: 'cap-ou', text: 'Ou choisissez votre service' }),
+        h('p', { class: 'section__note', text: 'Infos communes et contenus de votre service. Votre choix est retenu sur ce téléphone.' }),
         zone,
         h('p', { class: 'connexion__pied' }, h('button', { type: 'button', class: 'lien-discret', onclick: function () { ecranAnnuaire(); }, text: 'Espace créateurs' })))));
     listeServices().then(function (l) {
+      var o = lire(CLE_INFOS_OUVERT) !== false; infos.disabled = !o; infos.lastChild.textContent = o ? 'Les informations communes à tout le CHU : plans, Quiz du jour – Défi CHU, actualités, newsletters, documents.' : 'Bientôt';
       if (!l.length) { zone.replaceChildren(h('p', { class: 'vide', text: 'Aucun service n\'est encore ouvert.' })); return; }
       var filtre = h('input', { type: 'search', class: 'cap-filtre', placeholder: 'Rechercher un service', 'aria-label': 'Rechercher un service', autocomplete: 'off' });
       var ul = h('ul', { class: 'cap-liste' });
@@ -100,7 +110,9 @@
   function demarrer(suite) { // suite() : écran normal de l'appli (accueil ou connexion)
     init();
     if (enCommun()) retablir(); // rechargement pendant la modification des contenus communs : on revient à son service
+    var depuisInfos = enInfos(); if (depuisInfos) retablirInfos(); // Infos générales : à chaque ouverture, retour à l'écran de choix
     var id = lireLien(), cour = serviceCourant();
+    if (depuisInfos && !id) return ecranServices();
     if (id && (!cour || cour.id !== id)) {
       A.afficher(h('div', { class: 'page' }, h('div', { class: 'squelette', style: 'height:240px' })));
       return listeServices().then(function (l) {
@@ -205,6 +217,7 @@
       window.ReaDefiGestion ? h('section', { class: 'section defi-carte' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' })),
         h('p', { class: 'section__note', text: 'Questions communes à tous les services : phase de test, validation, ajout de questions, vue du ciel du Parcours.' }),
         h('button', { type: 'button', class: 'bouton', onclick: function () { window.ReaDefiGestion.ouvrir({ jeton: sess.jeton, role: sess.libelle || '', retour: function (m) { annuaire(sess, m || null); } }); }, text: 'Gérer le Défi CHU' })) : null,
+      sectionInfos(sess, e, action),
       creer, services, e.role === 'super' ? rattacher(sess) : null, createurs,
       h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { ecrire(CLE_CAP, null); ecranServices(); }, text: 'Quitter l\'espace créateurs' })].filter(Boolean));
   }
@@ -231,6 +244,37 @@
     return h('div', { class: 'cap-commun', role: 'note' }, h('span', { text: '🌴 Vous modifiez les contenus communs à tout le CHU (actualités, newsletters, documents).' }),
       h('button', { type: 'button', class: 'bouton bouton--discret', onclick: quitterCommun, text: 'Quitter' }));
   }
+
+  /* ---------- Infos générales : contenus communs en lecture, code commun ---------- */
+  function enInfos() { return !!lire(CLE_INFOS_RETOUR); }
+  function entrerInfos(flash) {
+    init();
+    var x = lire(CLE_INFOS);
+    if (x && x.jeton && Date.parse(x.expiration) > Date.now() && !flash) return activerInfos(x);
+    var champ = h('input', { id: 'code-infos', type: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', maxlength: '32', required: true });
+    var err = h('p', { class: 'message-erreur', role: 'alert', text: flash || '' }), b = h('button', { class: 'bouton', type: 'submit', text: 'Entrer' });
+    page('Infos générales', 'Cap NCHUG', h('form', { class: 'form-carte', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); err.textContent = ''; b.disabled = true;
+      Api.appeler('infos_login', { code: champ.value }).then(function (r) { var s = { jeton: r.jeton, expiration: r.expiration }; ecrire(CLE_INFOS, s); activerInfos(s); })
+        .catch(function (e) { err.textContent = erreurDe(e); b.disabled = false; champ.select(); });
+    } },
+      h('p', { class: 'section__note', text: 'Le code commun du CHU (affiché dans les services). Il n\'est demandé qu\'une fois sur ce téléphone, tant qu\'il ne change pas.' }),
+      h('div', { class: 'champ' }, h('label', { for: 'code-infos', text: 'Code Infos générales' }), champ), b, err), function () { ecranServices(); });
+    setTimeout(function () { champ.focus(); }, 50);
+  }
+  function activerInfos(x) {
+    if (!enInfos()) ecrire(CLE_INFOS_RETOUR, { session: A.stock.lire(A.CLE.session), service: serviceCourant() });
+    A.stock.ecrire(A.CLE.session, { jeton: x.jeton, role: 'visiteur', libelle: 'Infos générales', expiration: x.expiration });
+    A.stock.effacer(A.CLE.accueil); Api.choisirService({ id: '_chu', nom: 'Infos générales', api: null });
+    A.ecranAccueil();
+  }
+  function retablirInfos() {
+    var b = lire(CLE_INFOS_RETOUR); if (!b) return;
+    if (b.session) A.stock.ecrire(A.CLE.session, b.session); else A.stock.effacer(A.CLE.session);
+    A.stock.effacer(A.CLE.accueil); Api.choisirService(b.service || null); ecrire(CLE_INFOS_RETOUR, null);
+  }
+  function quitterInfos() { init(); retablirInfos(); ecranServices(); }
+  function infosExpiree(message) { init(); ecrire(CLE_INFOS, null); retablirInfos(); entrerInfos(message || A.message('session_expiree')); }
 
   /* ---------- Tableau de bord des créateurs (aucune donnée individuelle) ---------- */
   function tableauBord(sess) {
@@ -275,6 +319,22 @@
       h('div', { class: 'grille-2' }, h('div', { class: 'champ' }, h('label', { text: 'Identifiant' }), ident), h('div', { class: 'champ' }, h('label', { text: 'Nom' }), nom)),
       h('div', { class: 'champ' }, h('label', { text: 'Clé à usage unique' }), cle), err, b);
     return h('details', { class: 'section defi-ajout' }, h('summary', { text: 'Rattacher un service existant (la réa)' }), form);
+  }
+  function sectionInfos(sess, e, action) {
+    var i = e.infos || { code: '', commun: false };
+    var champ = h('input', { type: 'text', maxlength: '32', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'ex. NCHUG-2027', 'aria-label': 'Code Infos générales', value: i.code || '' });
+    return h('section', { class: 'section defi-carte' }, h('div', { class: 'section__tete' }, h('h2', { text: 'ℹ️ Infos générales : ' + (i.code ? 'ouvertes' : 'fermées') })),
+      h('p', { class: 'section__note', text: 'Accès sans service, avec un code commun à tout le CHU : plans, Quiz du jour – Défi CHU (entraînement, sans compter), actualités, newsletters et documents communs.' }),
+      !i.commun ? h('p', { class: 'message-erreur', text: 'Entrez d\'abord une fois dans « Modifier les contenus communs » : c\'est là que sont rangés ces contenus.' }) : null,
+      i.code ? h('p', { class: 'section__note', text: 'Code actuel : ' + i.code + ' · en le changeant, les téléphones devront saisir le nouveau.' }) : null,
+      h('form', { class: 'form-carte', onsubmit: function (ev) {
+        ev.preventDefault(); var c = champ.value.trim(); if (!c) return;
+        action('infos_code', { code: c }, function (r) { annuaire(sess, 'Infos générales ouvertes avec le code ' + r.code + '.'); });
+      } }, h('div', { class: 'champ' }, h('label', { text: 'Code commun (6 à 32 lettres ou chiffres, à afficher dans les services)' }), champ),
+        h('button', { class: 'bouton', type: 'submit', text: i.code ? 'Changer le code' : 'Ouvrir avec ce code' })),
+      i.code ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () {
+        if (confirm('Fermer les Infos générales ? Plus personne ne pourra y entrer sans un nouveau code.')) action('infos_code', { code: '' }, function () { annuaire(sess, 'Infos générales fermées.'); });
+      }, text: 'Fermer l\'accès' }) : null);
   }
   function blocLien(s) {
     var url = lienService(s.id), boite = h('div', { class: 'cap-qr', 'aria-label': 'QR code du service' });
@@ -353,5 +413,5 @@
   });
   window.addEventListener('rea:service-ferme', function () { init(); effacerDonneesLocales(); ecrire(CLE_SERVICE, null); Api.choisirService(null); ecranServices(A.message('service_inconnu')); });
 
-  window.ReaCap = { enCommun: enCommun, bandeauCommun: bandeauCommun, demarrer: demarrer, ecranServices: ecranServices, changerService: changerService, serviceCourant: serviceCourant, ecranAnnuaire: ecranAnnuaire, ecranCodes: ecranCodes, lienService: lienService };
+  window.ReaCap = { enInfos: enInfos, quitterInfos: quitterInfos, infosExpiree: infosExpiree, enCommun: enCommun, bandeauCommun: bandeauCommun, demarrer: demarrer, ecranServices: ecranServices, changerService: changerService, serviceCourant: serviceCourant, ecranAnnuaire: ecranAnnuaire, ecranCodes: ecranCodes, lienService: lienService };
 })();

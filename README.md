@@ -16,7 +16,7 @@ docs/            Application (hébergée par GitHub Pages)
   js/fun.js      Confettis, vibrations, série 🔥
   js/cap.js      Cap NCHUG : choix du service, espace créateurs, codes gérés dans l'appli
   js/dessin.js   Outil de dessin du plan (fond image/PDF, rectangles, formes libres, baguette magique)
-  js/defi.js     Défi CHU : défi du jour (6 questions dont 2 missions), classement des services, jeu Parcours (activable)
+  js/defi.js     Défi CHU : défi du jour (6 questions dont 2 missions), classement, jeu Parcours (activable), Plans du CHU (plan virtuel)
   js/communs.js  actualités modifiables dans l'appli, Documents et FAQ (service + CHU)
   js/service.js  personnaliser le service : nom, logo, rubriques, import du plan avec contrôle
   js/escape-editeur.js  éditeur des missions de l'escape game

@@ -39,7 +39,7 @@
     page(h('div', null,
       flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
       alerte ? h('p', { class: 'message-erreur', role: 'alert', text: alerte }) : null,
-      sectionPhase(e), sectionParcours(e), sectionQuestions(e), sectionEditeur(e), sectionImport(),
+      sectionPhase(e), sectionParcours(e), sectionQuestions(e), sectionEditeur(e), sectionPlan(e), sectionImport(),
       e.lienSheets ? h('p', { class: 'section__note' }, 'Tout est aussi modifiable dans le ', h('a', { href: e.lienSheets, target: '_blank', rel: 'noopener', text: 'Google Sheets de l\'annuaire' }), ' (onglets « Défi – … »). Les changements y sont pris en compte en 5 minutes.') :
         h('p', { class: 'section__note', text: 'Tout est aussi modifiable dans le Google Sheets « Base » (onglets « Défi – … ») ; les changements y sont pris en compte en 5 minutes.' })));
     window.scrollTo(0, scroll);
@@ -76,6 +76,28 @@
         ev.currentTarget.disabled = true;
         apres(appeler('defi_parcours_actif', { actif: !actif }), actif ? 'Jeu Parcours désactivé.' : 'Jeu Parcours activé pour tous les services.');
       }, text: actif ? 'Désactiver le jeu Parcours' : 'Activer le jeu Parcours' }));
+  }
+  /* ---------- Plans du CHU : services par bâtiment et par niveau (plan virtuel) ---------- */
+  function sectionPlan(e) {
+    var plan = e.plan || [], bats = (e.site && e.site.batiments || []).map(function (b) { return b.code; });
+    if (!bats.length) return h('section', { class: 'section' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏥 Plans du CHU : services par étage' })),
+      h('p', { class: 'vide', text: 'Dessinez d\'abord la vue du ciel : les bâtiments servent au plan virtuel.' }));
+    var selB = h('select', { 'aria-label': 'Bâtiment' }, bats.map(function (c) { return h('option', { value: c, text: c }); }));
+    var selN = h('select', { 'aria-label': 'Niveau' }, (e.niveaux || ['-1', '0', '1', '2', '3', '4']).map(function (n) { return h('option', { value: n, text: 'Niveau ' + n + (n === '0' ? ' (rue)' : '') }); }));
+    var zone = h('textarea', { rows: '8', maxlength: '4000', 'aria-label': 'Services de cet étage, un par ligne', placeholder: 'Un service par ligne' });
+    function charger() { var x = plan.filter(function (y) { return y.batiment === selB.value && y.niveau === selN.value; })[0]; zone.value = x ? x.services.join('\n') : ''; }
+    selB.addEventListener('change', charger); selN.addEventListener('change', charger); charger();
+    var resume = bats.map(function (b) { var n = plan.filter(function (y) { return y.batiment === b; }); return b + ' : ' + (n.length ? n.map(function (y) { return y.niveau; }).sort(function (a, c) { return a - c; }).join(', ') : '—'); }).join(' · ');
+    return h('section', { class: 'section' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏥 Plans du CHU : services par étage' })),
+      h('p', { class: 'section__note', text: 'Ce qui s\'affiche dans le plan virtuel quand on arrive à un étage. Un étage sans service n\'est pas proposé dans l\'ascenseur. Aussi modifiable dans l\'onglet « Plan – Services » du Google Sheets.' }),
+      h('p', { class: 'section__note', text: 'Étages renseignés · ' + resume }),
+      h('form', { class: 'form-carte', onsubmit: function (ev) {
+        ev.preventDefault(); var b = ev.currentTarget.querySelector('button'); b.disabled = true;
+        var l = zone.value.split('\n').map(function (x) { return x.trim(); }).filter(String);
+        apres(appeler('defi_plan_services', { batiment: selB.value, niveau: selN.value, services: l }), l.length ? selB.value + ', niveau ' + selN.value + ' : ' + l.length + ' service(s) enregistré(s).' : selB.value + ', niveau ' + selN.value + ' : étage retiré du plan virtuel.');
+      } }, h('div', { class: 'grille-2' }, h('div', { class: 'champ' }, h('label', { text: 'Bâtiment' }), selB), h('div', { class: 'champ' }, h('label', { text: 'Niveau' }), selN)),
+        h('div', { class: 'champ' }, h('label', { text: 'Services (un par ligne ; vide = étage retiré)' }), zone),
+        h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer cet étage' })));
   }
   function compter(qs) { var n = { 'à valider': 0, 'validée': 0, 'retirée': 0 }; qs.forEach(function (q) { n[q.statut]++; }); return n; }
 

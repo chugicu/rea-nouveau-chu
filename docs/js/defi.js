@@ -2,7 +2,9 @@
    - Défi du jour : les mêmes 6 questions pour tout le CHU (dont 2 missions du Parcours) ; seule la 1re réponse de chaque téléphone compte.
    - Classement : % de bonnes réponses par service (classé à partir de 30 réponses dans la semaine), podium, général.
    - Parcours : vue du ciel (bâtiment) → rue Caraïbes (N° d'entrée) → ascenseur (niveau) → arrivée ; jeu séparé activable par les gestionnaires.
-   - Gestion (super-admin et créateurs ; l'administrateur quand le service est seul) : phase de test, questions, vue du ciel.
+   - Plans du CHU › Plan virtuel : la même vue du ciel, en promenade libre, avec les services de chaque étage.
+   - Infos générales (visiteur) : entraînement, rien ne compte pour un service.
+   - Gestion (super-admin et créateurs ; l'administrateur quand le service est seul) : phase de test, questions, vue du ciel, services par étage.
    Aucune question ni aucun plan dans ce fichier : tout vient du moteur (Google Sheets privé). */
 (function () {
   'use strict';
@@ -13,10 +15,12 @@
 
   function init() { A = window.ReaApp; h = A.h; Api = window.ReaApi; }
   function session() { return A.stock.lire(A.CLE.session); }
-  function memoire() { var m = A.stock.lire(CLE.memoire) || {}; m.jours = m.jours || {}; return m; }
+  function visiteur() { return (session() || {}).role === 'visiteur'; } // Infos générales : entraînement, rien ne compte
+  function cleMemoire() { return visiteur() ? CLE.memoire + '-infos' : CLE.memoire; }
+  function memoire() { var m = A.stock.lire(cleMemoire()) || {}; m.jours = m.jours || {}; return m; }
   function sauver(m) { // on ne garde que les 14 derniers jours
     var j = Object.keys(m.jours).sort(); while (j.length > 14) delete m.jours[j.shift()];
-    A.stock.ecrire(CLE.memoire, m);
+    A.stock.ecrire(cleMemoire(), m);
   }
   function appareil() { // identifiant aléatoire de ce téléphone, jamais relié à une personne (partagé avec les paris)
     var a = A.stock.lire(CLE.appareil);
@@ -38,7 +42,7 @@
   function chargement(titre, retour) { page(titre, null, h('div', { class: 'squelette', style: 'height:260px;margin-top:16px' }), retour); }
   function echec(titre, e, reessayer, retour) {
     if (erreurSession(e)) return;
-    page(titre, null, h('div', null, h('p', { class: 'vide', text: e && e.code === 'reseau' ? 'Le Défi CHU se joue en ligne : vérifiez la connexion.' : A.message(e && e.code) }),
+    page(titre, null, h('div', null, h('p', { class: 'vide', text: e && e.code === 'reseau' ? 'Cette rubrique fonctionne en ligne : vérifiez la connexion.' : A.message(e && e.code) }),
       h('button', { class: 'bouton', type: 'button', onclick: reessayer, text: 'Réessayer' })), retour);
   }
   function bandeauTest(mode) { return mode === 'test' ? h('p', { class: 'defi-test', role: 'note', text: '🧪 Phase de test : certaines questions ne sont pas encore validées et les scores ne comptent pas. Le classement repartira de zéro à l\'ouverture officielle.' }) : null; }
@@ -54,8 +58,9 @@
     init();
     var m = memoire(), j = m.jours[A.aujourdhui()], fait = j && j.fin;
     return h('section', { class: 'section defi-carte' + (fait ? ' defi-carte--fait' : '') },
-      h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' }), h('span', { class: 'section__note', text: fait ? 'Fait ✓ · ' + j.bonnes + ' / ' + j.total : '6 questions · tout le CHU' })),
-      h('p', { class: 'section__note', text: fait ? 'Votre service compte sur vous demain aussi ! Le classement se joue en % de bonnes réponses.' : 'Les mêmes questions pour tous les services. Chaque réponse compte pour votre service.' }),
+      h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Quiz du jour – Défi CHU' }), h('span', { class: 'section__note', text: fait ? 'Fait ✓ · ' + j.bonnes + ' / ' + j.total : '6 questions · tout le CHU' })),
+      h('p', { class: 'section__note', text: visiteur() ? 'Les mêmes questions pour tous les services. Ici, c\'est un entraînement : vos réponses ne comptent pour aucun service.'
+        : fait ? 'Votre service compte sur vous demain aussi ! Le classement se joue en % de bonnes réponses.' : 'Les mêmes questions pour tous les services. Chaque réponse compte pour votre service.' }),
       h('div', { class: 'gps-boutons' },
         h('button', { class: fait ? 'bouton bouton--discret' : 'bouton', type: 'button', onclick: function () { RETOUR = function () { A.ecranAccueil(); }; fait ? classement() : jour(); }, text: fait ? 'Voir le classement' : 'Relever le défi' }),
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { ouvrir(function () { A.ecranAccueil(); }); }, text: m.parcours ? 'Parcours et classement' : 'Classement' })));
@@ -118,7 +123,7 @@
           h('p', { class: 'quiz-verdict quiz-verdict--' + (r.bon ? 'ok' : 'ko'), text: r.bon ? 'Bonne réponse !' : 'Pas tout à fait.' }),
           !r.bon ? h('p', { text: 'La bonne réponse : ' + texteBonne(q, r.bonne) + '.' }) : null,
           r.explication ? h('p', { class: 'quiz-explication', text: r.explication }) : null,
-          !r.compte ? h('p', { class: 'section__note', text: 'Ce téléphone avait déjà répondu à cette question : cette réponse ne compte pas.' }) : null,
+          !r.compte ? h('p', { class: 'section__note', text: r.entrainement ? 'Entraînement : cette réponse ne compte pour aucun service.' : 'Ce téléphone avait déjà répondu à cette question : cette réponse ne compte pas.' }) : null,
           h('button', { class: 'bouton', type: 'button', onclick: suite, text: i + 1 < d.questions.length ? 'Question suivante' : 'Voir le résultat' }));
         retour.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }).catch(function (e) {
@@ -156,7 +161,7 @@
       if (envoye) return; envoye = true; bouton.disabled = true; zone.textContent = 'Envoi…';
       appeler('defi_repondre', { donnees: { id: q.id, reponse: { termine: true }, appareil: appareil() } }).then(function (r) {
         note(r); fait = true; envoye = false;
-        if (r.compte) return suite();
+        if (r.compte || r.entrainement) return suite();
         zone.textContent = 'Ce téléphone avait déjà terminé cette mission : elle ne compte pas une seconde fois.'; bouton.disabled = false;
       }).catch(function (e) {
         envoye = false; bouton.disabled = false;
@@ -184,7 +189,7 @@
     page('Défi du jour', null, h('div', null, bandeauTest(d.mode),
       h('div', { class: 'quiz-fin' },
         h('p', { class: 'quiz-fin__score' }, h('b', { text: etat.bonnes + ' / ' + etat.total }), ' bonne' + (etat.bonnes > 1 ? 's' : '') + ' réponse' + (etat.bonnes > 1 ? 's' : '')),
-        h('p', { text: parfait ? 'Sans faute : votre service vous dit merci !' : 'Chaque réponse compte pour le % de votre service. Nouveau défi demain !' }),
+        h('p', { text: visiteur() ? 'Entraînement terminé : vos réponses ne comptent pour aucun service. Nouveau défi demain !' : parfait ? 'Sans faute : votre service vous dit merci !' : 'Chaque réponse compte pour le % de votre service. Nouveau défi demain !' }),
         h('div', { class: 'quiz-actions' },
           h('button', { class: 'bouton', type: 'button', onclick: function () { classement(); }, text: 'Voir le classement' }),
           memoire().parcours ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { RETOUR = function () { ouvrir(); }; parcours(); }, text: 'Jouer au Parcours' }) : null))), RETOUR);
@@ -369,7 +374,7 @@
       remplir(scene, h('div', { class: 'defi-arrivee' },
         h('p', { class: 'defi-arrivee__panneau' }, h('span', { text: libelleEntree(mi.portes.length === 1 ? mi.portes[0] : mi.bat) + ' · niveau ' + mi.niveau }), h('b', { text: mi.destination })),
         mi.explication ? h('p', { class: 'quiz-explication', text: mi.explication }) : null,
-        o.terminer ? h('p', { class: 'section__note', text: 'Mission réussie : elle compte comme une bonne réponse pour votre service.' }) : null,
+        o.terminer ? h('p', { class: 'section__note', text: visiteur() ? 'Mission réussie ! (Entraînement : elle ne compte pour aucun service.)' : 'Mission réussie : elle compte comme une bonne réponse pour votre service.' }) : null,
         bouton, zone));
       aide.textContent = '';
       if (!err && window.ReaFun) setTimeout(function () { window.ReaFun.succes(); }, 150);
@@ -396,6 +401,97 @@
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { (RETOUR || ouvrir)(); }, text: 'Retour' }))), RETOUR);
   }
 
-  window.ReaDefi = { carteAccueil: carteAccueil, ouvrir: ouvrir, jour: jour, classement: classement, parcours: parcours,
+
+  /* ---------- Plans du CHU : plan virtuel (vue du ciel → rue Caraïbes → ascenseur → étage), sans question ni score ---------- */
+  function plansChu(depuis) {
+    init(); if (depuis) RETOUR = depuis; var retour = RETOUR || function () { A.ecranAccueil(); };
+    A.definirEcran(null);
+    page('Plans du CHU', null, h('div', { class: 'quiz-themes' },
+      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🗺️', onclick: function () { RETOUR = function () { plansChu(); }; planVirtuel(); } },
+        h('b', { text: 'Plan virtuel' }), h('span', { text: 'Promenez-vous librement : vue du ciel, entrées de la rue Caraïbes, ascenseur et services de chaque étage' }))), retour);
+    RETOUR = retour;
+  }
+  function planVirtuel() {
+    init(); var retour = RETOUR;
+    chargement('Plan virtuel', retour);
+    appeler('defi_plan').then(function (d) { RETOUR = retour; promenade(d); }).catch(function (e) { echec('Plan virtuel', e, planVirtuel, retour); });
+  }
+  function promenade(d) {
+    var ETAPES_PLAN = ['Vue du ciel', 'Rue', 'Ascenseur', 'Étage'], etape = 0, bat = null, porte = null;
+    var aide = h('p', { class: 'defi-aide', 'aria-live': 'polite' }), scene = h('div', { class: 'defi-scene' }), bulle = h('div', { class: 'defi-mission' });
+    var puces = h('div', { class: 'defi-puces', 'aria-hidden': 'true' }), boutons = h('div', { class: 'gps-boutons plan-chu-nav' });
+    function portesDe(b) { return d.site.entrees.filter(function (e) { return e.batiment === b; }); }
+    function niveauxDe(b) {
+      return d.etages.filter(function (x) { return x.batiment === b; }).map(function (x) { return x.niveau; })
+        .sort(function (a, c) { return Number(a) - Number(c); });
+    }
+    function nomBat(b) { var x = batimentDe(d.site, b); return b + (x && x.nom ? ' · ' + x.nom : ''); }
+    function nav(liste) {
+      remplir.apply(null, [boutons].concat(liste.map(function (x) { return h('button', { type: 'button', class: 'bouton bouton--discret', onclick: x[1], text: x[0] }); })));
+    }
+    function cadre() {
+      puces.replaceChildren.apply(puces, ETAPES_PLAN.map(function (t, k) { return h('span', { class: 'defi-puce' + (k === etape ? ' defi-puce--on' : ''), text: t }); }));
+      page('Plan virtuel', bat ? nomBat(bat) : 'Plans du CHU', h('div', null, bulle, scene, aide, boutons, puces), RETOUR);
+    }
+    // 1. Vue du ciel : on entre dans le bâtiment de son choix
+    function ciel() {
+      etape = 0; bat = null; porte = null;
+      remplir(bulle, h('b', { text: 'Vue du ciel' }), h('span', { text: 'Vous arrivez au parking visiteurs. Touchez le bâtiment où vous voulez aller.' }));
+      var svg = dessinerSite(d.site, { toucher: true, ici: true });
+      svg.addEventListener('click', function (ev) {
+        var g = ev.target.closest && ev.target.closest('[data-type="batiment"]'); if (!g) return;
+        bat = g.getAttribute('data-code'); g.classList.add('defi-bat--ok');
+        setTimeout(function () { if (portesDe(bat).length) rue(); else ascenseur('Le ' + bat + ' n\'a pas d\'entrée sur la rue Caraïbes : vous êtes directement dans l\'ascenseur.'); }, 300);
+      });
+      svg.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.closest('[data-type="batiment"]')) { ev.preventDefault(); ev.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+      remplir(scene, h('div', { class: 'defi-carte-ciel' }, svg));
+      aide.textContent = 'Les N° en petit sont les entrées de la rue Caraïbes.';
+      nav([]);
+      cadre();
+    }
+    // 2. Rue Caraïbes : devant le bâtiment, on choisit une de ses portes (ou une autre : on change alors de bâtiment)
+    function rue() {
+      etape = 1; porte = null;
+      remplir(bulle, h('b', { text: 'Rue Caraïbes · ' + bat }), h('span', { text: 'Touchez une porte du ' + bat + ' (en surbrillance) pour prendre son ascenseur.' }));
+      var portes = d.site.entrees.slice().sort(function (a, b) { return b.y - a.y; });
+      var rangee = h('div', { class: 'defi-rue', role: 'list' }, portes.map(function (e) {
+        var c = couleurEntree(e, d.site), cote = e.x < 185 ? 'gauche' : 'droite', ici = e.batiment === bat;
+        return h('button', { type: 'button', role: 'listitem', class: 'defi-facade defi-facade--' + cote + (ici ? ' plan-chu-porte--ici' : ' plan-chu-porte--autre'), style: '--c:' + c,
+          'aria-label': 'Entrée N° ' + e.code + ', bâtiment ' + e.batiment, onclick: function () { bat = e.batiment; porte = e.code; ascenseur(); } },
+          h('span', { class: 'defi-facade__cote', text: cote === 'gauche' ? '◀ à gauche' : 'à droite ▶' }),
+          h('span', { class: 'defi-facade__num', text: e.code }), h('span', { class: 'defi-facade__bat', text: e.batiment }));
+      }));
+      remplir(scene, h('div', { class: 'defi-rue-cadre' }, h('p', { class: 'defi-rue__depart', text: '🅿️ Parking visiteurs' }), rangee, h('p', { class: 'defi-rue__depart', text: 'Faites défiler → vers le parking du personnel' })));
+      aide.textContent = 'Les entrées défilent dans l\'ordre où vous les croisez en remontant la rue.';
+      nav([['Vue du ciel', ciel]]);
+      cadre();
+      var cible = scene.querySelector('.plan-chu-porte--ici'); if (cible && cible.scrollIntoView) cible.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+    // 3. Ascenseur : seuls les étages renseignés
+    function ascenseur(note) {
+      etape = 2;
+      var l = niveauxDe(bat);
+      remplir(bulle, h('b', { text: 'Ascenseur' + (porte ? ' du N° ' + porte : ' du ' + bat) }), h('span', { text: l.length ? 'Choisissez un étage.' : 'Aucun service n\'est encore renseigné pour le ' + bat + '.' }));
+      remplir(scene, h('div', { class: 'defi-cabine' }, h('div', { class: 'defi-cabine__ecran', text: porte ? 'N° ' + porte : bat }),
+        l.length ? panneauAscenseur(l, function (niv) { etage(niv); }) : h('p', { class: 'vide', text: 'Revenez bientôt : la liste des services est en cours de saisie.' })));
+      aide.textContent = note || 'Le niveau 0 est celui de la rue Caraïbes.';
+      nav((portesDe(bat).length ? [['Revenir devant le bâtiment', rue]] : []).concat([['Vue du ciel', ciel]]));
+      cadre();
+    }
+    // 4. Étage : les services présents
+    function etage(niv) {
+      etape = 3;
+      var x = d.etages.filter(function (y) { return y.batiment === bat && y.niveau === niv; })[0] || { services: [] };
+      remplir(bulle, h('b', { text: bat + ' · niveau ' + niv + (niv === '0' ? ' (rue Caraïbes)' : '') }), h('span', { text: x.services.length + ' service' + (x.services.length > 1 ? 's' : '') + ' à cet étage' }));
+      remplir(scene, h('div', { class: 'defi-arrivee' },
+        h('p', { class: 'defi-arrivee__panneau' }, h('span', { text: (porte ? 'N° ' + porte + ' · ' : '') + bat + ' · niveau ' + niv }), h('b', { text: 'À cet étage' })),
+        h('ul', { class: 'plan-chu-services' }, x.services.map(function (t) { return h('li', { text: t }); }))));
+      aide.textContent = '';
+      nav([['Changer d\'étage', function () { ascenseur(); }]].concat(portesDe(bat).length ? [['Revenir devant le bâtiment', rue]] : []).concat([['Vue du ciel', ciel]]));
+      cadre();
+    }
+    ciel();
+  }
+  window.ReaDefi = { carteAccueil: carteAccueil, ouvrir: ouvrir, jour: jour, classement: classement, parcours: parcours, plansChu: plansChu, planVirtuel: planVirtuel,
     _dessinerSite: function (site, o) { init(); return dessinerSite(site, o); }, _outils: { s: s, clair: clair, couleurBat: couleurBat, libelleEntree: libelleEntree, page: page, remplir: remplir } };
 })();

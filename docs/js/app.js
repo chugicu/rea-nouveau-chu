@@ -63,6 +63,8 @@
   var MODULES = [
     // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
     { id: 'plan', c: '#223b80', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
+    // toujours : visible dans tous les services, même quand l'administrateur a choisi ses rubriques
+    { id: 'plan-chu', c: '#40a8df', sombre: true, e: '🏥', t: -1.5, toujours: true, nom: 'Plans du CHU', desc: 'Plan virtuel : vue du ciel, rue Caraïbes, ascenseur et services de chaque étage', ouvrir: function () { window.ReaDefi.plansChu(function () { ecranAccueil(); }); } },
     { id: 'visites', c: '#048e39', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'newsletter', c: '#40a8df', sombre: true, e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Les lettres d\'information du service et du CHU', etape: 3, ouvrir: function () { ecranNewsletters(); } },
     { id: 'souvenirs', c: '#95c127', sombre: true, e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },
@@ -99,6 +101,8 @@
     deja_rattache: 'Ce service a déjà été rattaché à Cap NCHUG.',
     action_inconnue: 'Cette fonction attend la mise à jour du moteur (Code.gs) par l\'administrateur.',
     defi_perime: 'Un nouveau défi a commencé : rechargez le défi du jour.',
+    infos_fermees: 'Les Infos générales ne sont pas encore ouvertes.',
+    code_infos_invalide: 'Le code doit compter de 6 à 32 lettres ou chiffres (le tiret est permis).',
     parcours_inactif: 'Le jeu Parcours n\'est pas encore ouvert. Les missions sont dans le Défi du jour !',
     question_invalide: 'Question incomplète.',
     service_existe: 'Un service porte déjà ce nom.',
@@ -190,6 +194,7 @@
 
   /* ---------- Écran de connexion ---------- */
   function ecranConnexion(erreurInitiale) {
+    if (window.ReaCap && window.ReaCap.enInfos()) return window.ReaCap.infosExpiree(erreurInitiale); // Infos générales : on redemande le code commun
     ecranCourant = null; // un chargement de l'accueil encore en cours ne doit pas réafficher l'accueil
     var champ = h('input', { id: 'code', name: 'code', type: 'text', inputmode: 'text', autocomplete: 'off',
       autocapitalize: 'characters', spellcheck: 'false', maxlength: '32', required: true, 'aria-describedby': 'code-aide' });
@@ -276,7 +281,8 @@
   function dessinerAccueil(session, d) {
     var role = session.role;
     var commun = !!(window.ReaCap && window.ReaCap.enCommun()); // contenus communs au CHU : seulement actualités, newsletters, documents
-    var libelleRole = role === 'admin' ? 'Administrateur' : role === 'referent' ? 'Référent : ' + (session.libelle || '') : 'Équipe réa';
+    var infos = role === 'visiteur'; // Infos générales : contenus communs en lecture, Défi en entraînement
+    var libelleRole = infos ? 'Infos générales' : role === 'admin' ? 'Administrateur' : role === 'referent' ? 'Référent : ' + (session.libelle || '') : 'Équipe réa';
 
     afficher(h('div', { class: 'page' },
       h('header', { class: 'entete' },
@@ -287,15 +293,16 @@
           window.ReaFun && window.ReaFun.serie() ? h('span', { class: 'serie', title: 'Jours d\'affilée avec le quiz du jour', text: '🔥 ' + window.ReaFun.serie() }) : null,
           h('span', { class: 'entete__role', text: libelleRole }))),
       window.ReaCap && window.ReaCap.enCommun() ? window.ReaCap.bandeauCommun() : null,
-      Api.multi ? h('p', { class: 'cap-entete' }, h('span', { text: 'Cap NCHUG' }), h('b', { text: d.service || '' })) : null,
-      d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
-      commun ? null : horizon(d),
-      !commun && d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
-      !commun && window.ReaQuiz ? window.ReaQuiz.carteAccueil() : null,
+      Api.multi ? h('p', { class: 'cap-entete' }, h('span', { text: 'Cap NCHUG' }), h('b', { text: infos ? 'Infos générales' : d.service || '' }),
+        infos && window.ReaCap ? h('button', { type: 'button', class: 'lien-discret', onclick: function () { window.ReaCap.quitterInfos(); }, text: 'Choisir mon service' }) : null) : null,
+      d.messageAccueil && !infos ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
+      infos ? h('p', { class: 'message-accueil', text: 'Les informations communes à tout le CHU. Pour les contenus de votre service, choisissez votre service.' }) : null,
+      commun || infos ? null : horizon(d),
+      !commun && !infos && d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
       !commun && window.ReaDefi ? window.ReaDefi.carteAccueil() : null,
       sectionModules(role, d),
-      commun ? null : sectionJauge(d.jauge),
-      commun ? null : sectionBadges(),
+      commun || infos ? null : sectionJauge(d.jauge),
+      commun || infos ? null : sectionBadges(),
       sectionActus(d.actualites, role),
       piedDePage(d)));
     app.focus({ preventScroll: true });
@@ -346,13 +353,14 @@
   function sectionModules(role, d) {
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
     var rub = d && d.rubriques; // lot 2 : rubriques choisies par l'administrateur (null = toutes)
-    var liste = MODULES.filter(function (m) { return !rub || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
+    var liste = MODULES.filter(function (m) { return !rub || m.toujours || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
+    if (role === 'visiteur') liste = MODULES.filter(function (m) { return ['plan-chu', 'newsletter', 'docs'].indexOf(m.id) >= 0; }); // Infos générales
     var commun = !!(window.ReaCap && window.ReaCap.enCommun());
     if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#40a8df', sombre: true, e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
     if (role === 'admin' && window.ReaCap && !commun) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
     // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
     if (role === 'admin' && (!Api.multi || (Api.service() && Api.service().api)) && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#95c127', sombre: true, e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
-    else if (role !== 'agent' && !commun && !rub) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
+    else if (role !== 'agent' && role !== 'visiteur' && !commun && !rub) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, liste.map(function (m) {
@@ -371,7 +379,7 @@
     actus = actus || [];
     return h('section', { class: 'section', 'aria-labelledby': 'titre-actus' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-actus', text: 'Actualités' }),
-        role && role !== 'agent' && window.ReaCommuns ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { window.ReaCommuns.actus(); }, text: '✏️ Gérer' }) : null),
+        (role === 'referent' || role === 'admin') && window.ReaCommuns ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { window.ReaCommuns.actus(); }, text: '✏️ Gérer' }) : null),
       actus.length
         ? h('ul', { class: 'actus' }, actus.map(function (a) {
             return h('li', { class: 'actu' + (a.epinglee ? ' actu--epinglee' : '') + (a.chu ? ' actu--chu' : '') },
@@ -388,7 +396,8 @@
       h('span', { class: 'pied__texte', text: 'CHU de la Guadeloupe · ' + ((d && d.service) || 'Réanimation – USC') }),
       h('div', { class: 'pied__actions' },
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: ecranAccueil, text: 'Actualiser' }),
-        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: deconnexion, text: 'Se déconnecter' })));
+        window.ReaCap && window.ReaCap.enInfos() ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: function () { window.ReaCap.quitterInfos(); }, text: 'Choisir mon service' })
+          : h('button', { class: 'bouton bouton--discret', type: 'button', onclick: deconnexion, text: 'Se déconnecter' })));
   }
 
   /* ---------- Visites des locaux ---------- */

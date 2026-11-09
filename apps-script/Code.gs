@@ -25,8 +25,8 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.3.2',
-  dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
+  version: '2.3.3',
+  dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
   maxEchecs: 30,
@@ -82,7 +82,7 @@ function doPost(e) {
     return json_({ ok: false, erreur: 'requete_invalide' });
   }
   try {
-    var action = String(req.action || '');
+    var action = String(req.action || ''); ACTION_COURANTE_ = action;
     // Annuaire (Cap NCHUG) : routes communes, puis entrée dans le service demandé
     if (action !== 'ping' && serviceDeplace_()) return json_({ ok: false, erreur: 'service_deplace' }); // rattaché à Cap NCHUG
     if (ROUTES_DEFI_GESTION[action]) return json_(ROUTES_DEFI_GESTION[action](req)); // Défi CHU : gestion commune
@@ -151,7 +151,8 @@ function doPost(e) {
       defi_jour: function () { return defiJour_(verifierJeton_(req.jeton)); },
       defi_repondre: function () { return defiRepondre_(verifierJeton_(req.jeton), req.donnees); },
       defi_classement: function () { return defiClassement_(verifierJeton_(req.jeton)); },
-      defi_parcours: function () { return defiParcours_(verifierJeton_(req.jeton)); }
+      defi_parcours: function () { return defiParcours_(verifierJeton_(req.jeton)); },
+      defi_plan: function () { return defiPlan_(verifierJeton_(req.jeton)); } // Plans du CHU : plan virtuel
     };
     if (!routes[action]) return json_({ ok: false, erreur: 'action_inconnue' });
     return json_(routes[action]());
@@ -1379,6 +1380,10 @@ function verifierJeton_(jeton) {
   if (charge.s === '_') throw erreurApp_('session_invalide'); // jeton de l'annuaire
   if ((charge.s || null) !== (CTX_SERVICE ? CTX_SERVICE.id : null)) throw erreurApp_('session_invalide'); // jeton d'un autre service
   if (charge.r === 'referent' && !referentActif_(charge.n)) throw erreurApp_('session_expiree');
+  if (charge.r === 'visiteur') { // Infos générales : lecture des contenus communs seulement, tant que le code commun n'a pas changé
+    if (!CTX_SERVICE || CTX_SERVICE.id !== COMMUN.id || charge.ci !== infosEmpreinte_()) throw erreurApp_('session_expiree');
+    if (!INFOS_ACTIONS[ACTION_COURANTE_]) throw erreurApp_('non_autorise');
+  }
   return charge;
 }
 function lireJeton_(jeton) {
@@ -1637,7 +1642,8 @@ function genererCode_(n) {
    Mode « annuaire » (Cap NCHUG) : le Google Sheets lié est l'annuaire des services ; chaque appel indique son
    service, et le moteur travaille alors dans le Google Sheets de ce service, avec ses propres réglages. */
 var CTX_SERVICE = null, CLASSEUR_MEMO = null, MEMO_PROPS = {};
-var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1, DEFI_PARCOURS: 1 };
+var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1, DEFI_PARCOURS: 1, INFOS_CODE: 1 };
+var ACTION_COURANTE_ = '';
 function cleProp_(k) { return CTX_SERVICE && !CLES_GLOBALES[k] ? 's:' + CTX_SERVICE.id + ':' + k : k; }
 /* Réglages du script, rangés par service, gardés en mémoire (cache) pour ménager le quota quotidien de lectures */
 var PROPS_ = {
@@ -1786,7 +1792,9 @@ function codesChanger_(session, quoi, nom) {
 // ============================================================================
 var ANNUAIRE = { onglet: 'Services', entetes: ['ID', 'Nom', 'Google Sheets (ID)', 'Actif', 'Créé le', 'Créé par'] };
 var ROUTES_ANNUAIRE = {
-  services: function () { return { ok: true, services: lireServices_().filter(function (s) { return s.actif && s.id.charAt(0) !== '_'; }).map(function (s) { return { id: s.id, nom: s.nom }; }) }; },
+  services: function () { return { ok: true, services: lireServices_().filter(function (s) { return s.actif && s.id.charAt(0) !== '_'; }).map(function (s) { return { id: s.id, nom: s.nom }; }), infos: infosOuvertes_() }; },
+  infos_login: function (req) { return infosLogin_(req.code); },
+  infos_code: function (req) { return infosCode_(verifierJetonAnnuaire_(req.jeton), req.code); },
   annuaire_login: function (req) { return annuaireLogin_(req.code); },
   annuaire_etat: function (req) { return annuaireEtat_(verifierJetonAnnuaire_(req.jeton)); },
   service_creer: function (req) { return serviceCreer_(verifierJetonAnnuaire_(req.jeton), req.donnees || {}); },
@@ -1818,7 +1826,7 @@ function verifierJetonAnnuaire_(jeton) {
 }
 function exigerSuper_(session) { if (session.r !== 'super') throw erreurApp_('non_autorise'); return session; }
 function annuaireEtat_(session) {
-  return { ok: true, role: session.r, libelle: session.n,
+  return { ok: true, role: session.r, libelle: session.n, infos: { code: PROPS_.getProperty('INFOS_CODE') || '', commun: !!communService_() },
     services: lireServices_().filter(function (s) { return s.id.charAt(0) !== '_'; }).map(function (s) { return { id: s.id, nom: s.nom, actif: s.actif, cree: s.cree, par: s.par, lienSheets: session.r === 'super' && s.ss ? 'https://docs.google.com/spreadsheets/d/' + s.ss : '' }; }),
     createurs: session.r === 'super' ? lireCreateurs_().map(function (c) { return { nom: c.nom, actif: !!c.actif, modifie: c.modifie || '' }; }) : null };
 }
@@ -1912,7 +1920,8 @@ function menuInvaliderAnnuaire() { props_().setProperty('VERSION_JETONS', String
 // rien sur GitHub. Aucun suivi individuel : seuls des totaux par service et par semaine sont gardés.
 // ============================================================================
 var DEFI = {
-  ongletQ: 'Défi – Questions', ongletSite: 'Défi – Site', ongletScores: 'Défi – Scores',
+  ongletQ: 'Défi – Questions', ongletSite: 'Défi – Site', ongletScores: 'Défi – Scores', ongletPlan: 'Plan – Services',
+  entetesPlan: ['Bâtiment', 'Niveau', 'Services (un par ligne)'],
   entetesQ: ['ID', 'Thème', 'Type', 'Question', 'Réponses (une par ligne)', 'Bonne réponse', 'Explication', 'Entrée ou bâtiment', 'Niveau', 'Source', 'Statut', 'Par', 'Modifiée le'],
   entetesSite: ['Type', 'Code', 'Nom', 'Couleur', 'Bâtiment', 'X', 'Y', 'Largeur', 'Hauteur'],
   entetesScores: ['Semaine (lundi)', 'Service', 'Nom du service', 'Réponses', 'Bonnes réponses', '% de bonnes réponses', 'Mode'],
@@ -1927,7 +1936,8 @@ var ROUTES_DEFI_GESTION = {
   defi_site: function (req) { gestionDefi_(req); return defiSiteEnregistrer_(req.site); },
   defi_importer: function (req) { return defiImporter_(gestionDefi_(req), req.donnees || {}); },
   defi_raz: function (req) { gestionDefi_(req); return defiRaz_(); },
-  defi_parcours_actif: function (req) { gestionDefi_(req); return defiParcoursActiver_(req.actif); }
+  defi_parcours_actif: function (req) { gestionDefi_(req); return defiParcoursActiver_(req.actif); },
+  defi_plan_services: function (req) { gestionDefi_(req); return defiPlanEnregistrer_(req.batiment, req.niveau, req.services); }
 };
 /* Qui gère le Défi : le super-admin et les créateurs (Cap NCHUG) ; l'administrateur quand le service est seul. */
 function gestionDefi_(req) {
@@ -1939,6 +1949,7 @@ function defiOnglets_(ss) {
   creerOnglet_(ss, DEFI.ongletQ, DEFI.entetesQ, []);
   creerOnglet_(ss, DEFI.ongletSite, DEFI.entetesSite, []);
   creerOnglet_(ss, DEFI.ongletScores, DEFI.entetesScores, []);
+  creerOnglet_(ss, DEFI.ongletPlan, DEFI.entetesPlan, []);
 }
 function defiOnglet_(nom) {
   var ss = defiClasseur_(), sh = ss.getSheetByName(nom);
@@ -1954,7 +1965,7 @@ function lundi_(iso) { var d = new Date(iso + 'T12:00:00Z'), j = (d.getUTCDay() 
 function libelleEntree_(e) { e = String(e || ''); return /^B/i.test(e) ? e.toUpperCase() : 'N° ' + e; }
 
 /* ---------- Lecture des questions et du site (gardés en cache 5 min) ---------- */
-function defiViderCache_() { CacheService.getScriptCache().removeAll(['defi|q', 'defi|site']); }
+function defiViderCache_() { CacheService.getScriptCache().removeAll(['defi|q', 'defi|site', 'defi|plan']); }
 function lireDefiQuestions_() {
   var c = CacheService.getScriptCache(), t = c.get('defi|q');
   if (t) return JSON.parse(t);
@@ -2049,12 +2060,12 @@ function defiRepondre_(session, d) {
   else bon = !!rep && rep.termine === true; // mission du Parcours : bonne dès qu'elle est terminée, quelles que soient les erreurs
   // Seule la 1re réponse de ce téléphone à cette question compte (empreinte gardée quelques heures, jamais reliée à une personne)
   var empr = 'defi|vu|' + fnv_(empreinteAppareil_(d.appareil) + '|' + date + '|' + id).toString(36) + fnv_(id + '|' + d.appareil).toString(36);
-  var c = CacheService.getScriptCache(), compte = !c.get(empr);
+  var c = CacheService.getScriptCache(), compte = session.r !== 'visiteur' && !c.get(empr); // Infos générales : entraînement, ne compte pour aucun service
   if (compte) {
     c.put(empr, '1', 21600);
     defiCompter_(session, mode, date, bon);
   }
-  return { ok: true, bon: bon, compte: compte, bonne: q.type === 'ascenseur' ? { entree: q.bonne.entree, libelle: libelleEntree_(q.bonne.entree), niveau: q.bonne.niveau } : q.bonne, explication: q.explication };
+  return { ok: true, bon: bon, compte: compte, entrainement: session.r === 'visiteur', bonne: q.type === 'ascenseur' ? { entree: q.bonne.entree, libelle: libelleEntree_(q.bonne.entree), niveau: q.bonne.niveau } : q.bonne, explication: q.explication };
 }
 function defiServiceCourant_() {
   if (CTX_SERVICE) return { id: CTX_SERVICE.id, nom: CTX_SERVICE.nom };
@@ -2106,6 +2117,67 @@ function defiParcours_(session) {
   var missions = defiPool_(mode).filter(function (q) { return q.type === 'ascenseur' && defiMissionJouable_(q, site); }).map(defiMission_);
   return { ok: true, mode: mode, site: site, missions: missions, niveaux: DEFI.niveaux, parcours: true };
 }
+/* ---------- Plans du CHU : services par bâtiment et par niveau (onglet « Plan – Services », jamais sur GitHub) ---------- */
+function lireDefiPlan_() {
+  var c = CacheService.getScriptCache(), t = c.get('defi|plan');
+  if (t) return JSON.parse(t);
+  var v = defiOnglet_(DEFI.ongletPlan).getDataRange().getValues(), parCle = {}, l = [];
+  for (var i = 1; i < v.length; i++) {
+    var bat = String(v[i][0] || '').trim().toUpperCase(), niv = String(v[i][1]).trim().replace(/^'/, '');
+    var sv = String(v[i][2] || '').split(/\n/).map(function (x) { return x.trim(); }).filter(String);
+    if (!bat || DEFI.niveaux.indexOf(niv) < 0 || !sv.length) continue;
+    var cle = bat + '|' + niv;
+    if (!parCle[cle]) { parCle[cle] = { batiment: bat, niveau: niv, services: [] }; l.push(parCle[cle]); }
+    parCle[cle].services = parCle[cle].services.concat(sv).slice(0, 40);
+  }
+  try { c.put('defi|plan', JSON.stringify(l), 300); } catch (e) { /* ignoré */ }
+  return l;
+}
+function defiPlan_(session) { return { ok: true, site: lireDefiSite_(), etages: lireDefiPlan_(), niveaux: DEFI.niveaux }; }
+function defiPlanEnregistrer_(bat, niv, services) {
+  bat = nettoyerTexte_(bat, 8).toUpperCase(); niv = String(niv == null ? '' : niv).trim();
+  if (!/^[A-Z0-9]{1,8}$/.test(bat) || DEFI.niveaux.indexOf(niv) < 0 || !Array.isArray(services) || services.length > 40) throw erreurApp_('requete_invalide');
+  var l = services.map(function (x) { return nettoyerTexte_(x, 120); }).filter(String);
+  var sh = defiOnglet_(DEFI.ongletPlan), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var v = sh.getDataRange().getValues(), ligne = 0;
+    for (var i = v.length - 1; i >= 1; i--) {
+      if (String(v[i][0] || '').trim().toUpperCase() === bat && String(v[i][1]).trim().replace(/^'/, '') === niv) { if (!ligne) ligne = i + 1; else sh.deleteRow(i + 1); }
+    }
+    if (!l.length) { if (ligne) sh.deleteRow(ligne); }
+    else if (ligne) sh.getRange(ligne, 1, 1, 3).setValues([[bat, niv, l.join('\n')]]);
+    else sh.appendRow([bat, niv, l.join('\n')]);
+  } finally { verrou.releaseLock(); }
+  defiViderCache_();
+  return defiGestionEtat_();
+}
+
+/* ---------- Infos générales : contenus communs en lecture, avec un code commun choisi par le super-admin ou un créateur ---------- */
+var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
+function infosEmpreinte_() { var c = PROPS_.getProperty('INFOS_CODE'); return c ? fnv_('infos|' + c).toString(36) : ''; }
+function infosOuvertes_() { return !!PROPS_.getProperty('INFOS_CODE') && !!communService_(); }
+function infosLogin_(code) {
+  sortirService_(); code = normaliserCode_(code);
+  if (!code) throw erreurApp_('code_manquant');
+  var cache = cache_(); if (cache.get('blocage')) throw erreurApp_('trop_de_tentatives');
+  var attendu = PROPS_.getProperty('INFOS_CODE'), c = communService_();
+  if (!attendu || !c) throw erreurApp_('infos_fermees');
+  if (!egaliteConstante_(code, attendu)) { enregistrerEchec_(cache); Utilities.sleep(600); throw erreurApp_('code_incorrect'); }
+  var ci = infosEmpreinte_();
+  CTX_SERVICE = { id: c.id, ssId: c.ss, nom: c.nom }; MEMO_PROPS = {};
+  try {
+    var exp = Date.now() + APP.dureeJetonJours.visiteur * 86400000;
+    return { ok: true, service: { id: c.id, nom: 'Infos générales' }, jeton: signerJeton_({ r: 'visiteur', n: '', v: versionJetons_(), exp: exp, s: c.id, ci: ci }),
+      role: 'visiteur', libelle: 'Infos générales', expiration: new Date(exp).toISOString() };
+  } finally { sortirService_(); }
+}
+function infosCode_(session, code) {
+  if (code === null || code === '' || code === undefined) { PROPS_.setProperty('INFOS_CODE', ''); return { ok: true, code: '' }; } // accès fermé
+  code = normaliserCode_(code);
+  if (!/^[A-Z0-9-]{6,32}$/.test(code)) throw erreurApp_('code_infos_invalide');
+  PROPS_.setProperty('INFOS_CODE', code);
+  return { ok: true, code: code };
+}
 function defiParcoursActiver_(actif) {
   PROPS_.setProperty('DEFI_PARCOURS', actif === true ? 'actif' : 'inactif');
   return defiGestionEtat_();
@@ -2115,7 +2187,7 @@ function defiParcoursActiver_(actif) {
 function defiGestionEtat_() {
   return { ok: true, mode: defiModeActuel_(), debut: PROPS_.getProperty('DEFI_DEBUT') || '', parcours: defiParcoursActif_(),
     questions: lireDefiQuestions_().map(function (q) { var x = Object.assign({}, q); delete x.ligne; return x; }),
-    site: lireDefiSite_(), niveaux: DEFI.niveaux,
+    site: lireDefiSite_(), niveaux: DEFI.niveaux, plan: lireDefiPlan_(),
     lienSheets: modeAnnuaire_() ? 'https://docs.google.com/spreadsheets/d/' + defiClasseur_().getId() : '' };
 }
 function defiMode_(mode) {
