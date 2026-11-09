@@ -92,6 +92,9 @@
   var MESSAGES = {
     code_manquant: 'Saisissez votre code.',
     service_inconnu: 'Ce service n\'est plus ouvert dans Cap NCHUG. Choisissez votre service.',
+    action_inconnue: 'Cette fonction attend la mise à jour du moteur (Code.gs) par l\'administrateur.',
+    defi_perime: 'Un nouveau défi a commencé : rechargez le défi du jour.',
+    question_invalide: 'Question incomplète.',
     service_existe: 'Un service porte déjà ce nom.',
     occupe: 'Beaucoup de monde en ce moment : réessayez dans une minute.',
     code_incorrect: 'Ce code n\'est pas reconnu. Vérifiez-le auprès de votre cadre ou d\'un référent.',
@@ -281,6 +284,7 @@
       horizon(d),
       d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
       window.ReaQuiz ? window.ReaQuiz.carteAccueil() : null,
+      window.ReaDefi ? window.ReaDefi.carteAccueil() : null,
       sectionModules(role, d),
       sectionJauge(d.jauge),
       sectionBadges(),
@@ -335,6 +339,8 @@
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
     var liste = MODULES.slice();
     if (role === 'admin' && window.ReaCap) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
+    // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
+    if (role === 'admin' && !Api.multi && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#c98a00', e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
     else if (role !== 'agent') liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),

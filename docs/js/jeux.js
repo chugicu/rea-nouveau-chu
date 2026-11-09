@@ -159,6 +159,7 @@
     function t(cle, ic, nom, desc) { return h('button', { type: 'button', class: 'quiz-theme', 'data-ic': ic, onclick: function () { window.ReaQuiz.theme(cle, hub); } }, h('b', { text: nom }), h('span', { text: desc })); }
     return h('section', { class: 'section' },
       h('div', { class: 'section__tete' }, h('h2', { text: 'Quiz' }), h('span', { class: 'section__note', text: 'Les questions ratées reviennent plus souvent' })),
+      window.ReaDefi ? h('button', { type: 'button', class: 'quiz-theme quiz-theme--defi', 'data-ic': '🏆', onclick: function () { window.ReaDefi.ouvrir(hub); } }, h('b', { text: 'Défi CHU' }), h('span', { text: 'Défi du jour entre services, classement, Parcours' })) : null,
       h('div', { class: 'quiz-themes' },
         t('plan', '🧭', 'Plan et équipements', 'Où se trouve… ? Sur le plan ou en QCM'),
         t('urgences', '🚨', 'Urgences et sécurité', 'Chariots d\'urgence, sécurité, réflexes'),

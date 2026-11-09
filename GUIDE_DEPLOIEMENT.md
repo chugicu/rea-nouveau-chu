@@ -369,6 +369,26 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 
 **Mises à jour :** un seul moteur pour tous les services : collez le nouveau `Code.gs` dans le projet de l'annuaire et faites « Nouvelle version », une fois.
 
+## Partie Q – Défi CHU (moteur 2.1.0)
+
+Questions communes à tous les services, défi du jour, classement des services en % de bonnes réponses, jeu « Parcours ». Aucune question et aucun plan ne sont sur GitHub : tout est dans le Google Sheets privé (annuaire Cap NCHUG, ou base « Base » de la réa tant qu'elle est seule).
+
+**Installer (réa seule, aujourd'hui) :**
+1. Collez le nouveau `Code.gs` dans le projet Apps Script de la réa, enregistrez, puis menu « Réa – Administration › 1. Installer / réparer la base » : trois onglets apparaissent (« Défi – Questions », « Défi – Site », « Défi – Scores »).
+2. Déployer › Gérer les déploiements › modifier › Nouvelle version.
+3. Dans l'appli, avec le code ADMINISTRATEUR : tuile 🏆 « Gestion du Défi CHU » › « Importer un fichier de questions » : choisissez `defi-chu-import.json` (fourni à part, à ne jamais déposer sur GitHub) et cochez « Remplacer aussi la vue du ciel ». Les 135 questions arrivent « à valider ».
+
+Avec Cap NCHUG, la gestion du Défi se fait depuis l'Espace créateurs (bouton « Gérer le Défi CHU »), par le super-admin et les créateurs ; les questions sont dans le Google Sheets de l'annuaire.
+
+**Phase de test, puis ouverture :**
+- En phase de test (au départ), les questions « à valider » et « validées » sont jouées ; les « retirées » jamais. Les scores ne servent qu'à tester.
+- Validez, retirez, modifiez ou ajoutez les questions dans l'appli (filtres par statut, thème, recherche) ou directement dans l'onglet « Défi – Questions » (colonne Statut : à valider / validée / retirée ; pris en compte en 5 minutes).
+- « Ouvrir officiellement le Défi » : seules les questions validées sont jouées et le classement repart de zéro. On peut revenir en phase de test.
+
+**Règles :** les mêmes 5 questions pour tout le CHU chaque jour ; seule la 1re réponse de chaque téléphone compte (empreinte gardée quelques heures, jamais reliée à une personne) ; un service est classé à partir de 30 réponses dans la semaine ; podium de la semaine, de la semaine dernière et classement général. Seuls des totaux par service et par semaine sont gardés ; la tâche de nuit les recopie dans « Défi – Scores ».
+
+**Vue du ciel (Parcours) :** dans la gestion, touchez un bâtiment, une entrée (N°) ou un parking pour changer son code, sa couleur (ou « sans couleur »), le bâtiment desservi, sa taille ; faites-le glisser pour le déplacer ; « + Entrée (N°) » pour ajouter un numéro de la rue Caraïbes. Le Parcours (vue du ciel → rue → ascenseur → arrivée) utilise les questions de type « ascenseur ». Une mission dont le bâtiment n'a pas d'entrée connue (ex. B40) passe directement à l'ascenseur.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

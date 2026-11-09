@@ -6,7 +6,7 @@
   'use strict';
   var A, h, Api;
   var CLE_SERVICE = 'rea.service', CLE_LISTE = 'rea.services-liste', CLE_CAP = 'rea.cap-session';
-  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1 };
+  var GARDER = { 'rea.service': 1, 'rea.services-liste': 1, 'rea.cap-session': 1, 'rea.gps-averti': 1, 'rea.appareil': 1, 'rea.defi': 1 }; // le Défi CHU est commun : une seule réponse par téléphone, quel que soit le service
 
   function init() { A = window.ReaApp; h = A.h; Api = window.ReaApi; }
   function lire(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
@@ -180,7 +180,11 @@
     }
     zone.replaceChildren.apply(zone, [
       flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
-      montre || null, creer, services, createurs,
+      montre || null,
+      window.ReaDefiGestion ? h('section', { class: 'section defi-carte' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' })),
+        h('p', { class: 'section__note', text: 'Questions communes à tous les services : phase de test, validation, ajout de questions, vue du ciel du Parcours.' }),
+        h('button', { type: 'button', class: 'bouton', onclick: function () { window.ReaDefiGestion.ouvrir({ jeton: sess.jeton, role: sess.libelle || '', retour: function (m) { annuaire(sess, m || null); } }); }, text: 'Gérer le Défi CHU' })) : null,
+      creer, services, createurs,
       h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { ecrire(CLE_CAP, null); ecranServices(); }, text: 'Quitter l\'espace créateurs' })].filter(Boolean));
   }
   function blocLien(s) {

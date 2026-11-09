@@ -325,3 +325,110 @@ details.detail-jauge summary::after { color: #1f6fa8; }
 :root[data-theme="dark"] .lien-discret { color: #9fd3ff; }
 .cap .form-carte .liste-simple, .cap .section .cap-admin-liste { box-shadow: none; background: none; margin: 0; }
 .cap .liste-simple li + li { border-top: 1px solid var(--trait); padding-top: 12px; margin-top: 4px; }
+
+/* ---------- Défi CHU (v2.1) ---------- */
+.defi-carte, .defi-classement > li, .defi-onglets, .defi-carte-ciel, .defi-rue-cadre, .defi-cabine, .defi-arrivee, .defi-q, .defi-filtres, .defi-editeur__panneau, details.defi-ajout {
+  --titre-local: var(--titre); --doux-local: var(--texte-doux);
+  color: var(--texte); background: var(--surface); border-radius: var(--r-carte); box-shadow: var(--clay); border: 0;
+}
+.defi-carte { padding: 18px; background: linear-gradient(160deg, #fff6d6, var(--surface) 70%); }
+.defi-carte--fait { background: linear-gradient(160deg, #e9f9d9, var(--surface) 70%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .defi-carte { background: linear-gradient(160deg, #4a3d14, var(--surface) 70%); } :root:not([data-theme="light"]) .defi-carte--fait { background: linear-gradient(160deg, #1f4a3a, var(--surface) 70%); } }
+:root[data-theme="dark"] .defi-carte { background: linear-gradient(160deg, #4a3d14, var(--surface) 70%); }
+.quiz-theme--defi { width: 100%; margin: 4px 0 14px; min-height: 96px; --t: 0deg !important; background: linear-gradient(135deg, #ffb700, #ff7a59) !important; color: #3a2400 !important; --titre-local: #3a2400; }
+.defi-test { background: #fff3c4; color: #5b4100; border-radius: 18px; padding: 10px 14px; font-weight: 600; box-shadow: var(--clay-petit); margin-bottom: 12px; }
+.defi-etape { font-weight: 800; color: var(--titre); margin: 14px 0 6px; }
+.quiz-choix__btn--choisi { border-color: var(--ciel-2); background: #e6f4fc; }
+.defi-vf { grid-template-columns: 1fr 1fr; }
+.defi-asc + .bouton { margin-top: 14px; width: 100%; }
+/* Panneau d'ascenseur */
+.defi-panneau { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 280px; margin: 0 auto; }
+.defi-bouton-niv { min-height: 64px; border-radius: 50%; aspect-ratio: 1; width: 72px; justify-self: center; display: grid; place-content: center; gap: 0; border: 3px solid #9aa6b8; background: radial-gradient(circle at 35% 30%, #fff, #d9dee6); color: #223b80; box-shadow: 0 5px 0 #8b95a7; font-family: var(--condense); }
+.defi-bouton-niv b { font-size: 1.7rem; line-height: 1; }
+.defi-bouton-niv small { font-size: .62rem; font-weight: 700; line-height: 1; }
+.defi-bouton-niv--choisi { border-color: var(--soleil-fonce); box-shadow: 0 0 0 4px var(--soleil), 0 5px 0 #8b95a7; }
+.defi-bouton-niv--ok { background: radial-gradient(circle at 35% 30%, #fff, #b8f08f); border-color: #46a302; }
+.defi-bouton-niv--ko { background: radial-gradient(circle at 35% 30%, #fff, #ffc2bb); border-color: #e03131; animation: defi-secoue .35s; }
+@keyframes defi-secoue { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+/* Classement */
+.defi-onglets { display: grid; grid-template-columns: repeat(3, 1fr); padding: 5px; gap: 4px; border-radius: 20px; margin-bottom: 10px; }
+.defi-onglet { border: 0; background: transparent; color: var(--texte); border-radius: 15px; min-height: 42px; font-weight: 700; font-size: .92rem; }
+.defi-onglet--actif { background: var(--ciel-2); color: #fff; }
+.defi-podium { display: grid; grid-template-columns: 1fr 1.1fr 1fr; align-items: end; gap: 8px; margin: 14px 0 18px; }
+.defi-podium__place { display: grid; justify-items: center; text-align: center; gap: 2px; color: var(--sur-ciel); }
+.defi-podium__medaille { font-size: 2rem; }
+.defi-podium__nom { font-family: var(--condense); font-size: 1.05rem; line-height: 1.05; overflow-wrap: anywhere; }
+.defi-podium__pc { font-weight: 700; font-size: .9rem; }
+.defi-podium__socle { width: 100%; border-radius: 14px 14px 6px 6px; display: grid; place-items: center; font-family: var(--condense); font-weight: 800; font-size: 1.8rem; color: #fff; box-shadow: var(--clay-petit); }
+.defi-podium__place--1 .defi-podium__socle { height: 96px; background: linear-gradient(#ffd34d, #ffb700); color: #5b3b00; }
+.defi-podium__place--2 .defi-podium__socle { height: 70px; background: linear-gradient(#e4e9f1, #b9c3d3); color: #34405a; }
+.defi-podium__place--3 .defi-podium__socle { height: 54px; background: linear-gradient(#f3b98a, #d8874a); color: #4a2400; }
+.defi-podium__place--vous .defi-podium__nom::after { content: " (vous)"; font-weight: 600; }
+.defi-classement { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.defi-ligne { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 4px 10px; padding: 12px 14px; }
+.defi-ligne__rang { font-family: var(--condense); font-weight: 800; font-size: 1.6rem; color: var(--titre); text-align: center; }
+.defi-ligne__nom, .defi-ligne__pc { display: grid; }
+.defi-ligne__nom small, .defi-ligne__pc small { color: var(--texte-doux); font-size: .78rem; }
+.defi-ligne__pc { text-align: right; }
+.defi-ligne__pc b { font-family: var(--condense); font-size: 1.45rem; color: var(--titre); }
+.defi-barre { grid-column: 2 / -1; height: 8px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.defi-barre span { display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #58cc02, #13a3a0); }
+.defi-ligne--vous { box-shadow: 0 0 0 4px var(--soleil), var(--clay); }
+.defi-ligne--attente { opacity: .72; }
+.defi-ligne--attente .defi-barre span { background: #9aa6b8; }
+/* Parcours */
+.defi-mission { display: grid; gap: 2px; background: var(--soleil); color: #223b80; border-radius: 22px; padding: 12px 16px 14px; box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .12), 0 8px 16px rgba(10, 30, 90, .2); margin-bottom: 12px; }
+.defi-mission b { font-family: var(--condense); font-weight: 800; font-size: 1.5rem; line-height: 1.05; }
+.defi-mission span { font-weight: 600; }
+.defi-carte-ciel { overflow: hidden; padding: 0; line-height: 0; }
+.defi-site { width: 100%; height: auto; display: block; font-family: var(--condense); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.defi-bat { cursor: pointer; }
+.defi-bat:focus { outline: none; }
+.defi-bat:focus-visible .defi-bat__fond, .defi-bat:hover .defi-bat__fond { stroke: #223b80; stroke-width: 3; }
+.defi-bat--ok .defi-bat__fond { stroke: #46a302; stroke-width: 6; }
+.defi-bat--ko { animation: defi-secoue .35s; }
+.defi-bat--ko .defi-bat__fond { stroke: #e03131; stroke-width: 5; }
+.defi-aide { color: var(--sur-ciel-doux); margin: 10px 4px; min-height: 1.4em; }
+.defi-aide--ko { color: #fff; background: rgba(224, 49, 49, .85); border-radius: 14px; padding: 8px 12px; animation: defi-secoue .35s; }
+.defi-puces { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+.defi-puce { text-align: center; border-radius: 16px; padding: 8px 2px; font-weight: 700; font-size: .8rem; background: rgba(255, 255, 255, .16); color: var(--sur-ciel); }
+.defi-puce--on { background: var(--soleil); color: #223b80; }
+.defi-puce--fait { background: rgba(88, 204, 2, .35); }
+.defi-rue-cadre { padding: 10px 0; }
+.defi-rue__depart { margin: 0; padding: 4px 16px; font-weight: 700; color: var(--texte-doux); font-size: .85rem; }
+.defi-rue { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 16px; scroll-snap-type: x mandatory; background: linear-gradient(180deg, transparent 72%, #bfe9fa 72%); }
+.defi-facade { flex: 0 0 120px; scroll-snap-align: start; min-height: 190px; border: 0; border-radius: 14px 14px 4px 4px; display: grid; grid-template-rows: auto 1fr auto; justify-items: center; padding: 8px 6px 10px;
+  background: linear-gradient(180deg, #f4f6fa 0 28%, var(--c) 28% 100%); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .15), 0 6px 12px rgba(10, 30, 90, .2); color: #223b80; }
+.defi-facade__cote { font-size: .72rem; font-weight: 700; color: #4a5568; }
+.defi-facade__num { align-self: center; font-family: var(--condense); font-weight: 800; font-size: 2.6rem; background: #fff; color: #223b80; border-radius: 12px; padding: 0 12px; min-width: 64px; box-shadow: 0 3px 0 rgba(0, 0, 0, .15); }
+.defi-facade__bat { font-family: var(--condense); font-weight: 800; color: #fff; background: rgba(0, 0, 0, .28); border-radius: 8px; padding: 0 8px; }
+.defi-facade--ok { box-shadow: 0 0 0 5px #58cc02, 0 6px 12px rgba(10, 30, 90, .2); }
+.defi-facade--ko { animation: defi-secoue .35s; box-shadow: 0 0 0 5px #e03131; }
+.defi-cabine { padding: 18px; display: grid; gap: 14px; background: linear-gradient(180deg, #eef1f5, #d5dbe3); color: #223b80; }
+.defi-cabine__ecran { justify-self: center; background: #1b2230; color: #ff6b3d; font-family: var(--condense); font-weight: 800; font-size: 2rem; padding: 4px 18px; border-radius: 10px; letter-spacing: .04em; }
+.defi-arrivee { padding: 18px; display: grid; gap: 12px; }
+.defi-arrivee__panneau { display: grid; margin: 0; border-radius: 14px; overflow: hidden; box-shadow: var(--clay-petit); }
+.defi-arrivee__panneau span { background: #d71920; color: #fff; font-weight: 700; padding: 6px 14px; }
+.defi-arrivee__panneau b { background: #fff; color: #223b80; font-family: var(--condense); font-size: 1.6rem; padding: 10px 14px; }
+/* Gestion */
+.defi-filtres { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; margin-bottom: 10px; }
+.defi-filtres input { grid-column: 1 / -1; }
+.defi-questions { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 12px; }
+.defi-q { padding: 14px 16px; display: grid; gap: 6px; border-left: 8px solid #ffb700; }
+.defi-q--ok { border-left-color: #58cc02; } .defi-q--off { border-left-color: #9aa6b8; opacity: .8; }
+.defi-q__tete { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: .85rem; color: var(--texte-doux); }
+.defi-q__tete b { color: var(--titre); }
+.defi-q__texte { font-weight: 700; color: var(--titre); margin: 0; }
+.defi-q__choix { margin: 0; padding-left: 22px; }
+.defi-q__bonne { font-weight: 800; color: #2c8a00; }
+.defi-q .form-carte { box-shadow: none; padding: 0; }
+details.defi-ajout { padding: 12px 16px; margin: 12px 0; }
+details.defi-ajout > summary { font-weight: 800; color: var(--titre); cursor: pointer; }
+.defi-editeur__carte { margin-top: 8px; }
+.defi-editeur__carte .defi-site [data-type] { cursor: grab; }
+.defi-choisi rect { stroke: #ff7a00 !important; stroke-width: 4 !important; stroke-dasharray: 6 4; }
+.defi-editeur__panneau { padding: 14px 16px; margin: 10px 0; display: grid; gap: 8px; }
+.defi-editeur__panneau h3 { margin: 0; color: var(--titre); font-family: var(--condense); font-size: 1.4rem; }
+.defi-couleur { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.defi-couleur input[type=color] { width: 56px; height: 40px; padding: 2px; border-radius: 10px; }
+.case { display: flex; gap: 8px; align-items: center; font-weight: 600; }

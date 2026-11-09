@@ -9,10 +9,11 @@
   var DEMO = MULTI ? !cfg.CAP_URL : !cfg.API_URL;
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
-  var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1 };
+  var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1,
+    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1 }; // gestion du Défi CHU : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
-    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1 };
+    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_gestion: 1 };
   var ATTENTES = [1200, 2500, 5000]; // nouveaux essais en cas d'affluence
 
   function ErreurApi(code) { this.code = code; this.message = code; }
@@ -109,6 +110,7 @@
     return new Promise(function (ok, ko) {
       setTimeout(function () {
         try {
+          if (/^defi_/.test(action)) return ok(demoDefi(action, d));
           if (ACTIONS_ANNUAIRE[action]) return ok(demoAnnuaire(action, d));
           if (action === 'codes_etat' || action === 'codes_changer') return ok(demoCodes(action, d));
         } catch (e) { return ko(e); }
@@ -259,6 +261,85 @@
       { id: 'QZclaude01', theme: 'plan', type: 'qcm', texte: 'Combien de lits de réanimation compte le nouveau service (hors lits gelés) ?', choix: ['29', '34', '38', '45'], bonne: '0', explication: 'Bougainvillier 9 + Hibiscus 8 + Atoumo 4 + Flamboyant 8.', lies: [], statut: 'brouillon', auteur: 'Claude (à relire)', modifiee: '2026-11-07' }
     ];
     return DQ;
+  }
+  /* Démonstration du Défi CHU : site et questions imaginaires (le vrai plan n'est jamais sur GitHub) */
+  function demoDefiBase() {
+    return demoLire('defi', {
+      mode: 'test', debut: '',
+      site: { batiments: [{ code: 'B1', nom: 'Accueil', couleur: '#2f3f9e', x: 210, y: 330, l: 80, h: 44 }, { code: 'B2', nom: 'Soins', couleur: '#e2302f', x: 214, y: 220, l: 110, h: 90 },
+        { code: 'B3', nom: 'Plateau', couleur: '#ffffff', x: 30, y: 150, l: 128, h: 130 }, { code: 'B4', nom: 'Enfants', couleur: '#f7c600', x: 44, y: 296, l: 100, h: 70 }, { code: 'B5', nom: 'Logistique', couleur: '', x: 214, y: 80, l: 110, h: 110 }],
+        entrees: [{ code: '2', batiment: 'B1', x: 192, y: 352 }, { code: '5', batiment: 'B2', x: 206, y: 262 }, { code: '8', batiment: 'B4', x: 160, y: 318 }, { code: '11', batiment: 'B3', x: 168, y: 214 }, { code: '14', batiment: 'B5', x: 206, y: 130 }],
+        parkings: [{ code: 'PP', nom: 'Parking personnel', x: 100, y: 6, l: 160, h: 40 }, { code: 'PV', nom: 'Parking visiteurs', x: 90, y: 400, l: 190, h: 50 }] },
+      questions: [
+        { id: 'X01', theme: 'divers', type: 'qcm', texte: 'Exemple : combien de jours compte une semaine ?', choix: ['5', '6', '7', '8'], bonne: 2, explication: 'Question d\'exemple : les vraies questions sont gérées par les créateurs.', source: 'Démo', statut: 'validée' },
+        { id: 'X02', theme: 'rue', type: 'qcm', texte: 'Dans l\'hôpital démo, à quel N° se trouve l\'accueil ?', choix: ['N° 2', 'N° 5', 'N° 8', 'N° 14'], bonne: 0, explication: 'N° 2 : l\'accueil (B1), en bleu.', source: 'Démo', statut: 'validée' },
+        { id: 'X03', theme: 'divers', type: 'vf', texte: 'Le niveau 0 est celui de la rue.', bonne: 'vrai', explication: 'Le niveau 0 est le niveau de la rue intérieure.', source: 'Démo', statut: 'validée' },
+        { id: 'X04', theme: 'ascenseur', type: 'ascenseur', texte: 'Prenez l\'ascenseur : le service démo de soins.', bonne: { entree: '5', niveau: '2' }, explication: 'N° 5 (B2), niveau 2.', source: 'Démo', statut: 'validée' },
+        { id: 'X05', theme: 'ascenseur', type: 'ascenseur', texte: 'Prenez l\'ascenseur : le bloc démo.', bonne: { entree: 'B3', niveau: '1' }, explication: 'B3, niveau 1.', source: 'Démo', statut: 'à valider' },
+        { id: 'X06', theme: 'ascenseur', type: 'ascenseur', texte: 'Prenez l\'ascenseur : la pédiatrie démo.', bonne: { entree: '8', niveau: '3' }, explication: 'N° 8 (B4), niveau 3.', source: 'Démo', statut: 'à valider' },
+        { id: 'X07', theme: 'divers', type: 'qcm', texte: 'Exemple : de quelle couleur est l\'accueil démo ?', choix: ['Rouge', 'Bleu', 'Jaune', 'Vert'], bonne: 1, explication: 'Bleu, comme son bâtiment B1.', source: 'Démo', statut: 'à valider' },
+        { id: 'X08', theme: 'divers', type: 'vf', texte: 'Au Défi CHU, le classement se fait au nombre de bonnes réponses.', bonne: 'faux', explication: 'Au % de bonnes réponses : les petits services ont autant de chances que les grands.', source: 'Démo', statut: 'validée' }],
+      scores: {}, vus: {}
+    });
+  }
+  function demoDefi(action, d) {
+    var B = demoDefiBase(), aujourd = new Date().toISOString().slice(0, 10);
+    function sauver() { demoEcrire('defi', B); }
+    function valide(q) { return q.texte && (q.type !== 'qcm' || (q.choix.length >= 2 && q.bonne >= 0 && q.bonne < q.choix.length)) && (q.type !== 'ascenseur' || (q.bonne.entree && q.bonne.niveau !== '')); }
+    function etat() { return { ok: true, mode: B.mode, debut: B.debut, questions: B.questions.map(function (q) { return Object.assign({ valide: !!valide(q), par: 'Démo', modifie: '' }, q); }), site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'], lienSheets: '' }; }
+    function pool() { return B.questions.filter(function (q) { return valide(q) && (q.statut === 'validée' || (B.mode === 'test' && q.statut === 'à valider')); }); }
+    function lib(e) { return /^B/.test(e) ? e : 'N° ' + e; }
+    function jourQ() {
+      var p = pool().slice(0, 5);
+      return p.map(function (q) { var x = { id: q.id, type: q.type, theme: q.theme, texte: q.texte }; if (q.type === 'qcm') x.choix = q.choix;
+        if (q.type === 'ascenseur') { x.entrees = ['2', '5', '8', 'B3'].concat(q.bonne.entree).filter(function (v, i, t) { return t.indexOf(v) === i; }).slice(-4).map(function (e) { return { code: e, libelle: lib(e) }; }); x.niveaux = ['-1', '0', '1', '2', '3', '4']; }
+        return x; });
+    }
+    var gestion = /^cap\./.test(d.jeton || '') || /^demo\.admin/.test(d.jeton || '');
+    if (/^defi_(gestion|mode|question|statut|site|importer)$/.test(action) && !gestion) throw new ErreurApi('non_autorise');
+    if (!/^(cap|demo)\./.test(d.jeton || '')) throw new ErreurApi('session_invalide');
+    switch (action) {
+      case 'defi_jour': return { ok: true, date: aujourd, mode: B.mode, questions: jourQ(), seuil: 30 };
+      case 'defi_repondre': {
+        var x = d.donnees || {}, q = B.questions.filter(function (y) { return y.id === x.id; })[0]; if (!q) throw new ErreurApi('defi_perime');
+        var bon = q.type === 'qcm' ? Number(x.reponse) === q.bonne : q.type === 'vf' ? x.reponse === q.bonne : x.reponse && x.reponse.entree === q.bonne.entree && x.reponse.niveau === q.bonne.niveau;
+        var cle = aujourd + '|' + q.id, compte = !B.vus[cle];
+        if (compte) { B.vus[cle] = 1; var sc = B.scores[B.mode] = B.scores[B.mode] || [0, 0]; sc[0]++; if (bon) sc[1]++; sauver(); }
+        return { ok: true, bon: !!bon, compte: compte, bonne: q.type === 'ascenseur' ? { entree: q.bonne.entree, libelle: lib(q.bonne.entree), niveau: q.bonne.niveau } : q.bonne, explication: q.explication };
+      }
+      case 'defi_classement': {
+        var moi = B.scores[B.mode] || [0, 0], nom = (SERVICE && SERVICE.nom) || 'Réanimation – USC';
+        var autres = B.mode === 'test' ? [['Cardiologie', 64, 51], ['Néonatalogie', 38, 33], ['Pédiatrie', 45, 31], ['Pharmacie', 12, 11]] : [];
+        function lignes(f) {
+          var l = autres.map(function (a) { return { nom: a[0], vous: false, reponses: Math.round(a[1] * f), pourcent: Math.round(1000 * a[2] / a[1]) / 10 }; })
+            .concat(moi[0] || f > 1 ? [{ nom: nom, vous: true, reponses: moi[0], pourcent: moi[0] ? Math.round(1000 * moi[1] / moi[0]) / 10 : 0 }] : []);
+          l.forEach(function (x) { x.classe = x.reponses >= 30; });
+          l.sort(function (a, b) { return (b.classe - a.classe) || (b.pourcent - a.pourcent) || (b.reponses - a.reponses); });
+          var r = 0; l.forEach(function (x) { x.rang = x.classe ? ++r : null; }); return l;
+        }
+        var lu = new Date(); lu.setDate(lu.getDate() - (lu.getDay() + 6) % 7); var luIso = lu.toISOString().slice(0, 10), av = new Date(lu); av.setDate(av.getDate() - 7);
+        return { ok: true, mode: B.mode, seuil: 30, semaine: { lundi: luIso, lignes: lignes(1) }, precedente: { lundi: av.toISOString().slice(0, 10), lignes: lignes(0.9).filter(function (x) { return !x.vous; }) }, general: lignes(3), debut: B.debut };
+      }
+      case 'defi_parcours': return { ok: true, mode: B.mode, site: B.site, niveaux: ['-1', '0', '1', '2', '3', '4'],
+        missions: pool().filter(function (q) { return q.type === 'ascenseur'; }).map(function (q) { return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication }; }) };
+      case 'defi_gestion': return etat();
+      case 'defi_mode': if (d.mode === 'officiel' && B.mode !== 'officiel') { B.debut = aujourd; B.scores.officiel = [0, 0]; } B.mode = d.mode === 'officiel' ? 'officiel' : 'test'; sauver(); return etat();
+      case 'defi_statut': B.questions.forEach(function (q) { if ((d.ids || []).indexOf(q.id) >= 0) q.statut = d.statut; }); sauver(); return etat();
+      case 'defi_question': {
+        var n = Object.assign({}, d.donnees); if (!valide(n)) throw new ErreurApi('question_invalide');
+        if (d.id) B.questions = B.questions.map(function (q) { return q.id === d.id ? Object.assign(n, { id: d.id }) : q; });
+        else { n.id = 'X' + String(B.questions.length + 1).padStart(2, '0'); B.questions.push(n); }
+        sauver(); return etat();
+      }
+      case 'defi_site': B.site = d.site; sauver(); return etat();
+      case 'defi_importer': {
+        var aj = 0, ign = 0, ids = {}; B.questions.forEach(function (q) { ids[q.id] = 1; });
+        (d.donnees.questions || []).forEach(function (q) { if (ids[q.id] || !valide(q)) { ign++; return; } ids[q.id] = 1; B.questions.push(Object.assign({}, q, { statut: q.statut || 'à valider' })); aj++; });
+        var siteOk = !!(d.donnees.site && d.donnees.remplacerSite); if (siteOk) B.site = d.donnees.site; sauver();
+        var r = etat(); r.import = { ajoutees: aj, ignorees: ign, site: siteOk }; return r;
+      }
+    }
+    throw new ErreurApi('action_inconnue');
   }
   function demoQuiz(action, d, ok, ko) {
     if (!/^demo\./.test(d.jeton || '')) return ko(new ErreurApi('session_absente'));

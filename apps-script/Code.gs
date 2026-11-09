@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.0.0',
+  version: '2.1.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -83,6 +83,7 @@ function doPost(e) {
   try {
     var action = String(req.action || '');
     // Annuaire (Cap NCHUG) : routes communes, puis entrée dans le service demandé
+    if (ROUTES_DEFI_GESTION[action]) return json_(ROUTES_DEFI_GESTION[action](req)); // Défi CHU : gestion commune
     if (ROUTES_ANNUAIRE[action]) { if (!modeAnnuaire_()) return json_({ ok: false, erreur: 'action_inconnue' }); return json_(ROUTES_ANNUAIRE[action](req)); }
     if (action !== 'ping' && modeAnnuaire_()) entrerService_(req.service);
     var routes = {
@@ -130,7 +131,12 @@ function doPost(e) {
       nl_retirer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlRetirer_(req.id); },
       // Codes d'accès gérés dans l'appli par l'administrateur du service
       codes_etat: function () { exigerAdmin_(verifierJeton_(req.jeton)); return codesEtat_(); },
-      codes_changer: function () { return codesChanger_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.nom); }
+      codes_changer: function () { return codesChanger_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.nom); },
+      // Défi CHU (commun à tous les services)
+      defi_jour: function () { return defiJour_(verifierJeton_(req.jeton)); },
+      defi_repondre: function () { return defiRepondre_(verifierJeton_(req.jeton), req.donnees); },
+      defi_classement: function () { return defiClassement_(verifierJeton_(req.jeton)); },
+      defi_parcours: function () { return defiParcours_(verifierJeton_(req.jeton)); }
     };
     if (!routes[action]) return json_({ ok: false, erreur: 'action_inconnue' });
     return json_(routes[action]());
@@ -663,11 +669,12 @@ function visitePresence_(id, present) {
 }
 
 /** Données personnelles des visites (prénom, initiale, fonction) effacées à J+30. Lancée chaque nuit. */
-function purgerVisites() { // tâche quotidienne ; en mode annuaire, pour chaque service
-  if (!modeAnnuaire_()) return purgerVisitesService_();
+function purgerVisites() { // tâche quotidienne ; en mode annuaire, pour chaque service ; puis les totaux du Défi CHU
+  var defi; try { defi = defiArchiver_(); } catch (e) { defi = 'Défi : ' + e.message; }
+  if (!modeAnnuaire_()) return purgerVisitesService_() + '\n' + defi;
   var r = [];
   lireServices_().forEach(function (sv) { if (!sv.actif) return; try { entrerService_(sv.id); r.push(sv.nom + ' : ' + purgerVisitesService_()); } catch (e) { r.push(sv.nom + ' : ' + e.message); } });
-  sortirService_(); return r.join('\n') || 'Aucun service.';
+  sortirService_(); r.push(defi); return r.join('\n');
 }
 function purgerVisitesService_() {
   var ss = classeur_(), j = lireParametres_(ss)['Date J'];
@@ -1455,6 +1462,7 @@ function installer() {
 
   var ss = classeur_();
   installerBase_(ss);
+  defiOnglets_(ss); // Défi CHU : le service seul garde ses questions dans sa base (rejoindra l'annuaire plus tard)
   installerPurgeQuotidienne_();
   if (!props.getProperty('CODE_SERVICE') || !props.getProperty('CODE_ADMIN')) {
     alerte_('Installation terminée.\n\nÉtape suivante : définissez le code SERVICE puis le code ADMINISTRATEUR (menu Réa – Administration).');
@@ -1592,7 +1600,7 @@ function genererCode_(n) {
    Mode « annuaire » (Cap NCHUG) : le Google Sheets lié est l'annuaire des services ; chaque appel indique son
    service, et le moteur travaille alors dans le Google Sheets de ce service, avec ses propres réglages. */
 var CTX_SERVICE = null, CLASSEUR_MEMO = null, MEMO_PROPS = {};
-var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1 };
+var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1 };
 function cleProp_(k) { return CTX_SERVICE && !CLES_GLOBALES[k] ? 's:' + CTX_SERVICE.id + ':' + k : k; }
 /* Réglages du script, rangés par service, gardés en mémoire (cache) pour ménager le quota quotidien de lectures */
 var PROPS_ = {
@@ -1840,6 +1848,7 @@ function installerAnnuaire() {
   if (!p.getProperty('VERSION_JETONS')) p.setProperty('VERSION_JETONS', '1');
   p.setProperty('CLASSEUR_ID', ss.getId()); p.setProperty('MODE', 'annuaire');
   creerOnglet_(ss, ANNUAIRE.onglet, ANNUAIRE.entetes, []);
+  defiOnglets_(ss);
   ss.getSheetByName(ANNUAIRE.onglet).protect().setDescription('Géré par l\'appli Cap NCHUG').setWarningOnly(true);
   var f = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1'); if (f && ss.getSheets().length > 1) ss.deleteSheet(f);
   installerPurgeQuotidienne_();
@@ -1853,3 +1862,318 @@ function menuCodeSuper() {
   alerte_('Code SUPER-ADMINISTRATEUR enregistré. Notez-le : il ne pourra pas être relu.');
 }
 function menuInvaliderAnnuaire() { props_().setProperty('VERSION_JETONS', String(versionJetons_() + 1)); alerte_('Le super-admin et les créateurs devront ressaisir leur code.'); }
+
+// ============================================================================
+// Défi CHU (moteur 2.1) : questions communes à tous les services, défi du jour, classement en % de bonnes
+// réponses par service, jeu « Parcours » (vue du ciel, rue Caraïbes, ascenseur, arrivée).
+// Tout est rangé dans le Google Sheets de l'annuaire (ou dans la base du service quand il est seul) :
+// rien sur GitHub. Aucun suivi individuel : seuls des totaux par service et par semaine sont gardés.
+// ============================================================================
+var DEFI = {
+  ongletQ: 'Défi – Questions', ongletSite: 'Défi – Site', ongletScores: 'Défi – Scores',
+  entetesQ: ['ID', 'Thème', 'Type', 'Question', 'Réponses (une par ligne)', 'Bonne réponse', 'Explication', 'Entrée ou bâtiment', 'Niveau', 'Source', 'Statut', 'Par', 'Modifiée le'],
+  entetesSite: ['Type', 'Code', 'Nom', 'Couleur', 'Bâtiment', 'X', 'Y', 'Largeur', 'Hauteur'],
+  entetesScores: ['Semaine (lundi)', 'Service', 'Nom du service', 'Réponses', 'Bonnes réponses', '% de bonnes réponses', 'Mode'],
+  parJour: 5, seuil: 30, semainesGardees: 8, niveaux: ['-1', '0', '1', '2', '3', '4'],
+  statuts: { 'à valider': 1, 'validée': 1, 'retirée': 1 }, types: { qcm: 1, vf: 1, ascenseur: 1 }, typesSite: { 'bâtiment': 1, 'entrée': 1, 'parking': 1 }
+};
+var ROUTES_DEFI_GESTION = {
+  defi_gestion: function (req) { gestionDefi_(req); return defiGestionEtat_(); },
+  defi_mode: function (req) { gestionDefi_(req); return defiMode_(req.mode); },
+  defi_question: function (req) { return defiQuestion_(gestionDefi_(req), req.id, req.donnees || {}); },
+  defi_statut: function (req) { gestionDefi_(req); return defiStatut_(req.ids, req.statut); },
+  defi_site: function (req) { gestionDefi_(req); return defiSiteEnregistrer_(req.site); },
+  defi_importer: function (req) { return defiImporter_(gestionDefi_(req), req.donnees || {}); }
+};
+/* Qui gère le Défi : le super-admin et les créateurs (Cap NCHUG) ; l'administrateur quand le service est seul. */
+function gestionDefi_(req) {
+  if (modeAnnuaire_()) return verifierJetonAnnuaire_(req.jeton);
+  return exigerAdmin_(verifierJeton_(req.jeton));
+}
+function defiClasseur_() { return annuaireClasseur_(); }
+function defiOnglets_(ss) {
+  creerOnglet_(ss, DEFI.ongletQ, DEFI.entetesQ, []);
+  creerOnglet_(ss, DEFI.ongletSite, DEFI.entetesSite, []);
+  creerOnglet_(ss, DEFI.ongletScores, DEFI.entetesScores, []);
+}
+function defiOnglet_(nom) {
+  var ss = defiClasseur_(), sh = ss.getSheetByName(nom);
+  if (!sh) { defiOnglets_(ss); sh = ss.getSheetByName(nom); }
+  return sh;
+}
+function defiModeActuel_() { return PROPS_.getProperty('DEFI_MODE') === 'officiel' ? 'officiel' : 'test'; }
+function fnv_(s) { var x = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = (x * 16777619) >>> 0; } return x; }
+function aujourdhuiDefi_() { return formaterDate_(new Date()); }
+function lundi_(iso) { var d = new Date(iso + 'T12:00:00Z'), j = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - j); return d.toISOString().slice(0, 10); }
+function libelleEntree_(e) { e = String(e || ''); return /^B/i.test(e) ? e.toUpperCase() : 'N° ' + e; }
+
+/* ---------- Lecture des questions et du site (gardés en cache 5 min) ---------- */
+function defiViderCache_() { CacheService.getScriptCache().removeAll(['defi|q', 'defi|site']); }
+function lireDefiQuestions_() {
+  var c = CacheService.getScriptCache(), t = c.get('defi|q');
+  if (t) return JSON.parse(t);
+  var v = defiOnglet_(DEFI.ongletQ).getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i], id = String(r[0] || '').trim(); if (!id) continue;
+    var type = String(r[2] || '').trim().toLowerCase().replace('vrai/faux', 'vf');
+    var q = { id: id, theme: String(r[1] || '').trim(), type: type, texte: String(r[3] || '').trim(), explication: String(r[6] || '').trim(),
+      source: String(r[9] || '').trim(), statut: String(r[10] || '').trim().toLowerCase() || 'à valider', par: String(r[11] || ''), modifie: r[12] instanceof Date ? formaterDate_(r[12]) : String(r[12] || ''), ligne: i + 1 };
+    if (q.statut === 'validee') q.statut = 'validée'; if (q.statut === 'retiree') q.statut = 'retirée'; if (!DEFI.statuts[q.statut]) q.statut = 'à valider';
+    if (type === 'qcm') { q.choix = String(r[4] || '').split(/\n/).map(function (x) { return x.trim(); }).filter(String); q.bonne = Number(r[5]) - 1; }
+    else if (type === 'vf') q.bonne = /^v/i.test(String(r[5]).trim()) || r[5] === true ? 'vrai' : 'faux';
+    else if (type === 'ascenseur') q.bonne = { entree: String(r[7] || '').trim().replace(/^N°\s*/i, ''), niveau: String(r[8]).trim().replace(/^'/, '') };
+    q.valide = defiQuestionValide_(q);
+    l.push(q);
+  }
+  try { c.put('defi|q', JSON.stringify(l), 300); } catch (e) { /* trop gros : pas de cache */ }
+  return l;
+}
+function defiQuestionValide_(q) {
+  if (!q.texte || !DEFI.types[q.type]) return false;
+  if (q.type === 'qcm') return q.choix.length >= 2 && q.choix.length <= 6 && q.bonne >= 0 && q.bonne < q.choix.length;
+  if (q.type === 'ascenseur') return !!q.bonne.entree && DEFI.niveaux.indexOf(q.bonne.niveau) >= 0;
+  return true;
+}
+function lireDefiSite_() {
+  var c = CacheService.getScriptCache(), t = c.get('defi|site');
+  if (t) return JSON.parse(t);
+  var v = defiOnglet_(DEFI.ongletSite).getDataRange().getValues(), s = { batiments: [], entrees: [], parkings: [] };
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i], type = String(r[0] || '').trim().toLowerCase(), code = String(r[1] || '').trim().replace(/^N°\s*/i, '');
+    if (!code && type !== 'parking') continue;
+    var x = { code: code, nom: String(r[2] || '').trim(), couleur: couleurValide_(String(r[3] || '').trim()) || '', x: Number(r[5]) || 0, y: Number(r[6]) || 0 };
+    if (type === 'bâtiment' || type === 'batiment') { x.l = Number(r[7]) || 60; x.h = Number(r[8]) || 40; s.batiments.push(x); }
+    else if (type === 'entrée' || type === 'entree') { x.batiment = String(r[4] || '').trim().toUpperCase(); s.entrees.push(x); }
+    else if (type === 'parking') { x.l = Number(r[7]) || 120; x.h = Number(r[8]) || 40; s.parkings.push(x); }
+  }
+  try { c.put('defi|site', JSON.stringify(s), 300); } catch (e) { /* ignoré */ }
+  return s;
+}
+function defiPool_(mode) { // questions jouables : validées ; en phase de test, aussi celles à valider
+  return lireDefiQuestions_().filter(function (q) { return q.valide && (q.statut === 'validée' || (mode === 'test' && q.statut === 'à valider')); });
+}
+
+/* ---------- Défi du jour : les mêmes 5 questions pour tout le CHU ---------- */
+function defiTirage_(date, mode) {
+  var cle = 'defi|jour|' + date + '|' + mode, c = CacheService.getScriptCache(), t = c.get(cle);
+  if (t) return JSON.parse(t);
+  var pool = defiPool_(mode).slice().sort(function (a, b) { return fnv_(date + '|' + a.id) - fnv_(date + '|' + b.id); });
+  var pris = [], parTheme = {};
+  pool.forEach(function (q) { if (pris.length < DEFI.parJour && (parTheme[q.theme] || 0) < 2) { pris.push(q); parTheme[q.theme] = (parTheme[q.theme] || 0) + 1; } });
+  pool.forEach(function (q) { if (pris.length < DEFI.parJour && pris.indexOf(q) < 0) pris.push(q); });
+  var entrees = defiEntreesConnues_();
+  var r = pris.map(function (q) {
+    var x = { id: q.id, type: q.type, theme: q.theme, texte: q.texte };
+    if (q.type === 'qcm') x.choix = q.choix;
+    if (q.type === 'ascenseur') { // 4 entrées proposées (dont la bonne), toujours les mêmes ce jour-là
+      var autres = entrees.filter(function (e) { return e !== q.bonne.entree; }).sort(function (a, b) { return fnv_(date + q.id + a) - fnv_(date + q.id + b); }).slice(0, 3);
+      x.entrees = autres.concat([q.bonne.entree]).sort(function (a, b) { return fnv_(q.id + a) - fnv_(q.id + b); }).map(function (e) { return { code: e, libelle: libelleEntree_(e) }; });
+      x.niveaux = DEFI.niveaux;
+    }
+    return x;
+  });
+  try { c.put(cle, JSON.stringify(r), 21600); } catch (e) { /* ignoré */ }
+  return r;
+}
+function defiEntreesConnues_() {
+  var vus = {}, l = [];
+  function aj(e) { e = String(e || '').trim(); if (e && !vus[e]) { vus[e] = 1; l.push(e); } }
+  var s = lireDefiSite_(); s.entrees.forEach(function (e) { aj(e.code); }); s.batiments.forEach(function (b) { aj(b.code); });
+  lireDefiQuestions_().forEach(function (q) { if (q.type === 'ascenseur') aj(q.bonne.entree); });
+  return l;
+}
+function defiJour_(session) {
+  var mode = defiModeActuel_(), date = aujourdhuiDefi_();
+  return { ok: true, date: date, mode: mode, questions: defiTirage_(date, mode), seuil: DEFI.seuil };
+}
+function defiRepondre_(session, d) {
+  d = d || {};
+  var mode = defiModeActuel_(), date = aujourdhuiDefi_(), id = String(d.id || '');
+  if (!defiTirage_(date, mode).some(function (x) { return x.id === id; })) throw erreurApp_('defi_perime'); // la journée a changé
+  var q = lireDefiQuestions_().filter(function (x) { return x.id === id; })[0]; if (!q) throw erreurApp_('introuvable');
+  var rep = d.reponse, bon;
+  if (q.type === 'qcm') bon = Number(rep) === q.bonne;
+  else if (q.type === 'vf') bon = String(rep) === q.bonne;
+  else bon = !!rep && String(rep.entree) === q.bonne.entree && String(rep.niveau) === q.bonne.niveau;
+  // Seule la 1re réponse de ce téléphone à cette question compte (empreinte gardée quelques heures, jamais reliée à une personne)
+  var empr = 'defi|vu|' + fnv_(empreinteAppareil_(d.appareil) + '|' + date + '|' + id).toString(36) + fnv_(id + '|' + d.appareil).toString(36);
+  var c = CacheService.getScriptCache(), compte = !c.get(empr);
+  if (compte) {
+    c.put(empr, '1', 21600);
+    defiCompter_(session, mode, date, bon);
+  }
+  return { ok: true, bon: bon, compte: compte, bonne: q.type === 'ascenseur' ? { entree: q.bonne.entree, libelle: libelleEntree_(q.bonne.entree), niveau: q.bonne.niveau } : q.bonne, explication: q.explication };
+}
+function defiServiceCourant_() {
+  if (CTX_SERVICE) return { id: CTX_SERVICE.id, nom: CTX_SERVICE.nom };
+  return { id: 'service', nom: String(lireParametres_(classeur_())['Nom du service'] || 'Mon service') };
+}
+function defiCompter_(session, mode, date, bon) {
+  var sv = defiServiceCourant_(), p = PropertiesService.getScriptProperties();
+  var kS = 'DEFI_S|' + lundi_(date) + '|' + mode + '|' + sv.id, kC = 'DEFI_C|' + mode + '|' + sv.id;
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    function plus(t) { var a = String(t || '0,0').split(','); return (Number(a[0]) + 1) + ',' + (Number(a[1]) + (bon ? 1 : 0)); }
+    var o = {}; o[kS] = plus(p.getProperty(kS)); o[kC] = plus(p.getProperty(kC)); o['DEFI_N|' + sv.id] = sv.nom;
+    p.setProperties(o);
+  } finally { verrou.releaseLock(); }
+  CacheService.getScriptCache().remove('defi|classement|' + mode);
+}
+
+/* ---------- Classement : % de bonnes réponses par service, à partir de 30 réponses ---------- */
+function defiClassement_(session) {
+  var mode = defiModeActuel_(), c = CacheService.getScriptCache(), cle = 'defi|classement|' + mode, t = c.get(cle), base;
+  if (t) base = JSON.parse(t);
+  else {
+    var tout = PropertiesService.getScriptProperties().getProperties(), noms = {}, semaines = {}, general = {};
+    Object.keys(tout).forEach(function (k) { if (k.indexOf('DEFI_N|') === 0) noms[k.slice(7)] = tout[k]; });
+    Object.keys(tout).forEach(function (k) {
+      var a = k.split('|'), v = String(tout[k]).split(',');
+      if (a[0] === 'DEFI_S' && a[2] === mode) { (semaines[a[1]] = semaines[a[1]] || {})[a[3]] = [Number(v[0]), Number(v[1])]; }
+      if (a[0] === 'DEFI_C' && a[1] === mode) general[a[2]] = [Number(v[0]), Number(v[1])];
+    });
+    if (modeAnnuaire_()) lireServices_().forEach(function (s) { noms[s.id] = s.nom; });
+    base = { noms: noms, semaines: semaines, general: general };
+    try { c.put(cle, JSON.stringify(base), 120); } catch (e) { /* ignoré */ }
+  }
+  var moi = defiServiceCourant_().id, lu = lundi_(aujourdhuiDefi_()), avant = decalerJours_(lu, -7);
+  function tableau(o) {
+    var l = Object.keys(o || {}).map(function (id) { var r = o[id]; return { nom: base.noms[id] || id, vous: id === moi, reponses: r[0], pourcent: r[0] ? Math.round(1000 * r[1] / r[0]) / 10 : 0, classe: r[0] >= DEFI.seuil }; });
+    l.sort(function (a, b) { return (b.classe - a.classe) || (b.pourcent - a.pourcent) || (b.reponses - a.reponses); });
+    var rang = 0; l.forEach(function (x) { x.rang = x.classe ? ++rang : null; });
+    return l;
+  }
+  return { ok: true, mode: mode, seuil: DEFI.seuil, semaine: { lundi: lu, lignes: tableau(base.semaines[lu]) },
+    precedente: { lundi: avant, lignes: tableau(base.semaines[avant]) }, general: tableau(base.general), debut: PROPS_.getProperty('DEFI_DEBUT') || '' };
+}
+
+/* ---------- Parcours : missions (questions « ascenseur ») et dessin du site ---------- */
+function defiParcours_(session) {
+  var mode = defiModeActuel_();
+  var missions = defiPool_(mode).filter(function (q) { return q.type === 'ascenseur'; }).map(function (q) {
+    return { id: q.id, destination: q.texte.replace(/^Prenez l'ascenseur\s*:\s*/i, '').replace(/\.$/, ''), entree: q.bonne.entree, niveau: q.bonne.niveau, explication: q.explication };
+  });
+  return { ok: true, mode: mode, site: lireDefiSite_(), missions: missions, niveaux: DEFI.niveaux };
+}
+
+/* ---------- Gestion (super-admin et créateurs) ---------- */
+function defiGestionEtat_() {
+  return { ok: true, mode: defiModeActuel_(), debut: PROPS_.getProperty('DEFI_DEBUT') || '',
+    questions: lireDefiQuestions_().map(function (q) { var x = Object.assign({}, q); delete x.ligne; return x; }),
+    site: lireDefiSite_(), niveaux: DEFI.niveaux,
+    lienSheets: modeAnnuaire_() ? 'https://docs.google.com/spreadsheets/d/' + defiClasseur_().getId() : '' };
+}
+function defiMode_(mode) {
+  if (mode !== 'test' && mode !== 'officiel') throw erreurApp_('requete_invalide');
+  var avant = defiModeActuel_();
+  PROPS_.setProperty('DEFI_MODE', mode);
+  if (mode === 'officiel' && avant !== 'officiel') { // ouverture officielle : le classement repart de zéro
+    var p = PropertiesService.getScriptProperties(), tout = p.getProperties();
+    Object.keys(tout).forEach(function (k) { if (/^DEFI_[SC]\|/.test(k) && k.indexOf('|officiel|') > 0) p.deleteProperty(k); });
+    PROPS_.setProperty('DEFI_DEBUT', aujourdhuiDefi_());
+  }
+  CacheService.getScriptCache().removeAll(['defi|classement|test', 'defi|classement|officiel']);
+  return defiGestionEtat_();
+}
+function ligneQuestion_(q, par) {
+  return [q.id, q.theme, q.type, q.texte, q.type === 'qcm' ? q.choix.join('\n') : '',
+    q.type === 'qcm' ? q.bonne + 1 : q.type === 'vf' ? q.bonne : '', q.explication,
+    q.type === 'ascenseur' ? q.bonne.entree : '', q.type === 'ascenseur' ? Number(q.bonne.niveau) : '', q.source || '', q.statut, par || '', new Date()];
+}
+function nettoyerQuestion_(d) {
+  var q = { theme: nettoyerTexte_(d.theme, 30) || 'divers', type: String(d.type || ''), texte: nettoyerTexte_(d.texte, 300), explication: nettoyerTexte_(d.explication, 500),
+    source: nettoyerTexte_(d.source, 100), statut: DEFI.statuts[d.statut] ? d.statut : 'à valider' };
+  if (q.type === 'qcm') { q.choix = (d.choix || []).map(function (x) { return nettoyerTexte_(x, 120); }).filter(String); q.bonne = Number(d.bonne); }
+  else if (q.type === 'vf') q.bonne = d.bonne === 'vrai' || d.bonne === true ? 'vrai' : 'faux';
+  else if (q.type === 'ascenseur') q.bonne = { entree: nettoyerTexte_((d.bonne || {}).entree, 10).replace(/^N°\s*/i, '').toUpperCase(), niveau: String((d.bonne || {}).niveau || '') };
+  if (!defiQuestionValide_(q)) throw erreurApp_('question_invalide');
+  return q;
+}
+function defiQuestion_(session, id, d) {
+  var q = nettoyerQuestion_(d), sh = defiOnglet_(DEFI.ongletQ);
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    defiViderCache_();
+    var l = lireDefiQuestions_();
+    if (id) { var x = l.filter(function (y) { return y.id === String(id); })[0]; if (!x) throw erreurApp_('introuvable'); q.id = x.id; sh.getRange(x.ligne, 1, 1, DEFI.entetesQ.length).setValues([ligneQuestion_(q, session.n)]); }
+    else {
+      var max = 0; l.forEach(function (y) { var m = /^D(\d+)$/.exec(y.id); if (m) max = Math.max(max, Number(m[1])); });
+      q.id = 'D' + ('00' + (max + 1)).slice(-3); sh.appendRow(ligneQuestion_(q, session.n));
+    }
+  } finally { defiViderCache_(); verrou.releaseLock(); }
+  return defiGestionEtat_();
+}
+function defiStatut_(ids, statut) {
+  if (!DEFI.statuts[statut] || !Array.isArray(ids) || !ids.length || ids.length > 500) throw erreurApp_('requete_invalide');
+  var sh = defiOnglet_(DEFI.ongletQ), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    defiViderCache_();
+    var l = lireDefiQuestions_(), vus = {}; ids.forEach(function (i) { vus[String(i)] = 1; });
+    l.forEach(function (q) { if (vus[q.id]) { sh.getRange(q.ligne, 11).setValue(statut); sh.getRange(q.ligne, 13).setValue(new Date()); } });
+  } finally { defiViderCache_(); verrou.releaseLock(); }
+  return defiGestionEtat_();
+}
+function nettoyerSite_(s) {
+  s = s || {}; var lignes = [], codes = {};
+  function n(v, a, b) { v = Math.round(Number(v)); return isNaN(v) ? a : Math.max(a, Math.min(b, v)); }
+  (s.batiments || []).slice(0, 40).forEach(function (b) {
+    var code = nettoyerTexte_(b.code, 10).toUpperCase(); if (!code || codes[code]) return; codes[code] = 1;
+    if (couleurValide_(b.couleur) === null) throw erreurApp_('requete_invalide');
+    lignes.push(['bâtiment', code, nettoyerTexte_(b.nom, 60), b.couleur || '', '', n(b.x, 0, 358), n(b.y, 0, 470), n(b.l, 20, 300), n(b.h, 20, 300)]);
+  });
+  (s.entrees || []).slice(0, 80).forEach(function (e) {
+    var code = nettoyerTexte_(e.code, 10).replace(/^N°\s*/i, ''); if (!code) return;
+    if (couleurValide_(e.couleur) === null) throw erreurApp_('requete_invalide');
+    lignes.push(['entrée', code, nettoyerTexte_(e.nom, 60), e.couleur || '', nettoyerTexte_(e.batiment, 10).toUpperCase(), n(e.x, 0, 358), n(e.y, 0, 470), '', '']);
+  });
+  (s.parkings || []).slice(0, 6).forEach(function (pk) {
+    lignes.push(['parking', nettoyerTexte_(pk.code, 10) || 'P', nettoyerTexte_(pk.nom, 40), couleurValide_(pk.couleur) || '', '', n(pk.x, 0, 358), n(pk.y, 0, 470), n(pk.l, 20, 358), n(pk.h, 10, 200)]);
+  });
+  return lignes;
+}
+function defiSiteEnregistrer_(site) {
+  var lignes = nettoyerSite_(site), sh = defiOnglet_(DEFI.ongletSite);
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, DEFI.entetesSite.length).clearContent();
+    if (lignes.length) sh.getRange(2, 1, lignes.length, DEFI.entetesSite.length).setValues(lignes);
+  } finally { defiViderCache_(); verrou.releaseLock(); }
+  return defiGestionEtat_();
+}
+/* Import d'un fichier de questions (banque fournie hors GitHub) : les questions déjà présentes (même ID) ne sont pas écrasées. */
+function defiImporter_(session, d) {
+  var sh = defiOnglet_(DEFI.ongletQ), ajout = 0, ignore = 0, lignes = [];
+  var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    defiViderCache_();
+    var deja = {}; lireDefiQuestions_().forEach(function (q) { deja[q.id] = 1; });
+    (Array.isArray(d.questions) ? d.questions : []).slice(0, 1000).forEach(function (x) {
+      var id = nettoyerTexte_(x.id, 12);
+      if (!/^[A-Za-z0-9_-]{1,12}$/.test(id) || deja[id]) { ignore++; return; }
+      try { var q = nettoyerQuestion_(x); q.id = id; deja[id] = 1; lignes.push(ligneQuestion_(q, session.n)); ajout++; } catch (e) { ignore++; }
+    });
+    if (lignes.length) sh.getRange(sh.getLastRow() + 1, 1, lignes.length, DEFI.entetesQ.length).setValues(lignes);
+  } finally { defiViderCache_(); verrou.releaseLock(); }
+  var siteRemplace = false;
+  if (d.site && (d.site.batiments || []).length) { var vide = !lireDefiSite_().batiments.length; if (vide || d.remplacerSite) { defiSiteEnregistrer_(d.site); siteRemplace = true; } }
+  var r = defiGestionEtat_(); r.import = { ajoutees: ajout, ignorees: ignore, site: siteRemplace }; return r;
+}
+
+/* ---------- Tâche quotidienne : copie des totaux dans l'onglet « Défi – Scores », ménage des vieilles semaines ---------- */
+function defiArchiver_() {
+  var p = PropertiesService.getScriptProperties(), tout = p.getProperties(), noms = {}, sh = defiOnglet_(DEFI.ongletScores);
+  Object.keys(tout).forEach(function (k) { if (k.indexOf('DEFI_N|') === 0) noms[k.slice(7)] = tout[k]; });
+  var v = sh.getDataRange().getValues(), lignes = {}, ordre = [];
+  for (var i = 1; i < v.length; i++) { if (!v[i][0]) continue; var cle = texteDate_(v[i][0]) + '|' + v[i][6] + '|' + v[i][1]; lignes[cle] = v[i].slice(0, 7); lignes[cle][0] = texteDate_(v[i][0]); ordre.push(cle); }
+  var limite = decalerJours_(lundi_(aujourdhuiDefi_()), -7 * DEFI.semainesGardees), n = 0;
+  Object.keys(tout).forEach(function (k) {
+    var a = k.split('|'); if (a[0] !== 'DEFI_S') return;
+    var r = String(tout[k]).split(','), rep = Number(r[0]), bon = Number(r[1]), cle = a[1] + '|' + a[2] + '|' + a[3];
+    if (!lignes[cle]) ordre.push(cle);
+    lignes[cle] = [a[1], a[3], noms[a[3]] || a[3], rep, bon, rep ? Math.round(1000 * bon / rep) / 10 : 0, a[2]];
+    if (a[1] < limite) { p.deleteProperty(k); n++; }
+  });
+  var l = ordre.map(function (k) { return lignes[k]; }).sort(function (a, b) { return a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : (b[5] - a[5]); });
+  if (l.length) { if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 7).clearContent(); sh.getRange(2, 1, l.length, 7).setValues(l); }
+  return 'Défi : ' + l.length + ' ligne(s) de scores, ' + n + ' vieille(s) semaine(s) rangée(s).';
+}

@@ -15,6 +15,8 @@ docs/            Application (hébergée par GitHub Pages)
   css/theme.css  Design « Lagon » (v1.8) : ciel, cartes en relief, mode sombre
   js/fun.js      Confettis, vibrations, série 🔥
   js/cap.js      Cap NCHUG : choix du service, espace créateurs, codes gérés dans l'appli
+  js/defi.js     Défi CHU : défi du jour, classement des services, jeu Parcours
+  js/defi-gestion.js  Défi CHU : phase de test, validation des questions, éditeur de la vue du ciel
   js/gps.js      Position GPS sur le plan (calculée sur le téléphone) + calage admin multi-points
   js/config.js   ← seul fichier à régler (URL du moteur)
   js/api.js      Échanges avec le moteur (et mode démonstration)
