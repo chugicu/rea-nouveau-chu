@@ -2,3 +2,4 @@
 plan-donnees.json
 plan-donnees.json.gz
 *.zip
+!docs/outils/plan-cap-nchug.zip
