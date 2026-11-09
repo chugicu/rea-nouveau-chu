@@ -276,3 +276,52 @@ details.detail-jauge summary::after { color: #1f6fa8; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gps-pastille--bon, :root:not([data-theme="light"]) .gps-pastille--moyen, :root:not([data-theme="light"]) .gps-pastille--mauvais { filter: brightness(.9); } }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gps-liste__ok .gps-liste__etat { color: #5fe39a; } }
 :root[data-theme="dark"] .gps-liste__ok .gps-liste__etat { color: #5fe39a; }
+
+/* ---------- v2.0 : Cap NCHUG (plusieurs services) ---------- */
+.cap-marque { margin: 4px 0 0; font-family: var(--condense); font-weight: 800; font-size: 1.15rem; letter-spacing: .06em; color: var(--titre); }
+.cap-choisi { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 6px 0 2px; }
+.cap-choisi span { font-family: var(--condense); font-weight: 800; font-size: 1.35rem; color: var(--titre); }
+.lien-discret { background: none; border: 0; padding: 4px 0; color: var(--lien, #1f6fa8); text-decoration: underline; font: inherit; font-size: .92rem; cursor: pointer; }
+.cap-services { display: grid; gap: 10px; margin-top: 8px; }
+.cap-filtre { width: 100%; min-height: 46px; border-radius: 14px; border: 2px solid rgba(34, 59, 128, .2); padding: 8px 14px; font: inherit; background: #fff; color: #1b2a4a; }
+.cap-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cap-service { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; padding: 12px 18px; border: 0; border-radius: 18px;
+  background: linear-gradient(135deg, #223b80, #1f6fa8); color: #fff; font: inherit; font-weight: 700; font-size: 1.08rem; text-align: left; cursor: pointer;
+  box-shadow: 0 5px 0 rgba(15, 30, 70, .35), 0 10px 20px rgba(15, 30, 70, .18); transition: transform .12s; }
+.cap-service:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(15, 30, 70, .35); }
+.cap-service span:last-child { font-size: 1.6rem; line-height: 1; opacity: .8; }
+.cap .form-carte h2, .cap .section h2 { font-family: var(--condense); font-size: 1.35rem; margin: 0 0 8px; }
+.cap .form-carte { display: grid; gap: 10px; margin-bottom: 16px; }
+.cap-code, .cap-cree, .cap-lien { --titre-local: var(--titre); --doux-local: var(--texte-doux); background: var(--surface); color: #1b2a4a; border-radius: var(--r-carte); padding: 16px; margin-bottom: 14px; display: grid; gap: 8px;
+  box-shadow: 0 6px 0 rgba(20, 40, 100, .12), 0 12px 28px rgba(20, 40, 100, .18); }
+.cap-cree .cap-code, .cap-cree .cap-lien { box-shadow: none; border: 2px solid rgba(34, 59, 128, .12); margin: 0; }
+.cap-code { border: 3px solid var(--soleil); }
+.cap-code p, .cap-cree p, .cap-lien p { margin: 0; }
+.cap-code__titre { font-weight: 700; color: #223b80; }
+.cap-code__valeur { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: .12em; color: #1b2a4a; word-break: break-all; }
+.cap-code__aide { font-size: .88rem; color: #a1261f; font-weight: 700; }
+.cap-cree h3 { margin: 0; font-family: var(--condense); font-size: 1.3rem; color: #223b80; }
+.cap-url { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85rem; word-break: break-all; background: #eef3fb; border-radius: 10px; padding: 8px 10px; }
+.cap-qr { width: 190px; max-width: 70%; margin: 4px auto 0; }
+.cap-qr svg { width: 100%; height: auto; display: block; }
+.cap-ligne { display: flex; flex-direction: column; gap: 2px; }
+.cap-admin-liste li, .cap .liste-simple li { display: grid; gap: 8px; }
+.cap-inactif { opacity: .62; }
+.cap .gps-boutons .bouton, .cap-code .bouton, .cap-lien .bouton { width: auto; min-height: 38px; padding: 6px 14px; font-size: .92rem; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cap-code, :root:not([data-theme="light"]) .cap-cree, :root:not([data-theme="light"]) .cap-lien { background: var(--surface); color: #eef3fb; }
+  :root:not([data-theme="light"]) .cap-code__valeur { color: #fff; }
+  :root:not([data-theme="light"]) .cap-code__titre, :root:not([data-theme="light"]) .cap-cree h3 { color: #ffd34d; }
+  :root:not([data-theme="light"]) .cap-url { background: rgba(255, 255, 255, .08); color: #eef3fb; }
+  :root:not([data-theme="light"]) .cap-code__aide { color: #ff9c8f; }
+  :root:not([data-theme="light"]) .cap-qr { background: #fff; padding: 8px; border-radius: 12px; }
+}
+.cap-entete { margin: 10px 2px 0; display: flex; flex-direction: column; gap: 0; color: var(--sur-ciel); }
+.cap-entete span { font-family: var(--condense); font-weight: 800; font-size: .95rem; letter-spacing: .06em; opacity: .85; }
+.cap-entete b { font-family: var(--condense); font-weight: 800; font-size: 1.7rem; line-height: 1.1; }
+.cap .form-carte { padding: 18px; }
+.cap .form-carte .liste-simple { padding: 0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lien-discret { color: #9fd3ff; } }
+:root[data-theme="dark"] .lien-discret { color: #9fd3ff; }
+.cap .form-carte .liste-simple, .cap .section .cap-admin-liste { box-shadow: none; background: none; margin: 0; }
+.cap .liste-simple li + li { border-top: 1px solid var(--trait); padding-top: 12px; margin-top: 4px; }

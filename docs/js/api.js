@@ -4,38 +4,114 @@
   'use strict';
 
   var cfg = window.REA_CONFIG || {};
-  var DEMO = !cfg.API_URL;
+  /* Cap NCHUG (plusieurs services) : CAP_URL présent dans config.js. Sinon : un seul service (API_URL), comme la réa. */
+  var MULTI = cfg.CAP_URL !== undefined;
+  var DEMO = MULTI ? !cfg.CAP_URL : !cfg.API_URL;
   var DELAI_MS = 15000;
+  var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
+  var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1 };
+  // Lectures : on peut les refaire sans risque si le réseau a coupé
+  var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
+    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1 };
+  var ATTENTES = [1200, 2500, 5000]; // nouveaux essais en cas d'affluence
 
   function ErreurApi(code) { this.code = code; this.message = code; }
   ErreurApi.prototype = Object.create(Error.prototype);
 
+  function adresse(action) {
+    if (!MULTI) return cfg.API_URL;
+    if (SERVICE && SERVICE.api && !ACTIONS_ANNUAIRE[action]) return SERVICE.api; // service sur son propre moteur (la réa au début)
+    return cfg.CAP_URL;
+  }
   function appeler(action, donnees) {
-    if (DEMO) return demo(action, donnees || {});
-    var corps = JSON.stringify(Object.assign({ action: action }, donnees || {}));
+    donnees = Object.assign({}, donnees || {});
+    if (MULTI && SERVICE && !SERVICE.api && !ACTIONS_ANNUAIRE[action]) donnees.service = SERVICE.id;
+    if (DEMO) return demo(action, donnees);
+    var corps = JSON.stringify(Object.assign({ action: action }, donnees));
+    return essai(adresse(action), corps, action, 0).catch(function (e) {
+      if (MULTI && e && e.code === 'service_inconnu') setTimeout(function () { window.dispatchEvent(new CustomEvent('rea:service-ferme')); }, 0);
+      throw e;
+    });
+  }
+  function essai(url, corps, action, n) {
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var minuterie = ctrl && setTimeout(function () { ctrl.abort(); }, DELAI_MS);
-    return fetch(cfg.API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: corps,
-      redirect: 'follow',
-      signal: ctrl ? ctrl.signal : undefined
-    }).then(function (rep) {
-      if (!rep.ok) throw new ErreurApi('reseau');
-      return rep.json();
-    }, function () {
-      throw new ErreurApi('reseau');
-    }).then(function (json) {
-      if (!json || json.ok !== true) throw new ErreurApi((json && json.erreur) || 'erreur_serveur');
-      return json;
-    }).finally(function () { if (minuterie) clearTimeout(minuterie); });
+    function encore(code) { // affluence : Google n'a pas traité la demande, on réessaie un peu plus tard
+      if (n >= ATTENTES.length) throw new ErreurApi(code);
+      return new Promise(function (ok) { setTimeout(ok, ATTENTES[n] * (0.8 + Math.random() * 0.4)); }).then(function () { return essai(url, corps, action, n + 1); });
+    }
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: corps, redirect: 'follow', signal: ctrl ? ctrl.signal : undefined })
+      .then(function (rep) {
+        if (rep.status === 429 || rep.status === 503) return { occupe: true };
+        if (!rep.ok) throw new ErreurApi('reseau');
+        return rep.text().then(function (t) {
+          try { return { json: JSON.parse(t) }; } catch (e) { return /simultan|too many|trop de|invoked too many/i.test(t) ? { occupe: true } : { json: null }; }
+        });
+      }, function (e) { return { coupe: true, delai: e && e.name === 'AbortError' }; })
+      .then(function (r) {
+        if (minuterie) clearTimeout(minuterie);
+        if (r.occupe) return encore('occupe');
+        if (r.coupe) { if (LECTURES[action] && !r.delai && n < 1) return encore('reseau'); throw new ErreurApi('reseau'); }
+        var json = r.json;
+        if (!json || json.ok !== true) throw new ErreurApi((json && json.erreur) || 'erreur_serveur');
+        return json;
+      });
   }
+  function choisirService(s) { SERVICE = s ? { id: s.id, nom: s.nom, api: s.api || null } : null; }
 
   /* ---------- Mode démonstration (aucune donnée réelle) ---------- */
+  /* Démonstration Cap NCHUG : annuaire et codes en mémoire sur ce téléphone */
+  function demoLire(k, defaut) { try { return JSON.parse(localStorage.getItem('rea.demo.' + k)) || defaut; } catch (e) { return defaut; } }
+  function demoEcrire(k, v) { try { localStorage.setItem('rea.demo.' + k, JSON.stringify(v)); } catch (e) { /* stockage bloqué */ } }
+  function demoServices() { return demoLire('services', [{ id: 'rea', nom: 'Réanimation – USC', actif: true, cree: '2026-11-01', par: 'Démo' }, { id: 'cardiologie', nom: 'Cardiologie', actif: true, cree: '2026-11-02', par: 'Démo' }, { id: 'neonat', nom: 'Néonatalogie', actif: true, cree: '2026-11-02', par: 'Démo' }]); }
+  function demoAnnuaire(action, d) {
+    var roles = { SUPDEMO: ['super', 'Super-administrateur'], CREADEMO: ['createur', 'Créateur démo'] };
+    var role = /^cap\./.test(d.jeton || '') ? d.jeton.split('.')[1] : null, crea = demoLire('createurs', [{ nom: 'Créateur démo', actif: true }]);
+    function etat() { return { ok: true, role: role, libelle: roles[role === 'super' ? 'SUPDEMO' : 'CREADEMO'][1], services: demoServices(), createurs: role === 'super' ? crea : null }; }
+    if (action === 'services') return { ok: true, services: demoServices().filter(function (x) { return x.actif; }).map(function (x) { return { id: x.id, nom: x.nom }; }) };
+    if (action === 'annuaire_login') { var c = String(d.code || '').trim().toUpperCase(); if (!roles[c]) throw new ErreurApi('code_incorrect'); return { ok: true, jeton: 'cap.' + roles[c][0], role: roles[c][0], libelle: roles[c][1], expiration: new Date(Date.now() + 864e5).toISOString() }; }
+    if (!role) throw new ErreurApi('session_invalide');
+    if (action === 'annuaire_etat') return etat();
+    if (action === 'service_creer') {
+      var nom = String((d.donnees || {}).nom || '').trim(), id = String((d.donnees || {}).id || nom).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+      if (nom.length < 2 || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) throw new ErreurApi('requete_invalide');
+      var l = demoServices(); if (l.some(function (x) { return x.id === id; })) throw new ErreurApi('service_existe');
+      l.push({ id: id, nom: nom, actif: true, cree: new Date().toISOString().slice(0, 10), par: roles[role === 'super' ? 'SUPDEMO' : 'CREADEMO'][1] }); demoEcrire('services', l);
+      return { ok: true, service: { id: id, nom: nom }, codes: { admin: 'ADMDEMO', agents: 'DEMO' } };
+    }
+    if (action === 'service_modifier') {
+      var l2 = demoServices(), sv = l2.filter(function (x) { return x.id === d.id; })[0]; if (!sv) throw new ErreurApi('introuvable');
+      if (d.donnees && d.donnees.actif === false && role !== 'super') throw new ErreurApi('non_autorise');
+      if (d.donnees && d.donnees.nom) sv.nom = d.donnees.nom; if (d.donnees && d.donnees.actif != null) sv.actif = d.donnees.actif; demoEcrire('services', l2); return etat();
+    }
+    if (action === 'service_code') return { ok: true, code: d.quoi === 'admin' ? 'ADMDEMO' : 'DEMO' };
+    if (action === 'createur') {
+      if (role !== 'super') throw new ErreurApi('non_autorise');
+      var x = crea.filter(function (c) { return c.nom === d.nom; })[0];
+      if (d.actif === false) { if (x) x.actif = false; } else { if (!x) { x = { nom: d.nom }; crea.push(x); } x.actif = true; }
+      demoEcrire('createurs', crea); return { ok: true, code: d.actif === false ? null : 'CREADEMO', etat: etat() };
+    }
+    throw new ErreurApi('action_inconnue');
+  }
+  function demoCodes(action, d) {
+    if (!/^demo\.admin/.test(d.jeton || '')) throw new ErreurApi('non_autorise');
+    var refs = demoLire('referents', [{ nom: 'Référent démo', actif: true, modifie: '2026-11-01' }]);
+    function etat() { return { ok: true, referents: refs, codeAgents: true }; }
+    if (action === 'codes_etat') return etat();
+    var code = null;
+    if (d.quoi === 'agents') code = 'DEMO'; else if (d.quoi === 'admin') code = 'ADMDEMO';
+    else if (d.quoi === 'referent') { refs = refs.filter(function (r) { return r.nom !== d.nom; }); refs.push({ nom: d.nom, actif: true, modifie: new Date().toISOString().slice(0, 10) }); code = 'REFDEMO'; }
+    else if (d.quoi === 'referent_off') refs.forEach(function (r) { if (r.nom === d.nom) r.actif = false; });
+    demoEcrire('referents', refs);
+    return { ok: true, code: code, etat: etat() };
+  }
   function demo(action, d) {
     return new Promise(function (ok, ko) {
       setTimeout(function () {
+        try {
+          if (ACTIONS_ANNUAIRE[action]) return ok(demoAnnuaire(action, d));
+          if (action === 'codes_etat' || action === 'codes_changer') return ok(demoCodes(action, d));
+        } catch (e) { return ko(e); }
         if (action === 'login') {
           var code = String(d.code || '').trim().toUpperCase().replace(/\s+/g, '');
           var roles = { DEMO: ['agent', ''], REFDEMO: ['referent', 'Référent démo'], ADMDEMO: ['admin', 'Administrateur'] };
@@ -54,7 +130,7 @@
           return ok({
             ok: true,
             session: { role: role, libelle: role === 'agent' ? '' : (role === 'admin' ? 'Administrateur' : 'Référent démo') },
-            service: 'Réanimation – USC',
+            service: (SERVICE && SERVICE.nom) || 'Réanimation – USC',
             messageAccueil: 'Bienvenue ! Préparons ensemble notre installation dans le nouveau CHU.',
             dateJ: iso,
             actualites: [
@@ -329,5 +405,5 @@
       acces: [{ cat: 'ascenseur', nom: 'Monte-malades', X: 820, Y: 290 }, { cat: 'escalier', nom: 'Escalier', X: 820, Y: 530 }] };
   }
 
-  window.ReaApi = { appeler: appeler, demo: DEMO, ErreurApi: ErreurApi };
+  window.ReaApi = { appeler: appeler, demo: DEMO, ErreurApi: ErreurApi, multi: MULTI, choisirService: choisirService, service: function () { return SERVICE; }, externes: (cfg.SERVICES_EXTERNES || []).filter(function (s) { return s && s.id && s.nom && s.api; }) };
 })();

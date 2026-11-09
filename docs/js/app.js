@@ -91,6 +91,9 @@
 
   var MESSAGES = {
     code_manquant: 'Saisissez votre code.',
+    service_inconnu: 'Ce service n\'est plus ouvert dans Cap NCHUG. Choisissez votre service.',
+    service_existe: 'Un service porte déjà ce nom.',
+    occupe: 'Beaucoup de monde en ce moment : réessayez dans une minute.',
     code_incorrect: 'Ce code n\'est pas reconnu. Vérifiez-le auprès de votre cadre ou d\'un référent.',
     trop_de_tentatives: 'Trop d\'essais incorrects. Réessayez dans 5 minutes.',
     session_absente: 'Votre session a expiré. Saisissez à nouveau votre code.',
@@ -178,6 +181,7 @@
 
   /* ---------- Écran de connexion ---------- */
   function ecranConnexion(erreurInitiale) {
+    ecranCourant = null; // un chargement de l'accueil encore en cours ne doit pas réafficher l'accueil
     var champ = h('input', { id: 'code', name: 'code', type: 'text', inputmode: 'text', autocomplete: 'off',
       autocapitalize: 'characters', spellcheck: 'false', maxlength: '32', required: true, 'aria-describedby': 'code-aide' });
     var erreur = h('p', { class: 'message-erreur', role: 'alert', text: erreurInitiale || '' });
@@ -203,12 +207,18 @@
         h('p', { id: 'code-aide', class: 'champ__aide', text: 'Code du service, ou votre code personnel si vous êtes référent.' })),
       bouton, erreur);
 
+    var multi = Api.multi && window.ReaCap, sv = multi ? window.ReaCap.serviceCourant() : null;
+    if (multi && !sv) return window.ReaCap.ecranServices();
+    var rea = !multi || (sv && sv.id === 'rea');
     afficher(h('section', { class: 'connexion', 'aria-labelledby': 'titre-connexion' },
       h('div', { class: 'connexion__carte' },
         h('div', { class: 'connexion__arc', 'aria-hidden': 'true' }),
         h('div', { class: 'logos logos--connexion' },
           h('img', { class: 'logo-chu', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
-          h('img', { class: 'logo-rea', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
+          rea ? h('img', { class: 'logo-rea', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' }) : null),
+        multi ? h('p', { class: 'cap-marque', text: 'Cap NCHUG' }) : null,
+        multi ? h('div', { class: 'cap-choisi' }, h('span', { text: sv.nom }),
+          h('button', { type: 'button', class: 'lien-discret', onclick: function () { window.ReaCap.changerService(); }, text: 'Changer de service' })) : null,
         h('h1', { id: 'titre-connexion', text: 'Préparons le nouveau service' }),
         h('p', { class: 'connexion__intro', text: 'Visites, plan, quiz et simulations pour être prêts le jour du déménagement.' }),
         form,
@@ -262,10 +272,11 @@
       h('header', { class: 'entete' },
         h('span', { class: 'pastille-logo logos' },
           h('img', { class: 'logo-chu logo-chu--petit', src: LOGO_CHU, alt: 'CHU de la Guadeloupe', width: '360', height: '279' }),
-          h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' })),
+          estRea() ? h('img', { class: 'logo-rea logo-rea--petit', src: 'assets/logos/reanimation-guadeloupe.png', alt: 'Réanimation Guadeloupe', width: '450', height: '288' }) : null),
         h('span', { class: 'entete__droite' },
           window.ReaFun && window.ReaFun.serie() ? h('span', { class: 'serie', title: 'Jours d\'affilée avec le quiz du jour', text: '🔥 ' + window.ReaFun.serie() }) : null,
           h('span', { class: 'entete__role', text: libelleRole }))),
+      Api.multi ? h('p', { class: 'cap-entete' }, h('span', { text: 'Cap NCHUG' }), h('b', { text: d.service || '' })) : null,
       d.messageAccueil ? h('p', { class: 'message-accueil', text: d.messageAccueil }) : null,
       horizon(d),
       d.elan && window.ReaJeux ? window.ReaJeux.sectionJauge(d.elan) : null,
@@ -274,7 +285,7 @@
       sectionJauge(d.jauge),
       sectionBadges(),
       sectionActus(d.actualites),
-      piedDePage()));
+      piedDePage(d)));
     app.focus({ preventScroll: true });
     if (window.ReaJeux) window.ReaJeux.apresAccueil(); // QR code scanné en attente
   }
@@ -323,7 +334,8 @@
   function sectionModules(role, d) {
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
     var liste = MODULES.slice();
-    if (role !== 'agent') liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: role === 'admin' ? 'Administration' : 'Espace référent', desc: 'En attendant : actualités, date J et effectifs se gèrent dans le Google Sheets « Base ».' });
+    if (role === 'admin' && window.ReaCap) liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
+    else if (role !== 'agent') liste.push({ id: 'admin', c: '#4c5a7a', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, liste.map(function (m) {
@@ -352,9 +364,10 @@
         : h('p', { class: 'vide', text: 'Aucune actualité pour le moment.' }));
   }
 
-  function piedDePage() {
+  function estRea() { var sv = Api.multi && window.ReaCap ? window.ReaCap.serviceCourant() : null; return !Api.multi || !!(sv && sv.id === 'rea'); }
+  function piedDePage(d) {
     return h('footer', { class: 'pied' },
-      h('span', { class: 'pied__texte', text: 'CHU de la Guadeloupe · Réanimation – USC' }),
+      h('span', { class: 'pied__texte', text: 'CHU de la Guadeloupe · ' + ((d && d.service) || 'Réanimation – USC') }),
       h('div', { class: 'pied__actions' },
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: ecranAccueil, text: 'Actualiser' }),
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: deconnexion, text: 'Se déconnecter' })));
@@ -937,7 +950,10 @@
   };
 
   /* ---------- Démarrage (après la mise à disposition des outils partagés) ---------- */
-  var s = stock.lire(CLE.session);
-  if (s && s.expiration && Date.parse(s.expiration) < Date.now()) { stock.effacer(CLE.session); s = null; }
-  if (s) ecranAccueil(); else ecranConnexion();
+  function lancer() {
+    var s = stock.lire(CLE.session);
+    if (s && s.expiration && Date.parse(s.expiration) < Date.now()) { stock.effacer(CLE.session); s = null; }
+    if (s) ecranAccueil(); else ecranConnexion();
+  }
+  if (Api.multi && window.ReaCap) window.ReaCap.demarrer(lancer); else lancer();
 })();

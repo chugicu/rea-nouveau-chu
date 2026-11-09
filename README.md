@@ -14,6 +14,7 @@ docs/            Application (hébergée par GitHub Pages)
   css/app.css    Charte CHU 2026 + logo Réanimation Guadeloupe
   css/theme.css  Design « Lagon » (v1.8) : ciel, cartes en relief, mode sombre
   js/fun.js      Confettis, vibrations, série 🔥
+  js/cap.js      Cap NCHUG : choix du service, espace créateurs, codes gérés dans l'appli
   js/gps.js      Position GPS sur le plan (calculée sur le téléphone) + calage admin multi-points
   js/config.js   ← seul fichier à régler (URL du moteur)
   js/api.js      Échanges avec le moteur (et mode démonstration)

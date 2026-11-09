@@ -1,6 +1,7 @@
 /**
- * Déménagement Réanimation – CHU de la Guadeloupe
- * Moteur de l'application (Google Apps Script, lié au Google Sheets "Base").
+ * Déménagement Réanimation – CHU de la Guadeloupe, puis Cap NCHUG (tous les services)
+ * Moteur de l'application (Google Apps Script, lié au Google Sheets "Base" ou à l'annuaire Cap NCHUG).
+ * 2.0 : Cap NCHUG : un seul moteur pour tous les services (mode « annuaire »), codes d'accès gérés dans l'appli.
  *
  * Étape 1 : installation, connexion par codes, accueil.
  * Étape 2 : plan du service (lecture du plan depuis le Drive, désignation des pièces par les référents).
@@ -24,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '1.8.1',
+  version: '2.0.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -73,7 +74,7 @@ function doGet() {
 }
 
 function doPost(e) {
-  var req;
+  var req; MEMO_PROPS = {}; sortirService_();
   try {
     req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
   } catch (err) {
@@ -81,6 +82,9 @@ function doPost(e) {
   }
   try {
     var action = String(req.action || '');
+    // Annuaire (Cap NCHUG) : routes communes, puis entrée dans le service demandé
+    if (ROUTES_ANNUAIRE[action]) { if (!modeAnnuaire_()) return json_({ ok: false, erreur: 'action_inconnue' }); return json_(ROUTES_ANNUAIRE[action](req)); }
+    if (action !== 'ping' && modeAnnuaire_()) entrerService_(req.service);
     var routes = {
       ping: function () { return { ok: true, version: APP.version, serveur: new Date().toISOString() }; },
       login: function () { return login_(req.code); },
@@ -123,7 +127,10 @@ function doPost(e) {
       nl_ajouter: function () { return nlAjouter_(exigerAdmin_(verifierJeton_(req.jeton)), req.donnees); },
       nl_envoyer_page: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlEnvoyerPage_(req.id, req.page, req.data); },
       nl_publier: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlPublier_(req.id); },
-      nl_retirer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlRetirer_(req.id); }
+      nl_retirer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlRetirer_(req.id); },
+      // Codes d'accès gérés dans l'appli par l'administrateur du service
+      codes_etat: function () { exigerAdmin_(verifierJeton_(req.jeton)); return codesEtat_(); },
+      codes_changer: function () { return codesChanger_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.nom); }
     };
     if (!routes[action]) return json_({ ok: false, erreur: 'action_inconnue' });
     return json_(routes[action]());
@@ -141,10 +148,10 @@ function login_(code) {
   code = normaliserCode_(code);
   if (!code) throw erreurApp_('code_manquant');
 
-  var cache = CacheService.getScriptCache();
+  var cache = cache_();
   if (cache.get('blocage')) throw erreurApp_('trop_de_tentatives');
 
-  var props = PropertiesService.getScriptProperties();
+  var props = props_();
   var empreinte = empreinte_(code);
   var role = null, libelle = '';
 
@@ -167,7 +174,8 @@ function login_(code) {
   var exp = Date.now() + APP.dureeJetonJours[role] * 86400000;
   return {
     ok: true,
-    jeton: signerJeton_({ r: role, n: libelle, v: versionJetons_(), exp: exp }),
+    jeton: signerJeton_({ r: role, n: libelle, v: versionJetons_(), exp: exp, s: CTX_SERVICE ? CTX_SERVICE.id : undefined }),
+    service: CTX_SERVICE ? CTX_SERVICE.id : undefined,
     role: role,
     libelle: libelle,
     expiration: new Date(exp).toISOString()
@@ -273,7 +281,7 @@ function plan_(session) {
    Le calage relie des points GPS du bâtiment à des points du plan : ce n'est pas une donnée personnelle.
    La position de chaque utilisateur est calculée sur son téléphone et n'est jamais envoyée. */
 function lireGpsCalage_() {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('gps_calage') || 'null'); } catch (e) { return null; }
+  try { return JSON.parse(props_().getProperty('gps_calage') || 'null'); } catch (e) { return null; }
 }
 function gpsCalage_(session, c) {
   if (!c || !Array.isArray(c.points) || c.points.length > 40) throw erreurApp_('requete_invalide');
@@ -285,12 +293,12 @@ function gpsCalage_(session, c) {
     return { geo: [Math.round(v[0] * 1e7) / 1e7, Math.round(v[1] * 1e7) / 1e7], plan: [Math.round(v[2]), Math.round(v[3])], acc: Math.max(0, Math.min(999, Math.round(Number(p.acc) || 0))), nom: nettoyerTexte_(p.nom, 60) };
   });
   var val = { points: points, le: new Date().toISOString() };
-  PropertiesService.getScriptProperties().setProperty('gps_calage', JSON.stringify(val));
+  props_().setProperty('gps_calage', JSON.stringify(val));
   return { ok: true, calage: val };
 }
 
 function geometriePlan_() {
-  var cache = CacheService.getScriptCache();
+  var cache = cache_();
   var morceaux = Number(cache.get('plan_n') || 0), texte = '';
   if (morceaux) {
     var parts = cache.getAll(Array.apply(null, Array(morceaux)).map(function (_, i) { return 'plan_' + i; }));
@@ -464,7 +472,7 @@ function retrouverPiece_(rep, ix, pris) { // la pièce du nouveau plan qui corre
   return meilleur;
 }
 function synchroniserPlan_(ss) {
-  var props = PropertiesService.getScriptProperties(), ix = indexPlan_(geometriePlan_()), emp = empreintePlan_(ix), avant = props.getProperty('plan_empreinte');
+  var props = props_(), ix = indexPlan_(geometriePlan_()), emp = empreintePlan_(ix), avant = props.getProperty('plan_empreinte');
   if (avant === emp) return null;
   var verrou = LockService.getScriptLock(); if (!verrou.tryLock(5000)) return null;
   try {
@@ -520,7 +528,7 @@ function remplacerIds_(ss, corresp) { // dans les questions du quiz (pièces li�
 
 /** À lancer après avoir remplacé le fichier du plan dans le Drive. */
 function viderCachePlan() {
-  var cache = CacheService.getScriptCache(), n = Number(cache.get('plan_n') || 0);
+  var cache = cache_(), n = Number(cache.get('plan_n') || 0);
   cache.removeAll(['plan_n'].concat(Array.apply(null, Array(n)).map(function (_, i) { return 'plan_' + i; })));
   alerte_('Le plan sera relu depuis le Drive au prochain affichage.');
 }
@@ -655,7 +663,13 @@ function visitePresence_(id, present) {
 }
 
 /** Données personnelles des visites (prénom, initiale, fonction) effacées à J+30. Lancée chaque nuit. */
-function purgerVisites() {
+function purgerVisites() { // tâche quotidienne ; en mode annuaire, pour chaque service
+  if (!modeAnnuaire_()) return purgerVisitesService_();
+  var r = [];
+  lireServices_().forEach(function (sv) { if (!sv.actif) return; try { entrerService_(sv.id); r.push(sv.nom + ' : ' + purgerVisitesService_()); } catch (e) { r.push(sv.nom + ' : ' + e.message); } });
+  sortirService_(); return r.join('\n') || 'Aucun service.';
+}
+function purgerVisitesService_() {
   var ss = classeur_(), j = lireParametres_(ss)['Date J'];
   if (!(j instanceof Date) || isNaN(j)) return 'Date J non fixée : rien à purger.';
   if (formaterDate_(new Date()) <= decalerJours_(formaterDate_(j), 30)) return 'Purge prévue après le ' + decalerJours_(formaterDate_(j), 30) + '.';
@@ -824,7 +838,7 @@ function lireQuiz_(ss) {
   }
   return l;
 }
-function quizCompteur_() { return Number(PropertiesService.getScriptProperties().getProperty('quiz_total') || 0); }
+function quizCompteur_() { return Number(props_().getProperty('quiz_total') || 0); }
 function quizListe_(session) {
   var ss = classeur_(), ref = session.r === 'referent' || session.r === 'admin', admin = session.r === 'admin';
   var l = lireQuiz_(ss).filter(function (q) {
@@ -904,7 +918,7 @@ function quizAjouterTotal_(n) {
   if (!(n >= 1 && n <= 50)) throw erreurApp_('requete_invalide');
   var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
   try {
-    var props = PropertiesService.getScriptProperties(), t = Number(props.getProperty('quiz_total') || 0) + n;
+    var props = props_(), t = Number(props.lireFrais('quiz_total') || 0) + n;
     props.setProperty('quiz_total', String(t));
     return { ok: true, total: t };
   } finally { verrou.releaseLock(); }
@@ -1032,13 +1046,13 @@ function jeuxReglage_(id, d) {
 function calculerElan_(ss, cfg) {
   cfg = cfg || jeuxConfig_(ss);
   var c = cfg.jauge; if (!c.actif) return null;
-  var pts = quizCompteur_() + Number(PropertiesService.getScriptProperties().getProperty('jeux_points') || 0);
+  var pts = quizCompteur_() + Number(props_().getProperty('jeux_points') || 0);
   var obj = Number(c.reglages.objectif) || 4000;
   return { points: pts, objectif: obj, pourcent: Math.min(100, Math.floor(100 * pts / obj)), paliers: c.reglages.paliers || [] };
 }
 function ajouterPointsJeux_(n, dejaVerrouille) { // dejaVerrouille : appelé alors que le verrou du script est déjà pris
   if (!(n > 0)) return;
-  function ajouter() { var p = PropertiesService.getScriptProperties(); p.setProperty('jeux_points', String(Number(p.getProperty('jeux_points') || 0) + n)); }
+  function ajouter() { var p = props_(); p.setProperty('jeux_points', String(Number(p.lireFrais('jeux_points') || 0) + n)); }
   if (dejaVerrouille) return ajouter();
   var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
   try { ajouter(); } finally { verrou.releaseLock(); }
@@ -1329,6 +1343,13 @@ function signerJeton_(charge) {
 }
 
 function verifierJeton_(jeton) {
+  var charge = lireJeton_(jeton);
+  if (charge.s === '_') throw erreurApp_('session_invalide'); // jeton de l'annuaire
+  if ((charge.s || null) !== (CTX_SERVICE ? CTX_SERVICE.id : null)) throw erreurApp_('session_invalide'); // jeton d'un autre service
+  if (charge.r === 'referent' && !referentActif_(charge.n)) throw erreurApp_('session_expiree');
+  return charge;
+}
+function lireJeton_(jeton) {
   if (!jeton || typeof jeton !== 'string' || jeton.indexOf('.') < 0) throw erreurApp_('session_absente');
   var parts = jeton.split('.');
   var attendu = b64url_(Utilities.computeHmacSha256Signature(parts[0], secret_()));
@@ -1337,7 +1358,6 @@ function verifierJeton_(jeton) {
   var charge = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(corps)).getDataAsString());
   if (charge.v !== versionJetons_()) throw erreurApp_('session_expiree');
   if (!charge.exp || Date.now() > charge.exp) throw erreurApp_('session_expiree');
-  if (charge.r === 'referent' && !referentActif_(charge.n)) throw erreurApp_('session_expiree');
   return charge;
 }
 
@@ -1356,17 +1376,17 @@ function normaliserCode_(code) {
 }
 
 function empreinte_(code) {
-  var sel = PropertiesService.getScriptProperties().getProperty('SEL');
+  var sel = props_().getProperty('SEL');
   var octets = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, sel + '|' + code, Utilities.Charset.UTF_8);
   return b64url_(octets);
 }
 
 function lireReferents_() {
-  return JSON.parse(PropertiesService.getScriptProperties().getProperty('REFERENTS') || '[]');
+  return JSON.parse(props_().getProperty('REFERENTS') || '[]');
 }
 
 function ecrireReferents_(liste) {
-  PropertiesService.getScriptProperties().setProperty('REFERENTS', JSON.stringify(liste));
+  props_().setProperty('REFERENTS', JSON.stringify(liste));
   // Liste visible dans le classeur (noms et statut uniquement, jamais les codes)
   var sh = classeur_().getSheetByName(ONGLETS.referents);
   sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 3).clearContent();
@@ -1389,19 +1409,27 @@ function verifierFormatCode_(code) {
 }
 
 function codeDejaUtilise_(empr) {
-  var p = PropertiesService.getScriptProperties();
+  var p = props_();
   if (empr === p.getProperty('CODE_ADMIN') || empr === p.getProperty('CODE_SERVICE')) return true;
   return lireReferents_().some(function (r) { return r.empreinte === empr; });
 }
 
 function versionJetons_() {
-  return Number(PropertiesService.getScriptProperties().getProperty('VERSION_JETONS') || 1);
+  return Number(props_().getProperty('VERSION_JETONS') || 1);
 }
 
 // ============================================================================
 // Menu d'administration dans le Google Sheets
 // ============================================================================
 function onOpen() {
+  if (modeAnnuaire_()) {
+    return SpreadsheetApp.getUi().createMenu('Cap NCHUG – Administration')
+      .addItem('Vérifier / réparer l\'annuaire', 'installerAnnuaire')
+      .addItem('Définir le code SUPER-ADMINISTRATEUR', 'menuCodeSuper')
+      .addItem('Déconnecter le super-admin et les créateurs', 'menuInvaliderAnnuaire')
+      .addItem('Effacer les inscriptions aux visites (tous les services)', 'menuPurgerVisites')
+      .addToUi();
+  }
   SpreadsheetApp.getUi().createMenu('Réa – Administration')
     .addItem('1. Installer / réparer la base', 'installer')
     .addSeparator()
@@ -1420,15 +1448,26 @@ function onOpen() {
 
 /** Crée les onglets, le sel et le secret. Sans danger si relancé : rien n'est effacé. */
 function installer() {
-  var props = PropertiesService.getScriptProperties();
+  var props = props_();
   if (!props.getProperty('SEL')) props.setProperty('SEL', Utilities.getUuid() + Utilities.getUuid());
   if (!props.getProperty('SECRET')) props.setProperty('SECRET', Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid());
   if (!props.getProperty('VERSION_JETONS')) props.setProperty('VERSION_JETONS', '1');
 
   var ss = classeur_();
+  installerBase_(ss);
+  installerPurgeQuotidienne_();
+  if (!props.getProperty('CODE_SERVICE') || !props.getProperty('CODE_ADMIN')) {
+    alerte_('Installation terminée.\n\nÉtape suivante : définissez le code SERVICE puis le code ADMINISTRATEUR (menu Réa – Administration).');
+  } else {
+    alerte_('Base vérifiée : tout est en place.');
+  }
+}
+
+/** Onglets d'un service (sans interface) : utilisé par « Installer » et par la création d'un service Cap NCHUG. */
+function installerBase_(ss, nomService) {
   creerOnglet_(ss, ONGLETS.parametres, ['Paramètre', 'Valeur', 'Aide'], [
     ['Date J', '', 'Date du 1er jour de transfert (format date). Laisser vide tant qu\'elle n\'est pas fixée.'],
-    ['Nom du service', 'Réanimation – USC', 'Affiché sur l\'accueil.'],
+    ['Nom du service', nomService || 'Réanimation – USC', 'Affiché sur l\'accueil.'],
     ["Message d'accueil", 'Bienvenue ! Préparons ensemble notre installation dans le nouveau CHU.', 'Court message affiché sous le compte à rebours.'],
     ['Fichier du plan (ID Drive)', '', 'Identifiant du fichier plan-donnees.json déposé dans le Drive (voir le guide).']
   ]);
@@ -1455,7 +1494,6 @@ function installer() {
   ss.getSheetByName(ONGLETS.inscriptions).getRange('H2:H1000').insertCheckboxes();
   ss.getSheetByName(ONGLETS.creneaux).getRange('B2:B1000').setNumberFormat('@'); // dates gardées en texte AAAA-MM-JJ
   ss.getSheetByName(ONGLETS.creneaux).getRange('C2:C1000').setNumberFormat('@');
-  installerPurgeQuotidienne_();
 
   // Mise en forme utile
   var act = ss.getSheetByName(ONGLETS.actualites);
@@ -1467,25 +1505,19 @@ function installer() {
 
   var feuilleDefaut = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1');
   if (feuilleDefaut && ss.getSheets().length > 1) ss.deleteSheet(feuilleDefaut);
-
-  if (!props.getProperty('CODE_SERVICE') || !props.getProperty('CODE_ADMIN')) {
-    alerte_('Installation terminée.\n\nÉtape suivante : définissez le code SERVICE puis le code ADMINISTRATEUR (menu Réa – Administration).');
-  } else {
-    alerte_('Base vérifiée : tout est en place.');
-  }
 }
 
 function menuCodeService() {
   var code = demanderCode_('Code SERVICE', 'Code commun à tout le service (au moins ' + APP.longueurMinCode + ' lettres/chiffres).\nLes agents déjà connectés le restent.');
   if (!code) return;
-  PropertiesService.getScriptProperties().setProperty('CODE_SERVICE', empreinte_(code));
+  props_().setProperty('CODE_SERVICE', empreinte_(code));
   alerte_('Code SERVICE enregistré.\nNotez-le : il n\'est conservé que sous forme chiffrée et ne pourra pas être relu.');
 }
 
 function menuCodeAdmin() {
   var code = demanderCode_('Code ADMINISTRATEUR', 'Code personnel, à ne jamais partager (au moins ' + APP.longueurMinCode + ' lettres/chiffres).');
   if (!code) return;
-  PropertiesService.getScriptProperties().setProperty('CODE_ADMIN', empreinte_(code));
+  props_().setProperty('CODE_ADMIN', empreinte_(code));
   alerte_('Code ADMINISTRATEUR enregistré.\nNotez-le : il ne pourra pas être relu.');
 }
 
@@ -1521,7 +1553,7 @@ function menuInvaliderSessions() {
   var ui = SpreadsheetApp.getUi();
   var ok = ui.alert('Déconnecter tout le monde ?', 'Tous les utilisateurs devront ressaisir leur code. À utiliser si un code a fuité (changez-le avant).', ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
-  var p = PropertiesService.getScriptProperties();
+  var p = props_();
   p.setProperty('VERSION_JETONS', String(versionJetons_() + 1));
   alerte_('Toutes les sessions sont fermées.');
 }
@@ -1554,14 +1586,73 @@ function genererCode_(n) {
 }
 
 // ============================================================================
+// Services (Cap NCHUG) : un seul moteur, un Google Sheets par service
+// ============================================================================
+/* Mode « autonome » (la réa aujourd'hui) : le moteur sert un seul service, lié à son Google Sheets.
+   Mode « annuaire » (Cap NCHUG) : le Google Sheets lié est l'annuaire des services ; chaque appel indique son
+   service, et le moteur travaille alors dans le Google Sheets de ce service, avec ses propres réglages. */
+var CTX_SERVICE = null, CLASSEUR_MEMO = null, MEMO_PROPS = {};
+var CLES_GLOBALES = { SEL: 1, SECRET: 1, MODE: 1, CODE_SUPER: 1, CREATEURS: 1, CLASSEUR_ID: 1, DOSSIER_SERVICES: 1 };
+function cleProp_(k) { return CTX_SERVICE && !CLES_GLOBALES[k] ? 's:' + CTX_SERVICE.id + ':' + k : k; }
+/* Réglages du script, rangés par service, gardés en mémoire (cache) pour ménager le quota quotidien de lectures */
+var PROPS_ = {
+  getProperty: function (k) {
+    var c = cleProp_(k); if (Object.prototype.hasOwnProperty.call(MEMO_PROPS, c)) return MEMO_PROPS[c];
+    var cache = CacheService.getScriptCache(), v = cache.get('p|' + c);
+    if (v === null || v === undefined) { v = PropertiesService.getScriptProperties().getProperty(c); try { cache.put('p|' + c, v === null ? '\u0000' : v, 21600); } catch (e) { /* trop gros : pas de cache */ } }
+    else if (v === '\u0000') v = null;
+    MEMO_PROPS[c] = v; return v;
+  },
+  lireFrais: function (k) { var c = cleProp_(k), v = PropertiesService.getScriptProperties().getProperty(c); MEMO_PROPS[c] = v; return v; }, // pour les compteurs, sous verrou
+  setProperty: function (k, v) {
+    var c = cleProp_(k); v = String(v); PropertiesService.getScriptProperties().setProperty(c, v); MEMO_PROPS[c] = v;
+    var cache = CacheService.getScriptCache(); try { cache.put('p|' + c, v, 21600); } catch (e) { cache.remove('p|' + c); }
+    return PROPS_;
+  }
+};
+function props_() { return PROPS_; }
+function prefixeCache_() { return CTX_SERVICE ? CTX_SERVICE.id + '|' : ''; }
+function cache_() { // cache du script, rangé par service
+  var c = CacheService.getScriptCache(), p = prefixeCache_();
+  function k(x) { return p + x; }
+  return {
+    get: function (x) { return c.get(k(x)); }, put: function (x, v, t) { return c.put(k(x), v, t); }, remove: function (x) { return c.remove(k(x)); },
+    getAll: function (xs) { var r = c.getAll(xs.map(k)), o = {}; xs.forEach(function (x) { if (r[k(x)] != null) o[x] = r[k(x)]; }); return o; },
+    putAll: function (o, t) { var r = {}; Object.keys(o).forEach(function (x) { r[k(x)] = o[x]; }); return c.putAll(r, t); },
+    removeAll: function (xs) { return c.removeAll(xs.map(k)); }
+  };
+}
+function modeAnnuaire_() { return PROPS_.getProperty('MODE') === 'annuaire'; }
+function lireServices_() { // annuaire : [{ id, nom, ss, actif, cree, par }]
+  var c = CacheService.getScriptCache(), t = c.get('annuaire_services');
+  if (t) return JSON.parse(t);
+  var sh = annuaireClasseur_().getSheetByName(ANNUAIRE.onglet), l = [];
+  if (sh) { var v = sh.getDataRange().getValues(); for (var i = 1; i < v.length; i++) if (v[i][0]) l.push({ id: String(v[i][0]), nom: String(v[i][1] || ''), ss: String(v[i][2] || ''), actif: v[i][3] === true, cree: v[i][4] instanceof Date ? formaterDate_(v[i][4]) : '', par: String(v[i][5] || ''), ligne: i + 1 }); }
+  try { c.put('annuaire_services', JSON.stringify(l), 300); } catch (e) { /* ignoré */ }
+  return l;
+}
+function entrerService_(id) {
+  var s = lireServices_().filter(function (x) { return x.id === String(id || ''); })[0];
+  if (!s || !s.actif || !s.ss) throw erreurApp_('service_inconnu');
+  CTX_SERVICE = { id: s.id, ssId: s.ss, nom: s.nom }; CLASSEUR_MEMO = null;
+  return s;
+}
+function sortirService_() { CTX_SERVICE = null; CLASSEUR_MEMO = null; }
+function annuaireClasseur_() { var ctx = CTX_SERVICE; CTX_SERVICE = null; try { return classeurLie_(); } finally { CTX_SERVICE = ctx; } }
+
+// ============================================================================
 // Utilitaires
 // ============================================================================
 function classeur_() {
-  var id = PropertiesService.getScriptProperties().getProperty('CLASSEUR_ID');
+  if (CTX_SERVICE) return CLASSEUR_MEMO || (CLASSEUR_MEMO = SpreadsheetApp.openById(CTX_SERVICE.ssId));
+  return classeurLie_();
+}
+function classeurLie_() {
+  var id = props_().getProperty('CLASSEUR_ID');
   if (id) return SpreadsheetApp.openById(id);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('Ouvrez ce script depuis le Google Sheets « Base » (Extensions > Apps Script).');
-  PropertiesService.getScriptProperties().setProperty('CLASSEUR_ID', ss.getId());
+  props_().setProperty('CLASSEUR_ID', ss.getId());
   return ss;
 }
 
@@ -1590,7 +1681,7 @@ function creerOnglet_(ss, nom, entetes, lignes) {
 }
 
 function secret_() {
-  var s = PropertiesService.getScriptProperties().getProperty('SECRET');
+  var s = props_().getProperty('SECRET');
   if (!s) throw erreurApp_('non_installe');
   return s;
 }
@@ -1614,3 +1705,151 @@ function alerte_(msg) {
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
+
+// ============================================================================
+// Codes d'accès gérés dans l'appli (administrateur du service) : indispensable pour les services de
+// Cap NCHUG, dont les administrateurs n'ont pas accès au Google Sheets. Chaque nouveau code n'est montré
+// qu'une fois : il n'est conservé que chiffré.
+// ============================================================================
+function codeNeuf_() { var c; do { c = genererCode_(8); } while (codeDejaUtilise_(empreinte_(c))); return c; }
+function codesEtat_() {
+  return { ok: true, referents: lireReferents_().map(function (r) { return { nom: r.nom, actif: !!r.actif, modifie: r.modifie || '' }; }),
+    codeAgents: !!props_().getProperty('CODE_SERVICE') };
+}
+function codesChanger_(session, quoi, nom) {
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var p = props_(), code = null;
+    if (quoi === 'agents') { code = codeNeuf_(); p.setProperty('CODE_SERVICE', empreinte_(code)); }
+    else if (quoi === 'admin') { code = codeNeuf_(); p.setProperty('CODE_ADMIN', empreinte_(code)); }
+    else if (quoi === 'referent' || quoi === 'referent_off') {
+      nom = nettoyerTexte_(nom, 60); if (!nom) throw erreurApp_('requete_invalide');
+      var liste = lireReferents_().filter(function (r) { return r.nom !== nom || quoi === 'referent_off'; });
+      if (quoi === 'referent') { code = codeNeuf_(); liste.push({ nom: nom, empreinte: empreinte_(code), actif: true, modifie: formaterDate_(new Date()) }); }
+      else { var t = false; liste.forEach(function (r) { if (r.nom === nom) { r.actif = false; r.modifie = formaterDate_(new Date()); t = true; } }); if (!t) throw erreurApp_('introuvable'); }
+      ecrireReferents_(liste);
+    } else if (quoi === 'deconnecter') { p.setProperty('VERSION_JETONS', String(versionJetons_() + 1)); }
+    else throw erreurApp_('requete_invalide');
+    return { ok: true, code: code, etat: codesEtat_() };
+  } finally { verrou.releaseLock(); }
+}
+
+// ============================================================================
+// Cap NCHUG : annuaire des services, super-administrateur et créateurs
+// ============================================================================
+var ANNUAIRE = { onglet: 'Services', entetes: ['ID', 'Nom', 'Google Sheets (ID)', 'Actif', 'Créé le', 'Créé par'] };
+var ROUTES_ANNUAIRE = {
+  services: function () { return { ok: true, services: lireServices_().filter(function (s) { return s.actif; }).map(function (s) { return { id: s.id, nom: s.nom }; }) }; },
+  annuaire_login: function (req) { return annuaireLogin_(req.code); },
+  annuaire_etat: function (req) { return annuaireEtat_(verifierJetonAnnuaire_(req.jeton)); },
+  service_creer: function (req) { return serviceCreer_(verifierJetonAnnuaire_(req.jeton), req.donnees || {}); },
+  service_modifier: function (req) { return serviceModifier_(verifierJetonAnnuaire_(req.jeton), req.id, req.donnees || {}); },
+  service_code: function (req) { return serviceCode_(verifierJetonAnnuaire_(req.jeton), req.id, req.quoi); },
+  createur: function (req) { return createurGerer_(exigerSuper_(verifierJetonAnnuaire_(req.jeton)), req.nom, req.actif); }
+};
+function lireCreateurs_() { try { return JSON.parse(props_().getProperty('CREATEURS') || '[]'); } catch (e) { return []; } }
+function annuaireLogin_(code) {
+  sortirService_(); code = normaliserCode_(code);
+  if (!code) throw erreurApp_('code_manquant');
+  var cache = cache_(); if (cache.get('blocage')) throw erreurApp_('trop_de_tentatives');
+  var e = empreinte_(code), role = null, nom = '';
+  if (e === props_().getProperty('CODE_SUPER')) { role = 'super'; nom = 'Super-administrateur'; }
+  else lireCreateurs_().forEach(function (c) { if (!role && c.actif && c.empreinte === e) { role = 'createur'; nom = c.nom; } });
+  if (!role) { enregistrerEchec_(cache); Utilities.sleep(600); throw erreurApp_('code_incorrect'); }
+  var exp = Date.now() + 86400000;
+  return { ok: true, jeton: signerJeton_({ r: role, n: nom, v: versionJetons_(), exp: exp, s: '_' }), role: role, libelle: nom, expiration: new Date(exp).toISOString() };
+}
+function verifierJetonAnnuaire_(jeton) {
+  sortirService_();
+  var c = lireJeton_(jeton);
+  if (c.s !== '_' || (c.r !== 'super' && c.r !== 'createur')) throw erreurApp_('session_invalide');
+  if (c.r === 'createur' && !lireCreateurs_().some(function (x) { return x.actif && x.nom === c.n; })) throw erreurApp_('session_expiree');
+  return c;
+}
+function exigerSuper_(session) { if (session.r !== 'super') throw erreurApp_('non_autorise'); return session; }
+function annuaireEtat_(session) {
+  return { ok: true, role: session.r, libelle: session.n,
+    services: lireServices_().map(function (s) { return { id: s.id, nom: s.nom, actif: s.actif, cree: s.cree, par: s.par, lienSheets: session.r === 'super' && s.ss ? 'https://docs.google.com/spreadsheets/d/' + s.ss : '' }; }),
+    createurs: session.r === 'super' ? lireCreateurs_().map(function (c) { return { nom: c.nom, actif: !!c.actif, modifie: c.modifie || '' }; }) : null };
+}
+function idService_(t) {
+  return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+}
+function dossierServices_() {
+  var id = props_().getProperty('DOSSIER_SERVICES');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* supprimé : on le recrée */ } }
+  var d = DriveApp.createFolder('Cap NCHUG – Services (privé)');
+  props_().setProperty('DOSSIER_SERVICES', d.getId());
+  return d;
+}
+function viderCacheServices_() { CacheService.getScriptCache().remove('annuaire_services'); }
+function serviceCreer_(session, d) {
+  var nom = nettoyerTexte_(d.nom, 60), id = idService_(d.id || nom);
+  if (nom.length < 2 || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    viderCacheServices_();
+    if (lireServices_().some(function (s) { return s.id === id; })) throw erreurApp_('service_existe');
+    var ss = SpreadsheetApp.create('Cap NCHUG – ' + nom);
+    try { DriveApp.getFileById(ss.getId()).moveTo(dossierServices_()); } catch (e) { console.error('déplacement : ' + e); }
+    CTX_SERVICE = { id: id, ssId: ss.getId(), nom: nom }; CLASSEUR_MEMO = ss;
+    installerBase_(ss, nom);
+    var p = props_(); p.setProperty('VERSION_JETONS', '1');
+    var admin = codeNeuf_(); p.setProperty('CODE_ADMIN', empreinte_(admin));
+    var agents = codeNeuf_(); p.setProperty('CODE_SERVICE', empreinte_(agents));
+    sortirService_();
+    annuaireClasseur_().getSheetByName(ANNUAIRE.onglet).appendRow([id, nom, ss.getId(), true, new Date(), session.n]);
+    viderCacheServices_();
+    return { ok: true, service: { id: id, nom: nom }, codes: { admin: admin, agents: agents } };
+  } finally { sortirService_(); verrou.releaseLock(); }
+}
+function serviceModifier_(session, id, d) {
+  var sv = lireServices_().filter(function (x) { return x.id === String(id || ''); })[0]; if (!sv) throw erreurApp_('introuvable');
+  var sh = annuaireClasseur_().getSheetByName(ANNUAIRE.onglet);
+  if (d.nom != null) { var nom = nettoyerTexte_(d.nom, 60); if (nom.length < 2) throw erreurApp_('requete_invalide'); sh.getRange(sv.ligne, 2).setValue(nom); }
+  if (d.actif != null) { if (session.r !== 'super' && d.actif === false) throw erreurApp_('non_autorise'); sh.getRange(sv.ligne, 4).setValue(d.actif === true); }
+  viderCacheServices_();
+  return annuaireEtat_(session);
+}
+function serviceCode_(session, id, quoi) { // nouveau code admin ou agents d'un service (code perdu)
+  if (quoi !== 'admin' && quoi !== 'agents') throw erreurApp_('requete_invalide');
+  var sv = lireServices_().filter(function (x) { return x.id === String(id || ''); })[0]; if (!sv || !sv.ss) throw erreurApp_('introuvable');
+  CTX_SERVICE = { id: sv.id, ssId: sv.ss, nom: sv.nom }; CLASSEUR_MEMO = null;
+  try { var code = codeNeuf_(); props_().setProperty(quoi === 'admin' ? 'CODE_ADMIN' : 'CODE_SERVICE', empreinte_(code)); return { ok: true, code: code }; }
+  finally { sortirService_(); }
+}
+function createurGerer_(session, nom, actif) {
+  nom = nettoyerTexte_(nom, 60); if (!nom) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var l = lireCreateurs_(), x = l.filter(function (c) { return c.nom === nom; })[0], code = null;
+    if (actif === false) { if (!x) throw erreurApp_('introuvable'); x.actif = false; }
+    else { code = genererCode_(10); var e = empreinte_(code); if (!x) { x = { nom: nom }; l.push(x); } x.empreinte = e; x.actif = true; }
+    x.modifie = formaterDate_(new Date());
+    props_().setProperty('CREATEURS', JSON.stringify(l));
+    return { ok: true, code: code, etat: annuaireEtat_(session) };
+  } finally { verrou.releaseLock(); }
+}
+/** Cap NCHUG : à lancer une fois dans un Google Sheets vide (Extensions › Apps Script › exécuter installerAnnuaire). */
+function installerAnnuaire() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || classeurLie_();
+  if (ss.getSheetByName(ONGLETS.parametres)) return alerte_('Ce Google Sheets est la base d\'un service : créez un Google Sheets vide pour l\'annuaire Cap NCHUG.');
+  var p = props_();
+  if (!p.getProperty('SEL')) p.setProperty('SEL', Utilities.getUuid() + Utilities.getUuid());
+  if (!p.getProperty('SECRET')) p.setProperty('SECRET', Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid());
+  if (!p.getProperty('VERSION_JETONS')) p.setProperty('VERSION_JETONS', '1');
+  p.setProperty('CLASSEUR_ID', ss.getId()); p.setProperty('MODE', 'annuaire');
+  creerOnglet_(ss, ANNUAIRE.onglet, ANNUAIRE.entetes, []);
+  ss.getSheetByName(ANNUAIRE.onglet).protect().setDescription('Géré par l\'appli Cap NCHUG').setWarningOnly(true);
+  var f = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1'); if (f && ss.getSheets().length > 1) ss.deleteSheet(f);
+  installerPurgeQuotidienne_();
+  if (!p.getProperty('CODE_SUPER')) alerte_('Annuaire Cap NCHUG installé.\\n\\nÉtape suivante : menu « Cap NCHUG – Administration › Définir le code SUPER-ADMINISTRATEUR ».');
+  else alerte_('Annuaire vérifié : tout est en place.');
+}
+function menuCodeSuper() {
+  var code = demanderCode_('Code SUPER-ADMINISTRATEUR', 'Votre code personnel pour Cap NCHUG (au moins ' + APP.longueurMinCode + ' lettres/chiffres). Il permet de créer les services et de nommer les admins créateurs.');
+  if (!code) return;
+  props_().setProperty('CODE_SUPER', empreinte_(code));
+  alerte_('Code SUPER-ADMINISTRATEUR enregistré. Notez-le : il ne pourra pas être relu.');
+}
+function menuInvaliderAnnuaire() { props_().setProperty('VERSION_JETONS', String(versionJetons_() + 1)); alerte_('Le super-admin et les créateurs devront ressaisir leur code.'); }
