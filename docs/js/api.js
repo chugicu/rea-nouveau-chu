@@ -83,16 +83,18 @@
     if (action === 'service_creer') {
       var nom = String((d.donnees || {}).nom || '').trim(), id = String((d.donnees || {}).id || nom).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
       if (nom.length < 2 || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) throw new ErreurApi('requete_invalide');
+      var dd0 = d.donnees || {}; if (dd0.codeAdmin) demoCodeChoisi(dd0.codeAdmin); if (dd0.codeAgents) demoCodeChoisi(dd0.codeAgents);
       var l = demoServices(); if (l.some(function (x) { return x.id === id; })) throw new ErreurApi('service_existe');
       l.push({ id: id, nom: nom, actif: true, cree: new Date().toISOString().slice(0, 10), par: roles[role === 'super' ? 'SUPDEMO' : 'CREADEMO'][1] }); demoEcrire('services', l);
-      return { ok: true, service: { id: id, nom: nom }, codes: { admin: 'ADMDEMO', agents: 'DEMO' } };
+      var dd = d.donnees || {};
+      return { ok: true, service: { id: id, nom: nom }, codes: { admin: dd.codeAdmin ? demoCodeChoisi(dd.codeAdmin) : 'ADMDEMO', agents: dd.codeAgents ? demoCodeChoisi(dd.codeAgents) : 'DEMO' } };
     }
     if (action === 'service_modifier') {
       var l2 = demoServices(), sv = l2.filter(function (x) { return x.id === d.id; })[0]; if (!sv) throw new ErreurApi('introuvable');
       if (d.donnees && d.donnees.actif === false && role !== 'super') throw new ErreurApi('non_autorise');
       if (d.donnees && d.donnees.nom) sv.nom = d.donnees.nom; if (d.donnees && d.donnees.actif != null) sv.actif = d.donnees.actif; demoEcrire('services', l2); return etat();
     }
-    if (action === 'service_code') return { ok: true, code: d.quoi === 'admin' ? 'ADMDEMO' : 'DEMO' };
+    if (action === 'service_code') return { ok: true, code: d.code ? demoCodeChoisi(d.code) : (d.quoi === 'admin' ? 'ADMDEMO' : 'DEMO') };
     if (action === 'infos_code') {
       var nc = String(d.code || '').trim().toUpperCase().replace(/\s+/g, '');
       if (nc && !/^[A-Z0-9-]{6,32}$/.test(nc)) throw new ErreurApi('code_infos_invalide');
@@ -121,12 +123,19 @@
     function etat() { return { ok: true, referents: refs, codeAgents: true, compteurs: cpt }; }
     if (action === 'codes_etat') return etat();
     var code = null;
-    if (d.quoi === 'agents') code = 'DEMO'; else if (d.quoi === 'admin') code = 'ADMDEMO';
-    else if (d.quoi === 'referent') { refs = refs.filter(function (r) { return r.nom !== d.nom; }); refs.push({ nom: d.nom, actif: true, modifie: new Date().toISOString().slice(0, 10) }); code = 'REFDEMO'; }
+    if (/^(agents|admin|referent)$/.test(d.quoi)) code = demoCodeChoisi(d.code); // démo : le code choisi est vérifié mais les codes de connexion restent DEMO / ADMDEMO
+    if (d.quoi === 'referent') { refs = refs.filter(function (r) { return r.nom !== d.nom; }); refs.push({ nom: d.nom, actif: true, modifie: new Date().toISOString().slice(0, 10) }); }
     else if (d.quoi === 'referent_off') refs.forEach(function (r) { if (r.nom === d.nom) r.actif = false; });
     else if (d.quoi === 'raz_quiz' || d.quoi === 'raz_jeux') { cpt[d.quoi === 'raz_quiz' ? 'quiz' : 'jeux'] = 0; demoEcrire('compteurs', cpt); }
     demoEcrire('referents', refs);
-    return { ok: true, code: code, etat: etat() };
+    return { ok: true, enregistre: !!code, etat: etat() };
+  }
+  function demoCodeChoisi(c) {
+    c = String(c || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (c.length < 6 || c.length > 32) throw new ErreurApi('code_longueur');
+    if (!/^[A-Z0-9]+$/.test(c)) throw new ErreurApi('code_caracteres');
+    if (['DEMO', 'ADMDEMO', 'REFDEMO', 'SUPDEMO', 'CREADEMO'].indexOf(c) >= 0) throw new ErreurApi('code_deja_utilise');
+    return c;
   }
   var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
   function demo(action, d) {

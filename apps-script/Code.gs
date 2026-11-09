@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.3.3',
+  version: '2.3.4',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -146,7 +146,7 @@ function doPost(e) {
       nl_retirer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return nlRetirer_(req.id); },
       // Codes d'accès gérés dans l'appli par l'administrateur du service
       codes_etat: function () { exigerAdmin_(verifierJeton_(req.jeton)); return codesEtat_(); },
-      codes_changer: function () { return codesChanger_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.nom); },
+      codes_changer: function () { return codesChanger_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.nom, req.code); },
       // Défi CHU (commun à tous les services)
       defi_jour: function () { return defiJour_(verifierJeton_(req.jeton)); },
       defi_repondre: function () { return defiRepondre_(verifierJeton_(req.jeton), req.donnees); },
@@ -1763,27 +1763,38 @@ function json_(obj) {
 // qu'une fois : il n'est conservé que chiffré.
 // ============================================================================
 function codeNeuf_() { var c; do { c = genererCode_(8); } while (codeDejaUtilise_(empreinte_(c))); return c; }
+/* Code choisi par l'administrateur (ou un créateur) : 6 à 32 lettres ou chiffres, différent des autres codes du service.
+   garder : empreinte actuelle du même rôle (on peut redonner le même code). */
+function codeChoisi_(code, garder) {
+  code = normaliserCode_(code);
+  if (code.length < APP.longueurMinCode || code.length > 32) throw erreurApp_('code_longueur');
+  if (!/^[A-Z0-9]+$/.test(code)) throw erreurApp_('code_caracteres');
+  var e = empreinte_(code);
+  if (e !== garder && codeDejaUtilise_(e)) throw erreurApp_('code_deja_utilise');
+  return code;
+}
 function codesEtat_() {
   return { ok: true, referents: lireReferents_().map(function (r) { return { nom: r.nom, actif: !!r.actif, modifie: r.modifie || '' }; }),
     codeAgents: !!props_().getProperty('CODE_SERVICE'), compteurs: { quiz: quizCompteur_(), jeux: Number(props_().getProperty('jeux_points') || 0) } };
 }
-function codesChanger_(session, quoi, nom) {
+function codesChanger_(session, quoi, nom, choisi) { // les codes sont choisis par l'administrateur (plus de tirage au hasard)
   var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
   try {
     var p = props_(), code = null;
-    if (quoi === 'agents') { code = codeNeuf_(); p.setProperty('CODE_SERVICE', empreinte_(code)); }
-    else if (quoi === 'admin') { code = codeNeuf_(); p.setProperty('CODE_ADMIN', empreinte_(code)); }
+    if (quoi === 'agents') { code = codeChoisi_(choisi, p.getProperty('CODE_SERVICE')); p.setProperty('CODE_SERVICE', empreinte_(code)); }
+    else if (quoi === 'admin') { code = codeChoisi_(choisi, p.getProperty('CODE_ADMIN')); p.setProperty('CODE_ADMIN', empreinte_(code)); }
     else if (quoi === 'referent' || quoi === 'referent_off') {
       nom = nettoyerTexte_(nom, 60); if (!nom) throw erreurApp_('requete_invalide');
+      var ancien = lireReferents_().filter(function (r) { return r.nom === nom; })[0];
       var liste = lireReferents_().filter(function (r) { return r.nom !== nom || quoi === 'referent_off'; });
-      if (quoi === 'referent') { code = codeNeuf_(); liste.push({ nom: nom, empreinte: empreinte_(code), actif: true, modifie: formaterDate_(new Date()) }); }
+      if (quoi === 'referent') { code = codeChoisi_(choisi, ancien && ancien.empreinte); liste.push({ nom: nom, empreinte: empreinte_(code), actif: true, modifie: formaterDate_(new Date()) }); }
       else { var t = false; liste.forEach(function (r) { if (r.nom === nom) { r.actif = false; r.modifie = formaterDate_(new Date()); t = true; } }); if (!t) throw erreurApp_('introuvable'); }
       ecrireReferents_(liste);
     } else if (quoi === 'deconnecter') { p.setProperty('VERSION_JETONS', String(versionJetons_() + 1)); }
     else if (quoi === 'raz_quiz') p.setProperty('quiz_total', '0'); // compteur « Défi d'équipe » du quiz
     else if (quoi === 'raz_jeux') p.setProperty('jeux_points', '0'); // points des jeux (jauge d'élan)
     else throw erreurApp_('requete_invalide');
-    return { ok: true, code: code, etat: codesEtat_() };
+    return { ok: true, enregistre: !!code, etat: codesEtat_() }; // le code choisi n'est jamais renvoyé
   } finally { verrou.releaseLock(); }
 }
 
@@ -1799,7 +1810,7 @@ var ROUTES_ANNUAIRE = {
   annuaire_etat: function (req) { return annuaireEtat_(verifierJetonAnnuaire_(req.jeton)); },
   service_creer: function (req) { return serviceCreer_(verifierJetonAnnuaire_(req.jeton), req.donnees || {}); },
   service_modifier: function (req) { return serviceModifier_(verifierJetonAnnuaire_(req.jeton), req.id, req.donnees || {}); },
-  service_code: function (req) { return serviceCode_(verifierJetonAnnuaire_(req.jeton), req.id, req.quoi); },
+  service_code: function (req) { return serviceCode_(verifierJetonAnnuaire_(req.jeton), req.id, req.quoi, req.code); },
   createur: function (req) { return createurGerer_(exigerSuper_(verifierJetonAnnuaire_(req.jeton)), req.nom, req.actif); },
   commun_jeton: function (req) { return communJeton_(verifierJetonAnnuaire_(req.jeton)); },
   tableau_bord: function (req) { return tableauBord_(verifierJetonAnnuaire_(req.jeton)); },
@@ -1844,6 +1855,14 @@ function viderCacheServices_() { CacheService.getScriptCache().remove('annuaire_
 function serviceCreer_(session, d) {
   var nom = nettoyerTexte_(d.nom, 60), id = idService_(d.id || nom);
   if (nom.length < 2 || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) throw erreurApp_('requete_invalide');
+  if (d.codeAdmin || d.codeAgents) { // codes choisis : vérifiés avant de créer le Google Sheets du service
+    var ca = normaliserCode_(d.codeAdmin), cg = normaliserCode_(d.codeAgents);
+    [ca, cg].forEach(function (c) {
+      if (c.length < APP.longueurMinCode || c.length > 32) throw erreurApp_('code_longueur');
+      if (!/^[A-Z0-9]+$/.test(c)) throw erreurApp_('code_caracteres');
+    });
+    if (ca === cg) throw erreurApp_('code_deja_utilise');
+  }
   var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
   try {
     viderCacheServices_();
@@ -1853,8 +1872,9 @@ function serviceCreer_(session, d) {
     CTX_SERVICE = { id: id, ssId: ss.getId(), nom: nom }; CLASSEUR_MEMO = ss;
     installerBase_(ss, nom);
     var p = props_(); p.setProperty('VERSION_JETONS', '1');
-    var admin = codeNeuf_(); p.setProperty('CODE_ADMIN', empreinte_(admin));
-    var agents = codeNeuf_(); p.setProperty('CODE_SERVICE', empreinte_(agents));
+    // Codes choisis par le créateur (ou tirés au hasard s'il ne les a pas tapés)
+    var admin = d.codeAdmin ? codeChoisi_(d.codeAdmin) : codeNeuf_(); p.setProperty('CODE_ADMIN', empreinte_(admin));
+    var agents = d.codeAgents ? codeChoisi_(d.codeAgents) : codeNeuf_(); p.setProperty('CODE_SERVICE', empreinte_(agents));
     sortirService_();
     annuaireClasseur_().getSheetByName(ANNUAIRE.onglet).appendRow([id, nom, ss.getId(), true, new Date(), session.n]);
     viderCacheServices_();
@@ -1869,11 +1889,14 @@ function serviceModifier_(session, id, d) {
   viderCacheServices_();
   return annuaireEtat_(session);
 }
-function serviceCode_(session, id, quoi) { // nouveau code admin ou agents d'un service (code perdu)
+function serviceCode_(session, id, quoi, choisi) { // nouveau code admin ou agents d'un service (code perdu) : choisi par le créateur ou au hasard
   if (quoi !== 'admin' && quoi !== 'agents') throw erreurApp_('requete_invalide');
   var sv = lireServices_().filter(function (x) { return x.id === String(id || ''); })[0]; if (!sv || !sv.ss) throw erreurApp_('introuvable');
   CTX_SERVICE = { id: sv.id, ssId: sv.ss, nom: sv.nom }; CLASSEUR_MEMO = null;
-  try { var code = codeNeuf_(); props_().setProperty(quoi === 'admin' ? 'CODE_ADMIN' : 'CODE_SERVICE', empreinte_(code)); return { ok: true, code: code }; }
+  try {
+    var cle = quoi === 'admin' ? 'CODE_ADMIN' : 'CODE_SERVICE', code = choisi ? codeChoisi_(choisi, props_().getProperty(cle)) : codeNeuf_();
+    props_().setProperty(cle, empreinte_(code)); return { ok: true, code: code };
+  }
   finally { sortirService_(); }
 }
 function createurGerer_(session, nom, actif) {

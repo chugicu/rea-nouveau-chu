@@ -416,6 +416,11 @@ details.detail-jauge summary::after { color: #223b80; }
 .plan-chu-services { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .plan-chu-services li { background: #fff; color: #223b80; border-radius: 12px; padding: 10px 14px; font-weight: 700; box-shadow: var(--clay-petit); border-left: 6px solid #40a8df; }
 .plan-chu-nav { margin: 4px 0 10px; }
+/* Codes choisis par l'administrateur */
+.cap-form-code { margin: 6px 0 4px; }
+.cap-form-code input, .form-carte input[id^="code-creer"] { font-family: var(--condense); letter-spacing: .08em; text-transform: uppercase; }
+.cap-details { margin: 6px 0; }
+.cap-details summary { cursor: pointer; font-weight: 700; color: var(--titre); padding: 4px 0; }
 /* Infos générales : écran de choix */
 .cap-infos { display: grid; gap: 6px; text-align: left; width: 100%; border: 0; border-radius: 18px; padding: 16px 18px; background: #40a8df; color: #fff; box-shadow: var(--clay-petit); cursor: pointer; font: inherit; }
 .cap-infos b { font-family: var(--condense); font-size: 1.4rem; }

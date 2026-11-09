@@ -365,9 +365,9 @@ Rien à faire côté moteur : seuls les fichiers du dossier `docs/` changent.
 
 **Ensuite, tout se fait dans l'appli :**
 - À l'ouverture, chacun choisit son service (retenu sur le téléphone), ou arrive par le lien / QR code de son service.
-- « Espace créateurs » (en bas de la liste des services) : votre code super-administrateur permet de nommer des admins créateurs (un code chacun, montré une fois), de créer un service en un clic, de fermer ou rouvrir un service, et de refaire un code admin perdu.
-- À la création d'un service, deux codes s'affichent une seule fois (administrateur, agents) avec le lien direct et le QR code du service. Un Google Sheets privé est créé pour le service dans le dossier « Cap NCHUG – Services (privé) » du compte dédié.
-- L'administrateur du service gère ses codes et ses référents dans l'appli (tuile ⚙️ Administration).
+- « Espace créateurs » (en bas de la liste des services) : votre code super-administrateur permet de nommer des admins créateurs (un code chacun, montré une fois), de créer un service, de fermer ou rouvrir un service, et de remplacer un code admin perdu (code choisi, ou bouton « Générer au hasard »).
+- À la création d'un service, le créateur choisit le code administrateur et le code des agents (ou les génère au hasard) ; ils s'affichent une dernière fois avec le lien direct et le QR code du service. Un Google Sheets privé est créé pour le service dans le dossier « Cap NCHUG – Services (privé) » du compte dédié.
+- L'administrateur du service choisit lui-même ses codes dans l'appli (tuile ⚙️ Administration) : code des agents, son code administrateur et le code de chaque référent. Règle : 6 à 32 lettres ou chiffres, sans espace, accent ni tiret, différent des autres codes du service (moteur 2.3.4). Les codes sont conservés chiffrés : notez-les.
 - Chaque administrateur personnalise ensuite son service et prépare son plan (parties S et T) ; le Défi CHU se gère depuis l'Espace créateurs (partie Q).
 
 **Mises à jour :** un seul moteur pour tous les services : collez le nouveau `Code.gs` dans le projet de l'annuaire et faites « Nouvelle version », une fois.

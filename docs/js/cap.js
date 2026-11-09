@@ -164,10 +164,15 @@
       return Api.appeler(nom, Object.assign({ jeton: sess.jeton }, d)).then(apres).catch(function (x) { annuaire(sess, erreurDe(x)); });
     }
     var nomNv = h('input', { type: 'text', maxlength: '60', placeholder: 'ex. Cardiologie', 'aria-label': 'Nom du nouveau service' });
-    var creer = h('form', { class: 'form-carte', onsubmit: function (ev) {
-      ev.preventDefault(); var nom = nomNv.value.trim(); if (nom.length < 2) return;
-      var b = creer.querySelector('button'); b.disabled = true; b.textContent = 'Création… (environ 20 s)';
-      action('service_creer', { donnees: { nom: nom } }, function (r) {
+    var cAdm = champCode('Code administrateur du service', 'code-creer-admin'), cAg = champCode('Code des agents du service', 'code-creer-agents');
+    var errC = h('p', { class: 'message-erreur', role: 'alert' });
+    function hasard(champ) { return h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { champ.value = codeAuHasard(); }, text: 'Générer au hasard' }); }
+    var creer = h('form', { class: 'form-carte', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); errC.textContent = ''; var nom = nomNv.value.trim(); if (nom.length < 2) { errC.textContent = 'Indiquez le nom du service.'; return; }
+      if (!codeValide(cAdm.value) || !codeValide(cAg.value)) { errC.textContent = 'Chaque code doit compter ' + REGLE_CODE; return; }
+      if (cAdm.value.trim().toUpperCase() === cAg.value.trim().toUpperCase()) { errC.textContent = 'Le code administrateur et le code des agents doivent être différents.'; return; }
+      var b = creer.querySelector('button[type="submit"]'); b.disabled = true; b.textContent = 'Création… (environ 20 s)';
+      action('service_creer', { donnees: { nom: nom, codeAdmin: cAdm.value, codeAgents: cAg.value } }, function (r) {
         annuaire(sess, null, h('div', { class: 'cap-cree' },
           h('h3', { text: '✅ Service « ' + r.service.nom + ' » créé' }),
           h('p', { class: 'section__note', text: 'Transmettez ces deux codes à l\'administrateur du service. Il pourra ensuite les changer, et nommer ses référents, depuis l\'appli (tuile Administration).' }),
@@ -175,7 +180,10 @@
           blocLien(r.service)));
       });
     } }, h('h2', { text: 'Créer un service' }), h('div', { class: 'champ' }, h('label', { text: 'Nom du service' }), nomNv),
-      h('button', { class: 'bouton', type: 'submit', text: 'Créer le service' }),
+      h('div', { class: 'champ' }, h('label', { for: 'code-creer-admin', text: 'Code administrateur du service' }), cAdm), hasard(cAdm),
+      h('div', { class: 'champ' }, h('label', { for: 'code-creer-agents', text: 'Code des agents du service' }), cAg), hasard(cAg),
+      h('p', { class: 'section__note', text: 'Règle : ' + REGLE_CODE }),
+      h('button', { class: 'bouton', type: 'submit', text: 'Créer le service' }), errC,
       h('p', { class: 'section__note', text: 'Un Google Sheets privé est créé pour le service sur le compte Cap NCHUG. Aucune manipulation Google n\'est nécessaire.' }));
 
     var services = h('section', { class: 'section' }, h('div', { class: 'section__tete' }, h('h2', { text: 'Services (' + e.services.length + ')' })),
@@ -184,7 +192,7 @@
           h('div', { class: 'cap-ligne' }, h('b', { text: s.nom }), h('span', { class: 'section__note', text: (s.actif ? '' : 'Fermé · ') + 'créé le ' + dateFr(s.cree) + (s.par ? ' par ' + s.par : '') })),
           h('div', { class: 'gps-boutons' },
             h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { annuaire(sess, null, h('div', { class: 'cap-cree' }, h('h3', { text: s.nom }), blocLien(s))); }, text: 'Lien et QR' }),
-            h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Créer un nouveau code ADMINISTRATEUR pour « ' + s.nom + ' » ? L\'ancien ne marchera plus.')) action('service_code', { id: s.id, quoi: 'admin' }, function (r) { annuaire(sess, null, codeAffiche('Nouveau code ADMINISTRATEUR · ' + s.nom, r.code)); }); }, text: 'Code admin perdu' }),
+            h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { annuaire(sess, null, formCodePerdu(s)); }, text: 'Code admin perdu' }),
             h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { var n = prompt('Nouveau nom du service', s.nom); if (n && n.trim().length >= 2) action('service_modifier', { id: s.id, donnees: { nom: n.trim() } }, function () { annuaire(sess, 'Nom modifié.'); }); }, text: 'Renommer' }),
             e.role === 'super' ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () {
               if (!s.actif || confirm('Fermer « ' + s.nom + ' » ? Ses utilisateurs ne pourront plus se connecter (rien n\'est effacé, vous pourrez le rouvrir).'))
@@ -336,6 +344,24 @@
         if (confirm('Fermer les Infos générales ? Plus personne ne pourra y entrer sans un nouveau code.')) action('infos_code', { code: '' }, function () { annuaire(sess, 'Infos générales fermées.'); });
       }, text: 'Fermer l\'accès' }) : null);
   }
+  // Code admin perdu : le créateur choisit le nouveau code (ou le génère)
+  function formCodePerdu(s) {
+    var champ = champCode('Nouveau code administrateur · ' + s.nom, 'code-perdu'), err = h('p', { class: 'message-erreur', role: 'alert' });
+    var f = h('form', { class: 'cap-cree', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); err.textContent = '';
+      if (!codeValide(champ.value)) { err.textContent = 'Le code doit compter ' + REGLE_CODE; return; }
+      if (!confirm('Remplacer le code ADMINISTRATEUR de « ' + s.nom + ' » ? L\'ancien ne marchera plus.')) return;
+      f.querySelector('button[type="submit"]').disabled = true;
+      Api.appeler('service_code', { jeton: lire(CLE_CAP).jeton, id: s.id, quoi: 'admin', code: champ.value }).then(function (r) {
+        f.replaceChildren(codeAffiche('Nouveau code ADMINISTRATEUR · ' + s.nom, r.code));
+      }).catch(function (x) { err.textContent = erreurDe(x); f.querySelector('button[type="submit"]').disabled = false; });
+    } }, h('h3', { text: 'Code administrateur perdu · ' + s.nom }),
+      h('div', { class: 'champ' }, h('label', { for: 'code-perdu', text: 'Nouveau code administrateur' }), champ),
+      h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { champ.value = codeAuHasard(); }, text: 'Générer au hasard' }),
+      h('p', { class: 'section__note', text: 'Règle : ' + REGLE_CODE }),
+      h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer ce code' }), err);
+    return f;
+  }
   function blocLien(s) {
     var url = lienService(s.id), boite = h('div', { class: 'cap-qr', 'aria-label': 'QR code du service' });
     chargerScript('vendor/qrcode.js').then(function () {
@@ -353,34 +379,59 @@
     return scripts[src] || (scripts[src] = new Promise(function (ok, ko) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { delete scripts[src]; ko(); }; document.head.appendChild(s); }));
   }
 
-  /* ---------- Administration du service : codes d'accès ---------- */
-  function ecranCodes(flash, montre) {
+  /* ---------- Saisie d'un code choisi (6 à 32 lettres ou chiffres) ---------- */
+  function champCode(etiquette, id) {
+    return h('input', { id: id, type: 'text', minlength: '6', maxlength: '32', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', 'aria-label': etiquette,
+      oninput: function (ev) { var c = ev.target; var v = c.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); if (v !== c.value) c.value = v; } });
+  }
+  function codeValide(v) { return /^[A-Z0-9]{6,32}$/.test(String(v || '').trim().toUpperCase()); }
+  function codeAuHasard() { // pour les créateurs seulement : même alphabet que le moteur (sans 0/O, 1/I/L)
+    var a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', t = new Uint32Array(8), c = '';
+    (window.crypto || window.msCrypto).getRandomValues(t); for (var i = 0; i < 8; i++) c += a.charAt(t[i] % a.length); return c;
+  }
+  var REGLE_CODE = '6 à 32 lettres ou chiffres, sans espace ni accent, différent des autres codes du service.';
+
+  /* ---------- Administration du service : codes d'accès, choisis par l'administrateur ---------- */
+  function ecranCodes(flash) {
     init(); A.definirEcran(null);
     var session = A.stock.lire(A.CLE.session); if (!session) return A.ecranConnexion();
     var zone = h('div', null, h('div', { class: 'squelette', style: 'height:240px' }));
     page('Administration', 'Codes d\'accès', zone, function () { A.ecranAccueil(); });
-    function changer(quoi, nom, titre) {
-      return Api.appeler('codes_changer', { jeton: session.jeton, quoi: quoi, nom: nom }).then(function (r) {
+    function changer(quoi, nom, code, message) {
+      return Api.appeler('codes_changer', { jeton: session.jeton, quoi: quoi, nom: nom, code: code }).then(function () {
         if (quoi === 'deconnecter') { A.stock.effacer(A.CLE.session); return A.ecranConnexion('Tout le monde a été déconnecté, vous aussi.'); }
-        ecranCodes(r.code ? null : 'Enregistré.', r.code ? codeAffiche(titre, r.code) : null);
+        ecranCodes(message || 'Enregistré.');
       }).catch(function (e) { ecranCodes(erreurDe(e)); });
     }
+    // Un formulaire « choisir le code » : champ, rappel des règles, bouton
+    function formCode(id, etiquette, bouton, envoyer, avant) {
+      var champ = champCode(etiquette, id), err = h('p', { class: 'message-erreur', role: 'alert' });
+      return h('form', { class: 'cap-form-code', novalidate: true, onsubmit: function (ev) {
+        ev.preventDefault(); err.textContent = '';
+        if (!codeValide(champ.value)) { err.textContent = 'Le code doit compter ' + REGLE_CODE; champ.focus(); return; }
+        if (avant && !avant()) return;
+        ev.currentTarget.querySelector('button').disabled = true; envoyer(champ.value.trim().toUpperCase());
+      } }, h('div', { class: 'champ' }, h('label', { for: id, text: etiquette }), champ), h('button', { class: 'bouton', type: 'submit', text: bouton }), err);
+    }
     Api.appeler('codes_etat', { jeton: session.jeton }).then(function (e) {
-      var nomR = h('input', { type: 'text', maxlength: '60', placeholder: 'ex. Marie D. – IDE', 'aria-label': 'Nom du référent' });
+      var nomR = h('input', { type: 'text', maxlength: '60', placeholder: 'ex. Marie D. – IDE', 'aria-label': 'Nom du référent', id: 'nom-referent' });
       zone.replaceChildren.apply(zone, [
-        flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, montre || null,
+        flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
+        h('p', { class: 'section__note', text: 'Vous choisissez chaque code. Règle : ' + REGLE_CODE + ' Notez-le bien : il est conservé chiffré et ne pourra pas être relu.' }),
         h('section', { class: 'section form-carte' }, h('h2', { text: 'Code des agents' }),
           h('p', { class: 'section__note', text: 'Un code commun à toute l\'équipe. En le changeant, les agents déjà connectés le restent ; les nouveaux devront utiliser le nouveau code.' }),
-          h('button', { type: 'button', class: 'bouton', onclick: function () { if (confirm('Créer un nouveau code pour les agents ? L\'ancien ne permettra plus de se connecter.')) changer('agents', null, 'Nouveau code des AGENTS'); }, text: 'Nouveau code agents' })),
+          formCode('code-agents', 'Nouveau code des agents', 'Enregistrer le code des agents', function (c) { changer('agents', null, c, 'Code des agents enregistré : ' + c + '.'); },
+            function () { return confirm('Remplacer le code des agents ? L\'ancien ne permettra plus de se connecter.'); })),
         h('section', { class: 'section form-carte' }, h('h2', { text: 'Référents' }),
-          e.referents.length ? h('ul', { class: 'liste-simple' }, e.referents.map(function (r) {
+          e.referents.length ? h('ul', { class: 'liste-simple' }, e.referents.map(function (r, k) {
             return h('li', { class: r.actif ? '' : 'cap-inactif' }, h('div', { class: 'cap-ligne' }, h('b', { text: r.nom }), h('span', { class: 'section__note', text: r.actif ? 'Actif' : 'Désactivé' })),
-              h('div', { class: 'gps-boutons' },
-                h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { changer('referent', r.nom, 'Code de ' + r.nom); }, text: r.actif ? 'Nouveau code' : 'Réactiver' }),
-                r.actif ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Désactiver ' + r.nom + ' ? Sa session est coupée immédiatement.')) changer('referent_off', r.nom); }, text: 'Désactiver' }) : null));
+              h('details', { class: 'cap-details' }, h('summary', { text: r.actif ? 'Changer son code' : 'Réactiver avec un code' }),
+                formCode('code-ref-' + k, 'Code de ' + r.nom, r.actif ? 'Enregistrer son code' : 'Réactiver', function (c) { changer('referent', r.nom, c, 'Code de ' + r.nom + ' enregistré : ' + c + '.'); })),
+              r.actif ? h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Désactiver ' + r.nom + ' ? Sa session est coupée immédiatement.')) changer('referent_off', r.nom); }, text: 'Désactiver' }) : null);
           })) : h('p', { class: 'vide', text: 'Aucun référent pour l\'instant.' }),
-          h('form', { onsubmit: function (ev) { ev.preventDefault(); var n = nomR.value.trim(); if (n) changer('referent', n, 'Code de ' + n); } },
-            h('div', { class: 'champ' }, h('label', { text: 'Ajouter un référent (prénom, initiale, fonction)' }), nomR), h('button', { class: 'bouton', type: 'submit', text: 'Créer son code' }))),
+          h('h3', { text: 'Ajouter un référent' }),
+          h('div', { class: 'champ' }, h('label', { for: 'nom-referent', text: 'Nom (prénom, initiale, fonction)' }), nomR),
+          formCode('code-nouveau-ref', 'Son code', 'Créer le référent', function (c) { var n = nomR.value.trim(); if (!n) { ecranCodes('Indiquez le nom du référent.'); return; } changer('referent', n, c, 'Référent ' + n + ' créé avec le code ' + c + '.'); })),
         e.compteurs ? h('section', { class: 'section form-carte' }, h('h2', { text: 'Compteurs' }),
           h('p', { class: 'section__note', text: 'Remettre à zéro, par exemple après une phase d\'essai. Les badges et records restent sur les téléphones de chacun.' }),
           h('ul', { class: 'liste-simple' },
@@ -389,8 +440,11 @@
             h('li', null, h('div', { class: 'cap-ligne' }, h('b', { text: 'Points des jeux' }), h('span', { class: 'section__note', text: e.compteurs.jeux.toLocaleString('fr-FR') + ' points' })),
               h('button', { type: 'button', class: 'bouton bouton--discret', disabled: !e.compteurs.jeux, onclick: function () { if (confirm('Remettre à zéro les points des jeux (' + e.compteurs.jeux + ') ?')) changer('raz_jeux'); }, text: 'Remettre à zéro' }))),
           h('p', { class: 'section__note', text: 'La jauge d\'élan additionne ces deux compteurs. Les scores du Défi CHU se remettent à zéro dans « Gestion du Défi CHU ».' })) : null,
+        h('section', { class: 'section form-carte' }, h('h2', { text: 'Votre code administrateur' }),
+          h('p', { class: 'section__note', text: 'Code personnel, à ne jamais partager.' }),
+          formCode('code-admin', 'Nouveau code administrateur', 'Changer mon code administrateur', function (c) { changer('admin', null, c, 'Votre code administrateur est maintenant : ' + c + '. Notez-le.'); },
+            function () { return confirm('Remplacer votre code administrateur ? L\'actuel ne marchera plus.'); })),
         h('section', { class: 'section form-carte' }, h('h2', { text: 'Sécurité' }),
-          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Créer un nouveau code ADMINISTRATEUR ? Votre code actuel ne marchera plus.')) changer('admin', null, 'Votre nouveau code ADMINISTRATEUR'); }, text: 'Changer mon code administrateur' }),
           h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { if (confirm('Déconnecter tout le monde ? Chacun devra ressaisir son code (à faire si un code a fuité, après l\'avoir changé).')) changer('deconnecter'); }, text: 'Déconnecter tout le monde' }))
       ].filter(Boolean));
     }).catch(function (e) {
