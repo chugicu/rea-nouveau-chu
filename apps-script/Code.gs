@@ -25,7 +25,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.1.0',
+  version: '2.2.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -83,6 +83,7 @@ function doPost(e) {
   try {
     var action = String(req.action || '');
     // Annuaire (Cap NCHUG) : routes communes, puis entrée dans le service demandé
+    if (action !== 'ping' && serviceDeplace_()) return json_({ ok: false, erreur: 'service_deplace' }); // rattaché à Cap NCHUG
     if (ROUTES_DEFI_GESTION[action]) return json_(ROUTES_DEFI_GESTION[action](req)); // Défi CHU : gestion commune
     if (ROUTES_ANNUAIRE[action]) { if (!modeAnnuaire_()) return json_({ ok: false, erreur: 'action_inconnue' }); return json_(ROUTES_ANNUAIRE[action](req)); }
     if (action !== 'ping' && modeAnnuaire_()) entrerService_(req.service);
@@ -1383,7 +1384,7 @@ function normaliserCode_(code) {
 }
 
 function empreinte_(code) {
-  var sel = props_().getProperty('SEL');
+  var sel = (CTX_SERVICE && props_().getProperty('SEL_SERVICE')) || props_().getProperty('SEL'); // service rattaché : il garde son sel, donc ses codes
   var octets = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, sel + '|' + code, Utilities.Charset.UTF_8);
   return b64url_(octets);
 }
@@ -1450,6 +1451,9 @@ function onOpen() {
     .addSeparator()
     .addItem('Relire le plan depuis le Drive', 'viderCachePlan')
     .addItem('Effacer les inscriptions aux visites (après J+30)', 'menuPurgerVisites')
+    .addSeparator()
+    .addItem('Préparer le rattachement à Cap NCHUG', 'menuPreparerRattachement')
+    .addItem('Annuler le rattachement à Cap NCHUG', 'menuAnnulerRattachement')
     .addToUi();
 }
 
@@ -1753,7 +1757,8 @@ var ROUTES_ANNUAIRE = {
   service_creer: function (req) { return serviceCreer_(verifierJetonAnnuaire_(req.jeton), req.donnees || {}); },
   service_modifier: function (req) { return serviceModifier_(verifierJetonAnnuaire_(req.jeton), req.id, req.donnees || {}); },
   service_code: function (req) { return serviceCode_(verifierJetonAnnuaire_(req.jeton), req.id, req.quoi); },
-  createur: function (req) { return createurGerer_(exigerSuper_(verifierJetonAnnuaire_(req.jeton)), req.nom, req.actif); }
+  createur: function (req) { return createurGerer_(exigerSuper_(verifierJetonAnnuaire_(req.jeton)), req.nom, req.actif); },
+  service_rattacher: function (req) { return serviceRattacher_(verifierJetonAnnuaire_(req.jeton), req.donnees); }
 };
 function lireCreateurs_() { try { return JSON.parse(props_().getProperty('CREATEURS') || '[]'); } catch (e) { return []; } }
 function annuaireLogin_(code) {
@@ -2176,4 +2181,119 @@ function defiArchiver_() {
   var l = ordre.map(function (k) { return lignes[k]; }).sort(function (a, b) { return a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : (b[5] - a[5]); });
   if (l.length) { if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 7).clearContent(); sh.getRange(2, 1, l.length, 7).setValues(l); }
   return 'Défi : ' + l.length + ' ligne(s) de scores, ' + n + ' vieille(s) semaine(s) rangée(s).';
+}
+
+// ============================================================================
+// Rattachement d'un service qui a son propre moteur (la réa) au moteur commun Cap NCHUG (moteur 2.2)
+// 1. Dans le moteur du service : menu « Préparer le rattachement à Cap NCHUG » → paquet chiffré rangé dans un onglet
+//    de sa base + clé à usage unique montrée une seule fois.
+// 2. Le Google Sheets « Base » (et le dossier Drive du service) est partagé avec le compte dédié Cap NCHUG.
+// 3. Le super-admin, dans l'Espace créateurs : « Rattacher un service existant » (lien du Sheets + clé).
+//    Les codes restent les mêmes (le sel du service le suit) ; chacun ressaisit simplement son code une fois.
+// 4. L'ancien moteur le voit et répond alors « service déplacé » : plus aucune écriture en double.
+// ============================================================================
+var RATTACHEMENT = { onglet: 'Rattachement Cap NCHUG', exclus: { SEL: 1, SECRET: 1, MODE: 1, CLASSEUR_ID: 1, RATTACHEMENT: 1, DEPLACE: 1, CODE_SUPER: 1, CREATEURS: 1, DOSSIER_SERVICES: 1, DEFI_MODE: 1, DEFI_DEBUT: 1 } };
+function cleUnique_() { // 20 caractères tirés d'identifiants aléatoires de Google
+  var a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', h = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''), s = '';
+  for (var i = 0; i < 20; i++) s += a.charAt(parseInt(h.substr(i * 3, 3), 16) % a.length);
+  return s.replace(/(.{5})(?=.)/g, '$1-');
+}
+function fluxOctets_(cle, n) { var o = []; for (var i = 0; o.length < n; i++) o = o.concat(Utilities.computeHmacSha256Signature('flux|' + i, cle)); return o; }
+function chiffrer_(texte, cle) {
+  var b = Utilities.newBlob(texte).getBytes(), f = fluxOctets_(cle, b.length), c = b.map(function (x, i) { return ((x ^ f[i]) << 24) >> 24; });
+  var corps = Utilities.base64Encode(c);
+  return 'v1.' + corps + '.' + Utilities.base64Encode(Utilities.computeHmacSha256Signature('mac|' + corps, cle));
+}
+function dechiffrer_(paquet, cle) {
+  var p = String(paquet || '').split('.'); if (p.length !== 3 || p[0] !== 'v1') throw erreurApp_('paquet_absent');
+  if (!egaliteConstante_(Utilities.base64Encode(Utilities.computeHmacSha256Signature('mac|' + p[1], cle)), p[2])) throw erreurApp_('cle_incorrecte');
+  var c = Utilities.base64Decode(p[1]), f = fluxOctets_(cle, c.length);
+  return Utilities.newBlob(c.map(function (x, i) { return ((x ^ f[i]) << 24) >> 24; })).getDataAsString();
+}
+function normaliserCle_(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/(.{5})(?=.)/g, '$1-'); }
+
+/* ----- Côté service autonome (la réa) ----- */
+function menuPreparerRattachement() {
+  if (modeAnnuaire_()) return alerte_('Ceci se fait dans le moteur du service à rattacher, pas dans l\'annuaire.');
+  var ui = SpreadsheetApp.getUi();
+  if (ui.alert('Rattacher ce service à Cap NCHUG', 'Un paquet chiffré (codes d\'accès chiffrés, référents, réglages) va être préparé pour le moteur commun Cap NCHUG. Rien ne change tant que le super-administrateur ne l\'a pas importé.\n\nContinuer ?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var p = PropertiesService.getScriptProperties(), tout = p.getProperties(), o = {};
+  Object.keys(tout).forEach(function (k) { if (!RATTACHEMENT.exclus[k] && !/^DEFI_[SCN]\|/.test(k) && k.indexOf('s:') !== 0) o[k] = tout[k]; });
+  var ss = classeur_(), params = lireParametres_(ss), cle = cleUnique_();
+  var paquet = chiffrer_(JSON.stringify({ v: 1, nom: String(params['Nom du service'] || ''), sel: tout.SEL, props: o, prepare: new Date().toISOString() }), cle);
+  var sh = ss.getSheetByName(RATTACHEMENT.onglet) || ss.insertSheet(RATTACHEMENT.onglet);
+  sh.clear();
+  sh.getRange(1, 1, 1, 3).setValues([['Paquet chiffré (ne pas modifier)', 'Importé par Cap NCHUG le', 'Aide']]).setFontWeight('bold');
+  sh.getRange(2, 1, 1, 3).setValues([[paquet, '', 'Préparé le ' + formaterDate_(new Date()) + '. Illisible sans la clé à usage unique. Effacé automatiquement après l\'import.']]);
+  try { sh.protect().setDescription('Rattachement Cap NCHUG').setWarningOnly(true); } catch (e) { /* ignoré */ }
+  p.setProperty('RATTACHEMENT', new Date().toISOString()); p.deleteProperty('DEPLACE'); CacheService.getScriptCache().remove('deplace');
+  ui.alert('Paquet prêt', 'Clé à usage unique (notez-la, elle ne sera plus affichée) :\n\n' + cle +
+    '\n\nÀ faire maintenant :\n1. Partagez ce Google Sheets, et le dossier Drive qui contient le plan et les dossiers privés, avec le compte dédié Cap NCHUG (rôle : éditeur).\n2. Donnez au super-administrateur le lien de ce Google Sheets et la clé.\n3. Il fait « Rattacher un service existant » dans l\'Espace créateurs.\n\nCe moteur continue de fonctionner jusqu\'à l\'import.', ui.ButtonSet.OK);
+}
+function menuAnnulerRattachement() {
+  var p = PropertiesService.getScriptProperties(); p.deleteProperty('RATTACHEMENT'); p.deleteProperty('DEPLACE'); CacheService.getScriptCache().remove('deplace');
+  var sh = classeurLie_().getSheetByName(RATTACHEMENT.onglet); if (sh) sh.getRange(2, 1, 1, 2).clearContent();
+  alerte_('Rattachement annulé : ce moteur sert de nouveau le service.\n\nSi le service a déjà été rattaché dans Cap NCHUG, demandez au super-administrateur de le fermer là-bas pour éviter deux moteurs actifs.');
+}
+/* Appelé à chaque requête du moteur autonome : une fois le paquet importé, ce moteur s'efface. */
+function serviceDeplace_() {
+  if (modeAnnuaire_()) return false;
+  var p = PROPS_; if (p.getProperty('DEPLACE') === '1') return true;
+  if (!p.getProperty('RATTACHEMENT')) return false;
+  var c = CacheService.getScriptCache(); if (c.get('deplace') === 'non') return false;
+  var sh = classeurLie_().getSheetByName(RATTACHEMENT.onglet), fait = !!(sh && String(sh.getRange(2, 2).getValue() || '').trim());
+  if (fait) { p.setProperty('DEPLACE', '1'); return true; }
+  c.put('deplace', 'non', 120); return false;
+}
+
+/* ----- Côté annuaire (moteur commun) ----- */
+function idDepuisLien_(t) { var m = /\/d\/([A-Za-z0-9_-]{20,})/.exec(String(t || '')); return m ? m[1] : (/^[A-Za-z0-9_-]{20,}$/.test(String(t || '').trim()) ? String(t).trim() : ''); }
+function serviceRattacher_(session, d) {
+  exigerSuper_(session); d = d || {};
+  var ssId = idDepuisLien_(d.sheets), cle = normaliserCle_(d.cle), nom = nettoyerTexte_(d.nom, 60), id = idService_(d.id || nom);
+  if (!ssId || cle.length < 23 || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    viderCacheServices_();
+    if (lireServices_().some(function (s) { return s.id === id || s.ss === ssId; })) throw erreurApp_('service_existe');
+    var ss; try { ss = SpreadsheetApp.openById(ssId); } catch (e) { throw erreurApp_('acces_refuse'); }
+    var sh = ss.getSheetByName(RATTACHEMENT.onglet); if (!sh) throw erreurApp_('paquet_absent');
+    if (String(sh.getRange(2, 2).getValue() || '').trim()) throw erreurApp_('deja_rattache');
+    var x = JSON.parse(dechiffrer_(sh.getRange(2, 1).getValue(), cle));
+    if (!x || x.v !== 1 || !x.sel || !x.props) throw erreurApp_('paquet_absent');
+    nom = nom || nettoyerTexte_(x.nom, 60) || id;
+    // Réglages du service (codes chiffrés, référents, compteurs, GPS, repères du plan) rangés sous son identifiant
+    var o = {}; Object.keys(x.props).forEach(function (k) { if (!RATTACHEMENT.exclus[k] && !CLES_GLOBALES[k]) o['s:' + id + ':' + k] = String(x.props[k]); });
+    o['s:' + id + ':SEL_SERVICE'] = x.sel; // les codes actuels restent valables
+    o['s:' + id + ':VERSION_JETONS'] = String(Number(x.props.VERSION_JETONS || 1) + 1);
+    PropertiesService.getScriptProperties().setProperties(o);
+    Object.keys(o).forEach(function (k) { CacheService.getScriptCache().remove('p|' + k); });
+    // Défi CHU : si l'annuaire n'a pas encore de questions, on reprend celles du service (avec leurs statuts) et sa vue du ciel
+    var defi = defiReprendre_(ss);
+    // Accès aux fichiers du Drive du service (plan, dossiers privés)
+    var params = lireParametres_(ss), avert = [];
+    [['Fichier du plan (ID Drive)', 'fichier', 'le plan'], ['Dossier des newsletters (ID Drive)', 'dossier', 'le dossier des newsletters'], ['Dossier des photos (ID Drive)', 'dossier', 'le dossier des photos']].forEach(function (a) {
+      var fid = String(params[a[0]] || '').trim(); if (!fid) return;
+      try { if (a[1] === 'fichier') DriveApp.getFileById(fid).getName(); else DriveApp.getFolderById(fid).getName(); }
+      catch (e) { avert.push('Cap NCHUG ne peut pas ouvrir ' + a[2] + ' : partagez-le avec le compte dédié (éditeur).'); }
+    });
+    sortirService_();
+    annuaireClasseur_().getSheetByName(ANNUAIRE.onglet).appendRow([id, nom, ssId, true, new Date(), session.n + ' (rattaché)']);
+    viderCacheServices_();
+    // Le paquet est effacé ; la date d'import fait basculer l'ancien moteur en « service déplacé »
+    sh.getRange(2, 1, 1, 2).setValues([['(importé, effacé)', new Date()]]);
+    return { ok: true, service: { id: id, nom: nom }, avertissements: avert, defi: defi };
+  } finally { sortirService_(); verrou.releaseLock(); }
+}
+function defiReprendre_(ssService) {
+  var dest = defiOnglet_(DEFI.ongletQ); if (dest.getLastRow() > 1) return 'L\'annuaire avait déjà ses questions du Défi : celles du service ne sont pas reprises.';
+  var r = [];
+  [[DEFI.ongletQ, DEFI.entetesQ.length], [DEFI.ongletSite, DEFI.entetesSite.length]].forEach(function (o) {
+    var src = ssService.getSheetByName(o[0]); if (!src || src.getLastRow() < 2) return;
+    var v = src.getRange(2, 1, src.getLastRow() - 1, o[1]).getValues(), sh = defiOnglet_(o[0]);
+    if (o[0] === DEFI.ongletSite && sh.getLastRow() > 1) return;
+    sh.getRange(2, 1, v.length, o[1]).setValues(v); r.push(v.length + (o[0] === DEFI.ongletQ ? ' questions' : ' éléments de la vue du ciel'));
+  });
+  defiViderCache_();
+  return r.length ? 'Défi CHU repris : ' + r.join(', ') + '.' : '';
 }

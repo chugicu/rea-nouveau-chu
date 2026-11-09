@@ -9,7 +9,7 @@
   var DEMO = MULTI ? !cfg.CAP_URL : !cfg.API_URL;
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
-  var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1,
+  var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1, service_rattacher: 1,
     defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1 }; // gestion du Défi CHU : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
@@ -86,6 +86,14 @@
       if (d.donnees && d.donnees.nom) sv.nom = d.donnees.nom; if (d.donnees && d.donnees.actif != null) sv.actif = d.donnees.actif; demoEcrire('services', l2); return etat();
     }
     if (action === 'service_code') return { ok: true, code: d.quoi === 'admin' ? 'ADMDEMO' : 'DEMO' };
+    if (action === 'service_rattacher') {
+      if (role !== 'super') throw new ErreurApi('non_autorise');
+      var dr = d.donnees || {}; if (!/\/d\/[A-Za-z0-9_-]{20,}/.test(dr.sheets || '') && !/^[A-Za-z0-9_-]{20,}$/.test(dr.sheets || '')) throw new ErreurApi('requete_invalide');
+      if (String(dr.cle || '').replace(/[^A-Za-z0-9]/g, '').length !== 20) throw new ErreurApi('cle_incorrecte');
+      var lr = demoServices(), idr = String(dr.id || 'rea'); if (lr.some(function (x) { return x.id === idr; })) throw new ErreurApi('service_existe');
+      lr.push({ id: idr, nom: dr.nom || idr, actif: true, cree: new Date().toISOString().slice(0, 10), par: 'Super-administrateur (rattaché)' }); demoEcrire('services', lr);
+      return { ok: true, service: { id: idr, nom: dr.nom || idr }, avertissements: [], defi: '' };
+    }
     if (action === 'createur') {
       if (role !== 'super') throw new ErreurApi('non_autorise');
       var x = crea.filter(function (c) { return c.nom === d.nom; })[0];

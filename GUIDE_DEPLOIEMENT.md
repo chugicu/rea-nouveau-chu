@@ -389,6 +389,28 @@ Avec Cap NCHUG, la gestion du Défi se fait depuis l'Espace créateurs (bouton �
 
 **Vue du ciel (Parcours) :** dans la gestion, touchez un bâtiment, une entrée (N°) ou un parking pour changer son code, sa couleur (ou « sans couleur »), le bâtiment desservi, sa taille ; faites-le glisser pour le déplacer ; « + Entrée (N°) » pour ajouter un numéro de la rue Caraïbes. Le Parcours (vue du ciel → rue → ascenseur → arrivée) utilise les questions de type « ascenseur ». Une mission dont le bâtiment n'a pas d'entrée connue (ex. B40) passe directement à l'ascenseur.
 
+## Partie R – Rattacher la réa au moteur commun Cap NCHUG (moteur 2.2.0)
+
+La réa garde son Google Sheets « Base », ses fichiers Drive, ses codes et ses référents : seul le moteur change. Ensuite elle a le même Défi CHU que les autres services (classement inter-services). À faire une fois, quand l'annuaire Cap NCHUG est installé (partie P).
+
+**Avant :** collez `Code.gs` 2.2.0 dans le projet de la réa **et** dans celui de l'annuaire, puis « Nouvelle version » des deux déploiements.
+
+1. **Dans le Google Sheets de la réa** : menu « Réa – Administration › Préparer le rattachement à Cap NCHUG ». Une clé à usage unique s'affiche une seule fois (notez-la). Un paquet chiffré est rangé dans l'onglet « Rattachement Cap NCHUG » (illisible sans la clé). La réa continue de fonctionner normalement.
+2. **Partage** (depuis le compte de la réa) : partagez avec le compte dédié Cap NCHUG, en **éditeur**, le Google Sheets « Base » et le dossier Drive qui contient le plan (`plan-donnees.json`) et les dossiers privés (newsletters, photos).
+3. **Dans l'appli, Espace créateurs** (code super-administrateur) : « Rattacher un service existant » : lien du Google Sheets, identifiant `rea`, nom, clé. En 20 secondes, la réa apparaît dans la liste des services, avec son lien et son QR code. Si un fichier Drive n'est pas accessible, un avertissement le dit : complétez le partage, rien d'autre à refaire.
+4. **Sur GitHub, `docs/js/config.js`** : remplacez le bloc par le second modèle indiqué en haut du fichier (`CAP_URL` + `SERVICE_HISTORIQUE: 'rea'`). Je peux le faire dès que vous me donnez l'adresse /exec de l'annuaire.
+
+**Ce qui change pour les agents :** rien à installer. À la mise à jour de l'appli, les téléphones qui avaient déjà l'appli de la réa arrivent directement sur la réa ; chacun ressaisit **son code habituel**, une seule fois (codes admin, agents et référents inchangés). Badges, records et réservations restent sur le téléphone.
+
+**Ce qui est repris :** codes (chiffrés), référents, compteurs du quiz et des jeux, calage GPS, repères du plan ; toutes les données du Google Sheets (plan modifié, visites, newsletters, quiz, jeux, souvenirs). Pour le Défi CHU : si l'annuaire n'a pas encore de questions, celles de la réa (avec leurs statuts) et sa vue du ciel sont reprises ; les scores de test ne le sont pas.
+
+**L'ancien moteur** voit l'import et répond ensuite « service déplacé » (plus d'écriture en double). Retour arrière possible : « Annuler le rattachement à Cap NCHUG » dans le menu de la réa, et fermer la réa dans l'Espace créateurs.
+
+**Points d'attention :**
+- Les fichiers restent la propriété du compte de la réa : ne supprimez pas ce compte et ne retirez pas le partage.
+- Les quotas du compte dédié couvrent désormais la réa aussi (voir l'estimation de la partie P).
+- Pendant les quelques minutes entre l'étape 3 et l'étape 4, l'appli encore réglée sur l'ancien moteur affiche « service déplacé » : faites les deux étapes à la suite, hors des heures de pointe.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

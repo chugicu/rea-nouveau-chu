@@ -91,6 +91,10 @@
     try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignoré */ }
     return m[1];
   }
+  function historique() { // config.js : SERVICE_HISTORIQUE = 'rea'
+    var id = (window.REA_CONFIG || {}).SERVICE_HISTORIQUE; if (!id) return null;
+    try { return Object.keys(localStorage).some(function (k) { return /^rea\./.test(k) && !/^rea\.(demo|services-liste|cap-session)/.test(k); }) ? id : null; } catch (e) { return null; }
+  }
   function demarrer(suite) { // suite() : écran normal de l'appli (accueil ou connexion)
     init();
     var id = lireLien(), cour = serviceCourant();
@@ -101,6 +105,14 @@
         if (!s) return ecranServices('Ce lien ne correspond à aucun service ouvert. Choisissez votre service.');
         A.stock.effacer(A.CLE.session); choisir(s); A.ecranConnexion();
       }).catch(function () { ecranServices('Pas de connexion : impossible d\'ouvrir ce lien pour le moment.'); });
+    }
+    if (!cour && historique()) { // téléphone qui utilisait déjà l'appli de la réa avant Cap NCHUG : on garde son service
+      A.afficher(h('div', { class: 'page' }, h('div', { class: 'squelette', style: 'height:240px' })));
+      return listeServices().then(function (l) {
+        var s = l.filter(function (x) { return x.id === historique(); })[0];
+        if (!s) return ecranServices();
+        A.stock.effacer(A.CLE.session); choisir(s); A.ecranConnexion('Votre appli fait maintenant partie de Cap NCHUG : saisissez votre code habituel.');
+      }).catch(function () { ecranServices(); });
     }
     if (!cour) return ecranServices();
     Api.choisirService(cour);
@@ -184,8 +196,32 @@
       window.ReaDefiGestion ? h('section', { class: 'section defi-carte' }, h('div', { class: 'section__tete' }, h('h2', { text: '🏆 Défi CHU' })),
         h('p', { class: 'section__note', text: 'Questions communes à tous les services : phase de test, validation, ajout de questions, vue du ciel du Parcours.' }),
         h('button', { type: 'button', class: 'bouton', onclick: function () { window.ReaDefiGestion.ouvrir({ jeton: sess.jeton, role: sess.libelle || '', retour: function (m) { annuaire(sess, m || null); } }); }, text: 'Gérer le Défi CHU' })) : null,
-      creer, services, createurs,
+      creer, services, e.role === 'super' ? rattacher(sess) : null, createurs,
       h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { ecrire(CLE_CAP, null); ecranServices(); }, text: 'Quitter l\'espace créateurs' })].filter(Boolean));
+  }
+  /* Rattacher un service qui a son propre moteur (la réa) : il garde ses données, ses codes et son Google Sheets */
+  function rattacher(sess) {
+    var lien = h('input', { type: 'url', placeholder: 'https://docs.google.com/spreadsheets/d/…', 'aria-label': 'Lien du Google Sheets du service' });
+    var ident = h('input', { type: 'text', maxlength: '24', value: 'rea', 'aria-label': 'Identifiant du service' });
+    var nom = h('input', { type: 'text', maxlength: '60', value: 'Réanimation – USC', 'aria-label': 'Nom du service' });
+    var cle = h('input', { type: 'text', maxlength: '30', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', 'aria-label': 'Clé à usage unique' });
+    var err = h('p', { class: 'message-erreur', role: 'alert' }), b = h('button', { class: 'bouton', type: 'submit', text: 'Rattacher le service' });
+    var form = h('form', { class: 'form-carte', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); err.textContent = ''; b.disabled = true; b.textContent = 'Rattachement… (environ 20 s)';
+      Api.appeler('service_rattacher', { jeton: sess.jeton, donnees: { sheets: lien.value.trim(), id: ident.value.trim(), nom: nom.value.trim(), cle: cle.value } }).then(function (r) {
+        annuaire(sess, null, h('div', { class: 'cap-cree' },
+          h('h3', { text: '✅ « ' + r.service.nom + ' » a rejoint Cap NCHUG' }),
+          h('p', { class: 'section__note', text: 'Les codes ne changent pas : chacun ressaisit simplement son code une fois. L\'ancien moteur du service répond désormais « service déplacé ».' }),
+          r.defi ? h('p', { class: 'section__note', text: r.defi }) : null,
+          (r.avertissements || []).map(function (a) { return h('p', { class: 'message-erreur', text: '⚠ ' + a }); }),
+          blocLien(r.service)));
+      }).catch(function (x) { b.disabled = false; b.textContent = 'Rattacher le service'; if (A.ERREURS_SESSION.indexOf(x && x.code) >= 0) { ecrire(CLE_CAP, null); return ecranAnnuaire(erreurDe(x)); } err.textContent = erreurDe(x); });
+    } },
+      h('p', { class: 'section__note', text: 'Pour un service qui a déjà son propre moteur (la réa). Dans son Google Sheets : menu « Préparer le rattachement à Cap NCHUG », puis partagez ce Google Sheets et son dossier Drive avec le compte dédié (éditeur).' }),
+      h('div', { class: 'champ' }, h('label', { text: 'Lien du Google Sheets « Base » du service' }), lien),
+      h('div', { class: 'grille-2' }, h('div', { class: 'champ' }, h('label', { text: 'Identifiant' }), ident), h('div', { class: 'champ' }, h('label', { text: 'Nom' }), nom)),
+      h('div', { class: 'champ' }, h('label', { text: 'Clé à usage unique' }), cle), err, b);
+    return h('details', { class: 'section defi-ajout' }, h('summary', { text: 'Rattacher un service existant (la réa)' }), form);
   }
   function blocLien(s) {
     var url = lienService(s.id), boite = h('div', { class: 'cap-qr', 'aria-label': 'QR code du service' });

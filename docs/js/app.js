@@ -92,6 +92,11 @@
   var MESSAGES = {
     code_manquant: 'Saisissez votre code.',
     service_inconnu: 'Ce service n\'est plus ouvert dans Cap NCHUG. Choisissez votre service.',
+    service_deplace: 'Votre service a rejoint Cap NCHUG : rechargez la page (ou touchez « Mettre à jour ») puis ressaisissez votre code habituel.',
+    cle_incorrecte: 'Clé incorrecte : vérifiez la clé donnée par le moteur du service.',
+    acces_refuse: 'Cap NCHUG ne peut pas ouvrir ce Google Sheets : partagez-le d\'abord avec le compte dédié (éditeur).',
+    paquet_absent: 'Aucun paquet de rattachement dans ce Google Sheets : lancez d\'abord « Préparer le rattachement à Cap NCHUG » dans son menu.',
+    deja_rattache: 'Ce service a déjà été rattaché à Cap NCHUG.',
     action_inconnue: 'Cette fonction attend la mise à jour du moteur (Code.gs) par l\'administrateur.',
     defi_perime: 'Un nouveau défi a commencé : rechargez le défi du jour.',
     question_invalide: 'Question incomplète.',
