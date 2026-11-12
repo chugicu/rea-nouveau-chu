@@ -403,7 +403,7 @@
 
 
   /* ---------- Plans du CHU : plan virtuel (vue du ciel → rue Caraïbes → ascenseur → étage), sans question ni score ----------
-     Recherche d'un service (sans accents) et liste de A à Z, sur l'écran « Plans du CHU » et à chaque étape ;
+     En haut de chaque étape : recherche d'un service (sans accents) puis liste déroulante des services de A à Z ;
      un résultat ouvre une fiche (bâtiment, niveau, entrée) avec « Me guider » : bâtiment, porte puis bouton d'ascenseur allumés. */
   var PLAN = null; // dernières données du plan (defi_plan), gardées le temps de la session
   function chargerPlan() { return appeler('defi_plan').then(function (d) { PLAN = d; return d; }); }
@@ -424,15 +424,16 @@
     var vus = {}; (d.etages || []).forEach(function (x) { vus[x.batiment] = 1; });
     return d.site.batiments.filter(function (b) { return vus[b.code] || portesBat(d, b.code).length; });
   }
-  // Barre de recherche + bouton A–Z ; choisir(élément) reçoit { nom, bat, niv } (service) ou { bat } (bâtiment)
-  function barreRecherche(d, choisir, versListe) {
-    var champ = h('input', { type: 'search', class: 'plan__recherche', placeholder: d ? 'Rechercher un service…' : 'Chargement des services…', 'aria-label': 'Rechercher un service', autocomplete: 'off', disabled: !d });
+  // En haut du Plan virtuel : ligne 1 la recherche, ligne 2 la liste déroulante des services de A à Z.
+  // choisir(élément) reçoit { nom, bat, niv } (service) ou { bat } (bâtiment)
+  function barreRecherche(d, choisir) {
+    var tous = servicesTous(d);
+    var champ = h('input', { type: 'search', class: 'plan__recherche', placeholder: 'Rechercher un service…', 'aria-label': 'Rechercher un service', autocomplete: 'off' });
     var res = h('ul', { class: 'plan__resultats', role: 'listbox', hidden: true });
-    var az = h('button', { type: 'button', class: 'bouton bouton--discret plan-chu-az', 'aria-label': 'Liste des services de A à Z', disabled: !d, onclick: function () { versListe(); }, text: 'A–Z' });
     champ.addEventListener('input', function () {
       var q = normal(champ.value);
       if (!q) { res.hidden = true; return; }
-      var l = servicesTous(d).filter(function (x) { return normal(x.nom).indexOf(q) >= 0; })
+      var l = tous.filter(function (x) { return normal(x.nom).indexOf(q) >= 0; })
         .sort(function (a, b) { return (normal(a.nom).indexOf(q) === 0 ? 0 : 1) - (normal(b.nom).indexOf(q) === 0 ? 0 : 1); });
       var bats = batimentsAvecEtages(d).filter(function (b) { return normal(b.code).replace(/ /g, '').indexOf(q.replace(/ /g, '')) === 0 || (b.nom && normal(b.nom).indexOf(q) >= 0); });
       var items = bats.map(function (b) { return { bat: b.code, titre: nomBatiment(d, b.code), sous: 'Bâtiment · ' + texteEntree(d, b.code) }; })
@@ -440,70 +441,39 @@
       remplir.apply(null, [res].concat(items.length ? items.map(function (x) {
         return h('li', { role: 'option' }, h('button', { type: 'button', onclick: function () { champ.value = ''; res.hidden = true; choisir(x.s || { bat: x.bat }); } },
           h('span', { class: 'plan__num', text: x.s ? '🏥' : '🏢' }), h('span', null, h('b', { text: x.titre }), h('small', { text: x.sous }))));
-      }) : [h('li', { class: 'plan__vide' }, 'Aucun service ne correspond. ', h('button', { type: 'button', class: 'lien-discret', onclick: function () { versListe(); }, text: 'Voir la liste de A à Z' }))]));
+      }) : [h('li', { class: 'plan__vide', text: 'Aucun service ne correspond : choisissez dans la liste ci-dessous.' })]));
       res.hidden = false;
     });
     champ.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { champ.value = ''; res.hidden = true; } });
-    return h('div', { class: 'plan-chu-cherche' }, h('div', { class: 'plan__cherche' }, champ, res), az);
+    var liste = h('select', { class: 'plan-chu-liste', 'aria-label': 'Choisir un service dans la liste (de A à Z)', disabled: !tous.length },
+      h('option', { value: '', text: tous.length ? 'Ou choisissez un service (de A à Z)…' : 'Aucun service encore renseigné' }),
+      tous.map(function (x, k) { return h('option', { value: String(k), text: x.nom + ' — ' + x.bat + ' · niv. ' + x.niv }); }));
+    liste.addEventListener('change', function () { var x = tous[Number(liste.value)]; if (liste.value !== '' && x) choisir(x); });
+    return h('div', { class: 'plan-chu-cherche' }, h('div', { class: 'plan__cherche' }, champ, res), liste);
   }
 
   var SORTIE_PLANS = null; // écran d'où l'on est venu (accueil du service, Infos générales…)
   function plansChu(depuis) {
     init(); if (depuis) SORTIE_PLANS = depuis; var retour = SORTIE_PLANS || function () { A.ecranAccueil(); };
     A.definirEcran(null);
-    var ici = function () { plansChu(); };
-    var zone = h('div');
-    function dessiner(d, erreur) {
-      remplir(zone, erreur ? h('p', { class: 'vide', text: 'La recherche des services fonctionne en ligne : vérifiez la connexion.' })
-        : barreRecherche(d, function (x) { fiche(d, x, ici); }, function () { listeAZ(d, ici); }));
-    }
-    dessiner(PLAN);
-    page('Plans du CHU', null, h('div', null, zone, h('div', { class: 'quiz-themes' },
-      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🗺️', onclick: function () { RETOUR = ici; planVirtuel(); } },
-        h('b', { text: 'Plan virtuel' }), h('span', { text: 'Promenez-vous librement : vue du ciel, entrées de la rue Caraïbes, ascenseur et services de chaque étage' })),
-      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🔤', onclick: function () { if (PLAN) listeAZ(PLAN, ici); else chargementPuis(function (d) { listeAZ(d, ici); }, ici); } },
-        h('b', { text: 'Services A–Z' }), h('span', { text: 'Choisissez un service dans la liste pour savoir où il se trouve et vous y laisser guider' })))), retour);
+    page('Plans du CHU', null, h('div', { class: 'quiz-themes' },
+      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🗺️', onclick: function () { RETOUR = function () { plansChu(); }; planVirtuel(); } },
+        h('b', { text: 'Plan virtuel' }), h('span', { text: 'Recherchez un service ou promenez-vous librement : vue du ciel, entrées de la rue Caraïbes, ascenseur et services de chaque étage' }))), retour);
     RETOUR = retour;
-    chargerPlan().then(function (d) { if (zone.isConnected) dessiner(d); }).catch(function (e) { if (erreurSession(e)) return; if (zone.isConnected && !PLAN) dessiner(null, true); });
-  }
-  function chargementPuis(suite, retour) {
-    chargement('Plans du CHU', retour);
-    chargerPlan().then(suite).catch(function (e) { echec('Plans du CHU', e, function () { chargementPuis(suite, retour); }, retour); });
-  }
-  // Liste de tous les services, par ordre alphabétique, groupés par initiale
-  function listeAZ(d, retour) {
-    var l = servicesTous(d), groupes = [], cle = null;
-    l.forEach(function (x) {
-      var c = normal(x.nom).charAt(0).toUpperCase() || '#'; if (/[0-9]/.test(c)) c = '#';
-      if (c !== cle) { cle = c; groupes.push({ c: c, l: [] }); }
-      groupes[groupes.length - 1].l.push(x);
-    });
-    var moi = function () { listeAZ(d, retour); };
-    page('Services A–Z', 'Plans du CHU', h('div', null,
-      barreRecherche(d, function (x) { fiche(d, x, moi); }, moi),
-      l.length ? h('nav', { class: 'plan-chu-lettres', 'aria-label': 'Aller à la lettre' }, groupes.map(function (g) {
-        return h('a', { href: '#az-' + g.c, onclick: function (ev) { ev.preventDefault(); var t = document.getElementById('az-' + g.c); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, text: g.c });
-      })) : null,
-      l.length ? h('div', { class: 'plan-chu-az-liste' }, groupes.map(function (g) {
-        return h('section', null, h('h2', { id: 'az-' + g.c, class: 'plan-chu-lettre', text: g.c }),
-          h('ul', { class: 'plan-chu-services plan-chu-services--choix' }, g.l.map(function (x) {
-            return h('li', null, h('button', { type: 'button', onclick: function () { fiche(d, x, moi); } }, h('b', { text: x.nom }), h('small', { text: x.bat + ' · ' + libNiveau(x.niv) })));
-          })));
-      })) : h('p', { class: 'vide', text: 'Aucun service n\'est encore renseigné.' })), retour);
   }
   // Fiche d'un service (ou d'un bâtiment) : où il se trouve, comment y aller
-  function fiche(d, x, retour) {
+  function fiche(d, x, retour, guider) { // guider(cible) : lance le guidage dans le Plan virtuel en cours
     var bat = x.bat, voisins;
     if (!x.nom) { // bâtiment : ses étages renseignés
       var niv = (d.etages || []).filter(function (y) { return y.batiment === bat; }).sort(function (a, b) { return Number(b.niveau) - Number(a.niveau); });
       page('Plan virtuel', 'Plans du CHU', h('div', null,
         h('div', { class: 'defi-mission' }, h('b', { text: nomBatiment(d, bat) }), h('span', { text: 'Entrée : ' + texteEntree(d, bat) })),
         niv.length ? h('ul', { class: 'plan-chu-services plan-chu-services--choix' }, niv.map(function (y) {
-          return h('li', null, h('button', { type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat, niv: String(y.niveau) }); } },
+          return h('li', null, h('button', { type: 'button', onclick: function () { guider({ bat: bat, niv: String(y.niveau) }); } },
             h('b', { text: 'Niveau ' + y.niveau + (String(y.niveau) === '0' ? ' (rue Caraïbes)' : '') }), h('small', { text: (y.services || []).join(' · ') })));
         })) : h('p', { class: 'vide', text: 'Aucun service n\'est encore renseigné pour le ' + bat + '.' }),
         h('div', { class: 'quiz-actions' },
-          h('button', { class: 'bouton', type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat }); }, text: '🧭 Me guider jusqu\'au ' + bat }),
+          h('button', { class: 'bouton', type: 'button', onclick: function () { guider({ bat: bat }); }, text: '🧭 Me guider jusqu\'au ' + bat }),
           h('button', { class: 'bouton bouton--discret', type: 'button', onclick: retour, text: 'Retour' }))), retour);
       return;
     }
@@ -517,7 +487,7 @@
         h('dt', { text: 'Entrée' }), h('dd', { text: texteEntree(d, bat) })),
       voisins.length ? h('p', { class: 'plan-chu-voisins' }, h('b', { text: 'Aussi à cet étage : ' }), voisins.join(' · ')) : null,
       h('div', { class: 'quiz-actions' },
-        h('button', { class: 'bouton', type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat, niv: x.niv, service: x.nom }); }, text: '🧭 Me guider' }),
+        h('button', { class: 'bouton', type: 'button', onclick: function () { guider({ bat: bat, niv: x.niv, service: x.nom }); }, text: '🧭 Me guider' }),
         h('button', { class: 'bouton bouton--discret', type: 'button', onclick: retour, text: 'Retour' }))), retour);
   }
   function planVirtuel() {
@@ -546,7 +516,7 @@
       puces.replaceChildren.apply(puces, ETAPES_PLAN.map(function (t, k) { return h('span', { class: 'defi-puce' + (k === etape ? ' defi-puce--on' : ''), text: t }); }));
       aide.classList.remove('defi-aide--ko');
       var reprendre = etapeCourante;
-      var recherche = barreRecherche(d, function (x) { fiche(d, x, function () { RETOUR = sortie; reprendre(); }); }, function () { listeAZ(d, function () { RETOUR = sortie; reprendre(); }); });
+      var recherche = barreRecherche(d, function (x) { fiche(d, x, function () { RETOUR = sortie; reprendre(); }, function (g) { RETOUR = sortie; guide = g; ciel(); }); });
       page('Plan virtuel', bat ? nomBatiment(d, bat) : 'Plans du CHU', h('div', null, recherche, bulle, scene, aide, boutons, puces), sortie);
       RETOUR = sortie;
     }

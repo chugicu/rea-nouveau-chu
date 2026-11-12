@@ -64,7 +64,7 @@
     // c : couleur de la carte ; e : pictogramme ; t : inclinaison (degrés)
     { id: 'plan', c: '#223b80', e: '🧭', t: 2, nom: 'Plan du service', desc: 'Plan interactif avec GPS, jeux pour apprendre le service', etape: 2, ouvrir: function () { ecranPlanHub(); } },
     // toujours : visible dans tous les services, même quand l'administrateur a choisi ses rubriques
-    { id: 'plan-chu', c: '#40a8df', sombre: true, e: '🏥', t: -1.5, toujours: true, nom: 'Plans du CHU', desc: 'Rechercher un service, liste de A à Z et plan virtuel (vue du ciel, rue Caraïbes, ascenseur)', ouvrir: function () { window.ReaDefi.plansChu(function () { ecranAccueil(); }); } },
+    { id: 'plan-chu', c: '#40a8df', sombre: true, e: '🏥', t: -1.5, toujours: true, nom: 'Plans du CHU', desc: 'Plan virtuel : rechercher un service, vue du ciel, rue Caraïbes, ascenseur et services de chaque étage', ouvrir: function () { window.ReaDefi.plansChu(function () { ecranAccueil(); }); } },
     { id: 'visites', c: '#048e39', e: '🚶', t: -1.5, nom: 'Visites des locaux', desc: 'Réserver un créneau pour découvrir le service', etape: 3, ouvrir: function () { ecranVisites(); } },
     { id: 'newsletter', c: '#40a8df', sombre: true, e: '📰', t: 1.5, nom: 'Newsletter', desc: 'Les lettres d\'information du service et du CHU', etape: 3, ouvrir: function () { ecranNewsletters(); } },
     { id: 'souvenirs', c: '#95c127', sombre: true, e: '📸', t: -2, nom: 'Souvenirs', desc: 'Photos et anecdotes du CHU actuel', etape: 4, ouvrir: function () { window.ReaJeux.souvenirs(); } },

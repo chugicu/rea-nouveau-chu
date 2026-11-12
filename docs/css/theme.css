@@ -532,12 +532,10 @@ polyline.dessin-trace { fill: none; }
   color: var(--texte); font: inherit; font-size: 1rem; letter-spacing: normal; text-transform: none; min-height: 44px; }
 .quiz-relire { width: 100%; margin-top: 14px; }
 /* Plans du CHU : recherche, liste A–Z, fiche et guidage */
-.plan-chu-cherche { display: flex; gap: 8px; align-items: center; margin: 6px 0 12px; }
+.plan-chu-cherche { display: grid; gap: 8px; margin: 6px 0 12px; }
+.plan-chu-liste { width: 100%; padding: 10px 14px; border: 2px solid var(--trait); border-radius: 16px; background: var(--surface); color: var(--texte); font: inherit; }
+.plan-chu-liste:focus { outline: none; border-color: var(--chu-bleu-clair); }
 .plan-chu-cherche .plan__resultats .plan__num { display: grid; place-items: center; font-size: 1.2rem; }
-.plan-chu-az { flex: none; padding: 10px 14px; font-weight: 800; }
-.plan-chu-lettres { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.plan-chu-lettres a { min-width: 34px; text-align: center; padding: 6px 4px; border-radius: 10px; background: #fff; color: #223b80; font-weight: 800; text-decoration: none; box-shadow: var(--clay-petit); }
-.plan-chu-lettre { margin: 14px 4px 6px; font-family: var(--condense); font-size: 1.3rem; color: var(--sur-ciel, #223b80); scroll-margin-top: 80px; }
 .plan-chu-services--choix li { padding: 0; }
 .plan-chu-services--choix button { display: grid; gap: 2px; width: 100%; padding: 10px 14px; border: 0; background: none; text-align: left; color: #223b80; font: inherit; cursor: pointer; border-radius: 12px; }
 .plan-chu-services--choix button:hover, .plan-chu-services--choix button:focus-visible { background: #eef6fc; }
