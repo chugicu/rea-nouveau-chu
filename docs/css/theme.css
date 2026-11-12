@@ -531,3 +531,24 @@ polyline.dessin-trace { fill: none; }
   width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid var(--trait); border-radius: 12px; background: var(--surface-2);
   color: var(--texte); font: inherit; font-size: 1rem; letter-spacing: normal; text-transform: none; min-height: 44px; }
 .quiz-relire { width: 100%; margin-top: 14px; }
+/* Plans du CHU : recherche, liste A–Z, fiche et guidage */
+.plan-chu-cherche { display: flex; gap: 8px; align-items: center; margin: 6px 0 12px; }
+.plan-chu-cherche .plan__resultats .plan__num { display: grid; place-items: center; font-size: 1.2rem; }
+.plan-chu-az { flex: none; padding: 10px 14px; font-weight: 800; }
+.plan-chu-lettres { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.plan-chu-lettres a { min-width: 34px; text-align: center; padding: 6px 4px; border-radius: 10px; background: #fff; color: #223b80; font-weight: 800; text-decoration: none; box-shadow: var(--clay-petit); }
+.plan-chu-lettre { margin: 14px 4px 6px; font-family: var(--condense); font-size: 1.3rem; color: var(--sur-ciel, #223b80); scroll-margin-top: 80px; }
+.plan-chu-services--choix li { padding: 0; }
+.plan-chu-services--choix button { display: grid; gap: 2px; width: 100%; padding: 10px 14px; border: 0; background: none; text-align: left; color: #223b80; font: inherit; cursor: pointer; border-radius: 12px; }
+.plan-chu-services--choix button:hover, .plan-chu-services--choix button:focus-visible { background: #eef6fc; }
+.plan-chu-services--choix small { font-weight: 500; color: #4a5568; }
+.plan-chu-fiche { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0 0 12px; padding: 14px 16px; background: #fff; color: #223b80; border-radius: 16px; box-shadow: var(--clay-petit); }
+.plan-chu-fiche dt { font-weight: 800; }
+.plan-chu-fiche dd { margin: 0; }
+.plan-chu-voisins { margin: 0 4px 12px; color: var(--sur-ciel-doux, #4a5568); }
+.plan-chu-services__cible { border-left-color: #95c127 !important; box-shadow: 0 0 0 4px #95c127, var(--clay-petit) !important; }
+@keyframes plan-chu-pulse { 50% { box-shadow: 0 0 0 9px rgba(149, 193, 39, .55), 0 6px 12px rgba(10, 30, 90, .2); } }
+@keyframes plan-chu-pulse-svg { 50% { stroke-width: 10; } }
+.plan-chu-guide.defi-facade, .plan-chu-guide.defi-bouton-niv { box-shadow: 0 0 0 5px #95c127, 0 6px 12px rgba(10, 30, 90, .2); animation: plan-chu-pulse 1.2s ease-in-out infinite; }
+.plan-chu-guide .defi-bat__fond { stroke: #95c127; stroke-width: 6; animation: plan-chu-pulse-svg 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .plan-chu-guide, .plan-chu-guide .defi-bat__fond { animation: none !important; } }

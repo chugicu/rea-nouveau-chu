@@ -402,45 +402,166 @@
   }
 
 
-  /* ---------- Plans du CHU : plan virtuel (vue du ciel → rue Caraïbes → ascenseur → étage), sans question ni score ---------- */
+  /* ---------- Plans du CHU : plan virtuel (vue du ciel → rue Caraïbes → ascenseur → étage), sans question ni score ----------
+     Recherche d'un service (sans accents) et liste de A à Z, sur l'écran « Plans du CHU » et à chaque étape ;
+     un résultat ouvre une fiche (bâtiment, niveau, entrée) avec « Me guider » : bâtiment, porte puis bouton d'ascenseur allumés. */
+  var PLAN = null; // dernières données du plan (defi_plan), gardées le temps de la session
+  function chargerPlan() { return appeler('defi_plan').then(function (d) { PLAN = d; return d; }); }
+  function normal(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function portesBat(d, b) { return d.site.entrees.filter(function (e) { return e.batiment === b; }); }
+  function nomBatiment(d, b) { var x = batimentDe(d.site, b); return b + (x && x.nom ? ' · ' + x.nom : ''); }
+  function libNiveau(n) { return 'niveau ' + n + (String(n) === '0' ? ' (rue Caraïbes)' : ''); }
+  function texteEntree(d, b) {
+    var p = portesBat(d, b).map(function (e) { return e.code; });
+    return p.length ? 'rue Caraïbes N° ' + p.join(' ou ') : 'pas d\'entrée sur la rue Caraïbes : ascenseur direct';
+  }
+  function servicesTous(d) { // un élément par service et par étage, par ordre alphabétique
+    var l = [];
+    (d.etages || []).forEach(function (x) { (x.services || []).forEach(function (t) { if (String(t).trim()) l.push({ nom: String(t).trim(), bat: x.batiment, niv: String(x.niveau) }); }); });
+    return l.sort(function (a, b) { return a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base', numeric: true }) || a.bat.localeCompare(b.bat, 'fr', { numeric: true }) || Number(a.niv) - Number(b.niv); });
+  }
+  function batimentsAvecEtages(d) {
+    var vus = {}; (d.etages || []).forEach(function (x) { vus[x.batiment] = 1; });
+    return d.site.batiments.filter(function (b) { return vus[b.code] || portesBat(d, b.code).length; });
+  }
+  // Barre de recherche + bouton A–Z ; choisir(élément) reçoit { nom, bat, niv } (service) ou { bat } (bâtiment)
+  function barreRecherche(d, choisir, versListe) {
+    var champ = h('input', { type: 'search', class: 'plan__recherche', placeholder: d ? 'Rechercher un service…' : 'Chargement des services…', 'aria-label': 'Rechercher un service', autocomplete: 'off', disabled: !d });
+    var res = h('ul', { class: 'plan__resultats', role: 'listbox', hidden: true });
+    var az = h('button', { type: 'button', class: 'bouton bouton--discret plan-chu-az', 'aria-label': 'Liste des services de A à Z', disabled: !d, onclick: function () { versListe(); }, text: 'A–Z' });
+    champ.addEventListener('input', function () {
+      var q = normal(champ.value);
+      if (!q) { res.hidden = true; return; }
+      var l = servicesTous(d).filter(function (x) { return normal(x.nom).indexOf(q) >= 0; })
+        .sort(function (a, b) { return (normal(a.nom).indexOf(q) === 0 ? 0 : 1) - (normal(b.nom).indexOf(q) === 0 ? 0 : 1); });
+      var bats = batimentsAvecEtages(d).filter(function (b) { return normal(b.code).replace(/ /g, '').indexOf(q.replace(/ /g, '')) === 0 || (b.nom && normal(b.nom).indexOf(q) >= 0); });
+      var items = bats.map(function (b) { return { bat: b.code, titre: nomBatiment(d, b.code), sous: 'Bâtiment · ' + texteEntree(d, b.code) }; })
+        .concat(l.map(function (x) { return { s: x, titre: x.nom, sous: x.bat + ' · ' + libNiveau(x.niv) }; })).slice(0, 8);
+      remplir.apply(null, [res].concat(items.length ? items.map(function (x) {
+        return h('li', { role: 'option' }, h('button', { type: 'button', onclick: function () { champ.value = ''; res.hidden = true; choisir(x.s || { bat: x.bat }); } },
+          h('span', { class: 'plan__num', text: x.s ? '🏥' : '🏢' }), h('span', null, h('b', { text: x.titre }), h('small', { text: x.sous }))));
+      }) : [h('li', { class: 'plan__vide' }, 'Aucun service ne correspond. ', h('button', { type: 'button', class: 'lien-discret', onclick: function () { versListe(); }, text: 'Voir la liste de A à Z' }))]));
+      res.hidden = false;
+    });
+    champ.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { champ.value = ''; res.hidden = true; } });
+    return h('div', { class: 'plan-chu-cherche' }, h('div', { class: 'plan__cherche' }, champ, res), az);
+  }
+
+  var SORTIE_PLANS = null; // écran d'où l'on est venu (accueil du service, Infos générales…)
   function plansChu(depuis) {
-    init(); if (depuis) RETOUR = depuis; var retour = RETOUR || function () { A.ecranAccueil(); };
+    init(); if (depuis) SORTIE_PLANS = depuis; var retour = SORTIE_PLANS || function () { A.ecranAccueil(); };
     A.definirEcran(null);
-    page('Plans du CHU', null, h('div', { class: 'quiz-themes' },
-      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🗺️', onclick: function () { RETOUR = function () { plansChu(); }; planVirtuel(); } },
-        h('b', { text: 'Plan virtuel' }), h('span', { text: 'Promenez-vous librement : vue du ciel, entrées de la rue Caraïbes, ascenseur et services de chaque étage' }))), retour);
+    var ici = function () { plansChu(); };
+    var zone = h('div');
+    function dessiner(d, erreur) {
+      remplir(zone, erreur ? h('p', { class: 'vide', text: 'La recherche des services fonctionne en ligne : vérifiez la connexion.' })
+        : barreRecherche(d, function (x) { fiche(d, x, ici); }, function () { listeAZ(d, ici); }));
+    }
+    dessiner(PLAN);
+    page('Plans du CHU', null, h('div', null, zone, h('div', { class: 'quiz-themes' },
+      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🗺️', onclick: function () { RETOUR = ici; planVirtuel(); } },
+        h('b', { text: 'Plan virtuel' }), h('span', { text: 'Promenez-vous librement : vue du ciel, entrées de la rue Caraïbes, ascenseur et services de chaque étage' })),
+      h('button', { type: 'button', class: 'quiz-theme', 'data-ic': '🔤', onclick: function () { if (PLAN) listeAZ(PLAN, ici); else chargementPuis(function (d) { listeAZ(d, ici); }, ici); } },
+        h('b', { text: 'Services A–Z' }), h('span', { text: 'Choisissez un service dans la liste pour savoir où il se trouve et vous y laisser guider' })))), retour);
     RETOUR = retour;
+    chargerPlan().then(function (d) { if (zone.isConnected) dessiner(d); }).catch(function (e) { if (erreurSession(e)) return; if (zone.isConnected && !PLAN) dessiner(null, true); });
+  }
+  function chargementPuis(suite, retour) {
+    chargement('Plans du CHU', retour);
+    chargerPlan().then(suite).catch(function (e) { echec('Plans du CHU', e, function () { chargementPuis(suite, retour); }, retour); });
+  }
+  // Liste de tous les services, par ordre alphabétique, groupés par initiale
+  function listeAZ(d, retour) {
+    var l = servicesTous(d), groupes = [], cle = null;
+    l.forEach(function (x) {
+      var c = normal(x.nom).charAt(0).toUpperCase() || '#'; if (/[0-9]/.test(c)) c = '#';
+      if (c !== cle) { cle = c; groupes.push({ c: c, l: [] }); }
+      groupes[groupes.length - 1].l.push(x);
+    });
+    var moi = function () { listeAZ(d, retour); };
+    page('Services A–Z', 'Plans du CHU', h('div', null,
+      barreRecherche(d, function (x) { fiche(d, x, moi); }, moi),
+      l.length ? h('nav', { class: 'plan-chu-lettres', 'aria-label': 'Aller à la lettre' }, groupes.map(function (g) {
+        return h('a', { href: '#az-' + g.c, onclick: function (ev) { ev.preventDefault(); var t = document.getElementById('az-' + g.c); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, text: g.c });
+      })) : null,
+      l.length ? h('div', { class: 'plan-chu-az-liste' }, groupes.map(function (g) {
+        return h('section', null, h('h2', { id: 'az-' + g.c, class: 'plan-chu-lettre', text: g.c }),
+          h('ul', { class: 'plan-chu-services plan-chu-services--choix' }, g.l.map(function (x) {
+            return h('li', null, h('button', { type: 'button', onclick: function () { fiche(d, x, moi); } }, h('b', { text: x.nom }), h('small', { text: x.bat + ' · ' + libNiveau(x.niv) })));
+          })));
+      })) : h('p', { class: 'vide', text: 'Aucun service n\'est encore renseigné.' })), retour);
+  }
+  // Fiche d'un service (ou d'un bâtiment) : où il se trouve, comment y aller
+  function fiche(d, x, retour) {
+    var bat = x.bat, voisins;
+    if (!x.nom) { // bâtiment : ses étages renseignés
+      var niv = (d.etages || []).filter(function (y) { return y.batiment === bat; }).sort(function (a, b) { return Number(b.niveau) - Number(a.niveau); });
+      page('Plan virtuel', 'Plans du CHU', h('div', null,
+        h('div', { class: 'defi-mission' }, h('b', { text: nomBatiment(d, bat) }), h('span', { text: 'Entrée : ' + texteEntree(d, bat) })),
+        niv.length ? h('ul', { class: 'plan-chu-services plan-chu-services--choix' }, niv.map(function (y) {
+          return h('li', null, h('button', { type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat, niv: String(y.niveau) }); } },
+            h('b', { text: 'Niveau ' + y.niveau + (String(y.niveau) === '0' ? ' (rue Caraïbes)' : '') }), h('small', { text: (y.services || []).join(' · ') })));
+        })) : h('p', { class: 'vide', text: 'Aucun service n\'est encore renseigné pour le ' + bat + '.' }),
+        h('div', { class: 'quiz-actions' },
+          h('button', { class: 'bouton', type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat }); }, text: '🧭 Me guider jusqu\'au ' + bat }),
+          h('button', { class: 'bouton bouton--discret', type: 'button', onclick: retour, text: 'Retour' }))), retour);
+      return;
+    }
+    voisins = ((d.etages || []).filter(function (y) { return y.batiment === bat && String(y.niveau) === x.niv; })[0] || { services: [] }).services
+      .filter(function (t) { return String(t).trim() !== x.nom; });
+    page('Plan virtuel', 'Plans du CHU', h('div', null,
+      h('div', { class: 'defi-mission' }, h('b', { text: x.nom }), h('span', { text: 'Où se trouve ce service' })),
+      h('dl', { class: 'plan-chu-fiche' },
+        h('dt', { text: 'Bâtiment' }), h('dd', { text: nomBatiment(d, bat) }),
+        h('dt', { text: 'Niveau' }), h('dd', { text: x.niv + (x.niv === '0' ? ' (rue Caraïbes)' : '') }),
+        h('dt', { text: 'Entrée' }), h('dd', { text: texteEntree(d, bat) })),
+      voisins.length ? h('p', { class: 'plan-chu-voisins' }, h('b', { text: 'Aussi à cet étage : ' }), voisins.join(' · ')) : null,
+      h('div', { class: 'quiz-actions' },
+        h('button', { class: 'bouton', type: 'button', onclick: function () { RETOUR = retour; promenade(d, { bat: bat, niv: x.niv, service: x.nom }); }, text: '🧭 Me guider' }),
+        h('button', { class: 'bouton bouton--discret', type: 'button', onclick: retour, text: 'Retour' }))), retour);
   }
   function planVirtuel() {
     init(); var retour = RETOUR;
     chargement('Plan virtuel', retour);
-    appeler('defi_plan').then(function (d) { RETOUR = retour; promenade(d); }).catch(function (e) { echec('Plan virtuel', e, planVirtuel, retour); });
+    chargerPlan().then(function (d) { RETOUR = retour; promenade(d); }).catch(function (e) { echec('Plan virtuel', e, planVirtuel, retour); });
   }
-  function promenade(d) {
-    var ETAPES_PLAN = ['Vue du ciel', 'Rue', 'Ascenseur', 'Étage'], etape = 0, bat = null, porte = null;
+  // guide (facultatif) : { bat, niv, service } → les éléments à toucher sont allumés ; sans guide, promenade libre
+  function promenade(d, guide) {
+    var ETAPES_PLAN = ['Vue du ciel', 'Rue', 'Ascenseur', 'Étage'], etape = 0, bat = null, porte = null, sortie = RETOUR;
     var aide = h('p', { class: 'defi-aide', 'aria-live': 'polite' }), scene = h('div', { class: 'defi-scene' }), bulle = h('div', { class: 'defi-mission' });
     var puces = h('div', { class: 'defi-puces', 'aria-hidden': 'true' }), boutons = h('div', { class: 'gps-boutons plan-chu-nav' });
-    function portesDe(b) { return d.site.entrees.filter(function (e) { return e.batiment === b; }); }
+    var etapeCourante = null;
+    function portesDe(b) { return portesBat(d, b); }
     function niveauxDe(b) {
-      return d.etages.filter(function (x) { return x.batiment === b; }).map(function (x) { return x.niveau; })
+      return d.etages.filter(function (x) { return x.batiment === b; }).map(function (x) { return String(x.niveau); })
         .sort(function (a, c) { return Number(a) - Number(c); });
     }
-    function nomBat(b) { var x = batimentDe(d.site, b); return b + (x && x.nom ? ' · ' + x.nom : ''); }
+    function cible() { return guide ? (guide.service || nomBatiment(d, guide.bat)) : ''; }
+    function signaler(t) { aide.textContent = t; aide.classList.remove('defi-aide--ko'); void aide.offsetWidth; aide.classList.add('defi-aide--ko'); }
     function nav(liste) {
+      if (guide) liste = liste.concat([['Arrêter le guidage', function () { guide = null; etapeCourante(); }]]);
       remplir.apply(null, [boutons].concat(liste.map(function (x) { return h('button', { type: 'button', class: 'bouton bouton--discret', onclick: x[1], text: x[0] }); })));
     }
     function cadre() {
       puces.replaceChildren.apply(puces, ETAPES_PLAN.map(function (t, k) { return h('span', { class: 'defi-puce' + (k === etape ? ' defi-puce--on' : ''), text: t }); }));
-      page('Plan virtuel', bat ? nomBat(bat) : 'Plans du CHU', h('div', null, bulle, scene, aide, boutons, puces), RETOUR);
+      aide.classList.remove('defi-aide--ko');
+      var reprendre = etapeCourante;
+      var recherche = barreRecherche(d, function (x) { fiche(d, x, function () { RETOUR = sortie; reprendre(); }); }, function () { listeAZ(d, function () { RETOUR = sortie; reprendre(); }); });
+      page('Plan virtuel', bat ? nomBatiment(d, bat) : 'Plans du CHU', h('div', null, recherche, bulle, scene, aide, boutons, puces), sortie);
+      RETOUR = sortie;
     }
-    // 1. Vue du ciel : on entre dans le bâtiment de son choix
+    // 1. Vue du ciel : on entre dans le bâtiment de son choix (ou dans le bâtiment allumé)
     function ciel() {
-      etape = 0; bat = null; porte = null;
-      remplir(bulle, h('b', { text: 'Vue du ciel' }), h('span', { text: 'Vous arrivez au parking visiteurs. Touchez le bâtiment où vous voulez aller.' }));
+      etape = 0; bat = null; porte = null; etapeCourante = ciel;
+      remplir(bulle, h('b', { text: guide ? 'Direction : ' + cible() : 'Vue du ciel' }),
+        h('span', { text: guide ? 'Vous arrivez au parking visiteurs. Touchez le bâtiment allumé : le ' + guide.bat + '.' : 'Vous arrivez au parking visiteurs. Touchez le bâtiment où vous voulez aller.' }));
       var svg = dessinerSite(d.site, { toucher: true, ici: true });
+      if (guide) { var gc = svg.querySelector('[data-type="batiment"][data-code="' + guide.bat + '"]'); if (gc) gc.classList.add('plan-chu-guide'); }
       svg.addEventListener('click', function (ev) {
         var g = ev.target.closest && ev.target.closest('[data-type="batiment"]'); if (!g) return;
-        bat = g.getAttribute('data-code'); g.classList.add('defi-bat--ok');
+        var code = g.getAttribute('data-code');
+        if (guide && code !== guide.bat) { signaler('Ce n\'est pas le ' + code + ' : ' + cible() + ' est au ' + guide.bat + ' (bâtiment allumé).'); return; }
+        bat = code; g.classList.add('defi-bat--ok');
         setTimeout(function () { if (portesDe(bat).length) rue(); else ascenseur('Le ' + bat + ' n\'a pas d\'entrée sur la rue Caraïbes : vous êtes directement dans l\'ascenseur.'); }, 300);
       });
       svg.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.closest('[data-type="batiment"]')) { ev.preventDefault(); ev.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
@@ -451,13 +572,18 @@
     }
     // 2. Rue Caraïbes : devant le bâtiment, on choisit une de ses portes (ou une autre : on change alors de bâtiment)
     function rue() {
-      etape = 1; porte = null;
-      remplir(bulle, h('b', { text: 'Rue Caraïbes · ' + bat }), h('span', { text: 'Touchez une porte du ' + bat + ' (en surbrillance) pour prendre son ascenseur.' }));
+      etape = 1; porte = null; etapeCourante = rue;
+      var nums = portesDe(bat).map(function (e) { return e.code; });
+      remplir(bulle, h('b', { text: 'Rue Caraïbes · ' + bat }),
+        h('span', { text: guide ? 'Touchez la porte allumée : N° ' + nums.join(' ou ') + '.' : 'Touchez une porte du ' + bat + ' (en surbrillance) pour prendre son ascenseur.' }));
       var portes = d.site.entrees.slice().sort(function (a, b) { return b.y - a.y; });
       var rangee = h('div', { class: 'defi-rue', role: 'list' }, portes.map(function (e) {
         var c = couleurEntree(e, d.site), cote = e.x < 185 ? 'gauche' : 'droite', ici = e.batiment === bat;
-        return h('button', { type: 'button', role: 'listitem', class: 'defi-facade defi-facade--' + cote + (ici ? ' plan-chu-porte--ici' : ' plan-chu-porte--autre'), style: '--c:' + c,
-          'aria-label': 'Entrée N° ' + e.code + ', bâtiment ' + e.batiment, onclick: function () { bat = e.batiment; porte = e.code; ascenseur(); } },
+        return h('button', { type: 'button', role: 'listitem', class: 'defi-facade defi-facade--' + cote + (ici ? ' plan-chu-porte--ici' : ' plan-chu-porte--autre') + (ici && guide ? ' plan-chu-guide' : ''), style: '--c:' + c,
+          'aria-label': 'Entrée N° ' + e.code + ', bâtiment ' + e.batiment, onclick: function () {
+            if (guide && !ici) { signaler('Le N° ' + e.code + ' mène au ' + e.batiment + '. Pour ' + cible() + ' : N° ' + nums.join(' ou ') + '.'); return; }
+            bat = e.batiment; porte = e.code; ascenseur();
+          } },
           h('span', { class: 'defi-facade__cote', text: cote === 'gauche' ? '◀ à gauche' : 'à droite ▶' }),
           h('span', { class: 'defi-facade__num', text: e.code }), h('span', { class: 'defi-facade__bat', text: e.batiment }));
       }));
@@ -465,28 +591,38 @@
       aide.textContent = 'Les entrées défilent dans l\'ordre où vous les croisez en remontant la rue.';
       nav([['Vue du ciel', ciel]]);
       cadre();
-      var cible = scene.querySelector('.plan-chu-porte--ici'); if (cible && cible.scrollIntoView) cible.scrollIntoView({ block: 'nearest', inline: 'center' });
+      var c2 = scene.querySelector('.plan-chu-porte--ici'); if (c2 && c2.scrollIntoView) c2.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
     // 3. Ascenseur : seuls les étages renseignés
     function ascenseur(note) {
-      etape = 2;
-      var l = niveauxDe(bat);
-      remplir(bulle, h('b', { text: 'Ascenseur' + (porte ? ' du N° ' + porte : ' du ' + bat) }), h('span', { text: l.length ? 'Choisissez un étage.' : 'Aucun service n\'est encore renseigné pour le ' + bat + '.' }));
+      etape = 2; etapeCourante = function () { ascenseur(note); };
+      var l = niveauxDe(bat), vise = guide && guide.niv != null && guide.bat === bat ? guide.niv : null;
+      remplir(bulle, h('b', { text: 'Ascenseur' + (porte ? ' du N° ' + porte : ' du ' + bat) }),
+        h('span', { text: !l.length ? 'Aucun service n\'est encore renseigné pour le ' + bat + '.' : vise != null ? 'Touchez le bouton allumé : niveau ' + vise + '.' : 'Choisissez un étage.' }));
+      var panneau = l.length ? panneauAscenseur(l, function (niv) {
+        if (vise != null && niv !== vise) { signaler('Pas au niveau ' + niv + ' : ' + cible() + ' est au niveau ' + vise + ' (bouton allumé).'); return; }
+        etage(niv);
+      }) : null;
+      if (panneau && vise != null) { var bv = panneau.querySelector('[data-n="' + vise + '"]'); if (bv) bv.classList.add('plan-chu-guide'); }
       remplir(scene, h('div', { class: 'defi-cabine' }, h('div', { class: 'defi-cabine__ecran', text: porte ? 'N° ' + porte : bat }),
-        l.length ? panneauAscenseur(l, function (niv) { etage(niv); }) : h('p', { class: 'vide', text: 'Revenez bientôt : la liste des services est en cours de saisie.' })));
+        panneau || h('p', { class: 'vide', text: 'Revenez bientôt : la liste des services est en cours de saisie.' })));
       aide.textContent = note || 'Le niveau 0 est celui de la rue Caraïbes.';
+      if (guide && guide.niv == null) guide = null; // guidage jusqu'à un bâtiment : terminé une fois dans l'ascenseur
       nav((portesDe(bat).length ? [['Revenir devant le bâtiment', rue]] : []).concat([['Vue du ciel', ciel]]));
       cadre();
     }
-    // 4. Étage : les services présents
+    // 4. Étage : les services présents (celui recherché est mis en évidence)
     function etage(niv) {
-      etape = 3;
-      var x = d.etages.filter(function (y) { return y.batiment === bat && y.niveau === niv; })[0] || { services: [] };
-      remplir(bulle, h('b', { text: bat + ' · niveau ' + niv + (niv === '0' ? ' (rue Caraïbes)' : '') }), h('span', { text: x.services.length + ' service' + (x.services.length > 1 ? 's' : '') + ' à cet étage' }));
+      etape = 3; etapeCourante = function () { etage(niv); };
+      var x = d.etages.filter(function (y) { return y.batiment === bat && String(y.niveau) === niv; })[0] || { services: [] };
+      var vise = guide && guide.service ? guide.service : null; guide = null; // arrivé : fin du guidage
+      remplir(bulle, h('b', { text: vise ? 'Vous êtes arrivé : ' + vise : bat + ' · niveau ' + niv + (niv === '0' ? ' (rue Caraïbes)' : '') }),
+        h('span', { text: vise ? bat + ' · ' + libNiveau(niv) : x.services.length + ' service' + (x.services.length > 1 ? 's' : '') + ' à cet étage' }));
       remplir(scene, h('div', { class: 'defi-arrivee' },
         h('p', { class: 'defi-arrivee__panneau' }, h('span', { text: (porte ? 'N° ' + porte + ' · ' : '') + bat + ' · niveau ' + niv }), h('b', { text: 'À cet étage' })),
-        h('ul', { class: 'plan-chu-services' }, x.services.map(function (t) { return h('li', { text: t }); }))));
+        h('ul', { class: 'plan-chu-services' }, x.services.map(function (t) { return h('li', { class: vise && String(t).trim() === vise ? 'plan-chu-services__cible' : null, text: t }); }))));
       aide.textContent = '';
+      if (vise && window.ReaFun) setTimeout(function () { window.ReaFun.succes(); }, 150);
       nav([['Changer d\'étage', function () { ascenseur(); }]].concat(portesDe(bat).length ? [['Revenir devant le bâtiment', rue]] : []).concat([['Vue du ciel', ciel]]));
       cadre();
     }

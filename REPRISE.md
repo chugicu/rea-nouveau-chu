@@ -6,7 +6,7 @@ Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questio
 PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.3.4) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.5.6`).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.5.7`).
 - Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans).
 
 ## Règles à ne jamais enfreindre
@@ -32,6 +32,8 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 - Infos générales (Cap NCHUG) : bouton sur l'écran de choix, code commun choisi dans l'Espace créateurs (`INFOS_CODE`, global), jeton `visiteur` limité à la lecture (liste `INFOS_ACTIONS` dans le moteur), Défi en entraînement, retour à l'écran de choix à chaque ouverture.
 
 - Codes (2.3.4) : l'administrateur choisit tous les codes de son service (agents, admin, référents), sans tirage au hasard ; les créateurs choisissent ou génèrent les codes à la création d'un service et pour un code admin perdu (`codeChoisi_` : 6 à 32 lettres/chiffres, unique dans le service ; jamais renvoyé par `codes_changer`).
+
+- Plans du CHU (appli 2.5.7, 12/11/2026) : barre de recherche des services (sans accents, noms de « Plan – Services » + codes B) sur l'écran « Plans du CHU » et en haut de chaque étape du Plan virtuel ; tuile et bouton « A–Z » (liste alphabétique groupée par lettre) ; fiche (bâtiment, niveau, entrée rue Caraïbes, autres services de l'étage) avec « Me guider » : bâtiment, porte(s) puis bouton d'ascenseur allumés, l'agent les touche (rien n'est compté), service mis en évidence à l'arrivée. B50 : « N° 32 ou 40 » tant que l'entrée par niveau n'est pas connue ; bâtiment sans entrée : ascenseur direct. Le plan du service garde sa recherche existante. Aucun changement du moteur.
 
 ## Reste à faire côté utilisateur
 1. Coller `Code.gs` 2.3.4 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
