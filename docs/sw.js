@@ -1,6 +1,6 @@
 /* Service worker : rend l'application utilisable hors ligne.
    Pensez à augmenter VERSION à chaque mise en ligne d'une nouvelle version. */
-var VERSION = 'rea-app-v2.6.1';
+var VERSION = 'rea-app-v2.6.2';
 var FICHIERS = [
   './',
   'index.html',
@@ -30,9 +30,13 @@ var FICHIERS = [
 ];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FICHIERS); }));
+  // cache: 'reload' : fichiers relus sur le serveur, jamais depuis le cache HTTP du navigateur (sinon une version mêlée peut s'installer)
+  // skipWaiting : la nouvelle version prend la main tout de suite ; un simple rechargement suffit ensuite (bouton « Mettre à jour »)
+  self.skipWaiting();
+  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FICHIERS.map(function (f) { return new Request(f, { cache: 'reload' }); })); }));
 });
 
+self.addEventListener('message', function (e) { if (e.data === 'activer') self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (cles) {
     return Promise.all(cles.filter(function (k) { return k.indexOf('rea-app-') === 0 && k !== VERSION; })

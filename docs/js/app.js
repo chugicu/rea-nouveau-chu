@@ -975,13 +975,21 @@
   });
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').then(function (reg) {
+    // Mises à jour : la nouvelle version s'installe et prend la main d'elle-même (sw.js) ; le bandeau propose de recharger.
+    var avaitControleur = !!navigator.serviceWorker.controller, derniereVerif = Date.now();
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (avaitControleur) majBandeaux({ majDispo: true }); avaitControleur = true; });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      if (reg.waiting && navigator.serviceWorker.controller) { reg.waiting.postMessage('activer'); majBandeaux({ majDispo: true }); } // version restée en attente
       reg.addEventListener('updatefound', function () {
         var nouveau = reg.installing;
         if (!nouveau) return;
         nouveau.addEventListener('statechange', function () {
-          if (nouveau.state === 'installed' && navigator.serviceWorker.controller) majBandeaux({ majDispo: true });
+          if ((nouveau.state === 'installed' || nouveau.state === 'activated') && navigator.serviceWorker.controller) majBandeaux({ majDispo: true });
         });
+      });
+      // vérifier à chaque retour dans l'appli (au plus une fois toutes les 10 minutes)
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && Date.now() - derniereVerif > 600000) { derniereVerif = Date.now(); reg.update().catch(function () {}); }
       });
     }).catch(function () { /* l'app fonctionne sans */ });
   }

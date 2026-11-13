@@ -6,7 +6,7 @@ Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questio
 PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.4.0) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.6.0`).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.6.2`).
 - Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées).
 
 ## Règles à ne jamais enfreindre
@@ -36,6 +36,8 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 - Plans du CHU (appli 2.5.8, 12/11/2026) : en haut de chaque étape du Plan virtuel, ligne 1 = barre de recherche des services (sans accents, noms de « Plan – Services » + codes B), ligne 2 = liste déroulante des services de A à Z (pas de tuile à part, rien sur l'écran « Plans du CHU »). Un choix ouvre une fiche (bâtiment, niveau, entrée rue Caraïbes, autres services de l'étage) avec « Me guider » : bâtiment, porte(s) puis bouton d'ascenseur allumés, l'agent les touche (rien n'est compté), service mis en évidence à l'arrivée. B50 : « N° 32 ou 40 » tant que l'entrée par niveau n'est pas connue ; bâtiment sans entrée : ascenseur direct. Le plan du service garde sa recherche existante. Aucun changement du moteur.
 
 - PDF et rubriques (moteur 2.4.0, appli 2.6.0, 13/11/2026) : PDF dans « Documents et FAQ » (admin et référents ; images + texte extrait pour la recherche ; colonnes 10–14 de l'onglet). Rubriques personnalisées : onglet « Rubriques » par service, fiches rangées par la colonne « Rubrique » (`RUBxxx/SRyyy`) ; catalogue « Rubriques – Catalogue » dans l'annuaire ; un service reprend une rubrique d'un autre (paramètre « Rubriques adoptées ») = structure suivie, fiches propres ; rubriques du service « _chu » = communes, visibles d'office. Max 6 rubriques, 12 sous-rubriques. Actions : `docs_pdf_envoyer`, `docs_pdf_page`, `rub_etat`, `rub_gerer` ; `home` renvoie `perso`.
+
+- Mises à jour (appli 2.6.2) : `sw.js` fait `skipWaiting()` à l'installation et relit les fichiers avec `cache: 'reload'` ; l'appli affiche le bandeau « Mettre à jour » (rechargement) et vérifie les mises à jour au retour dans l'appli. Auparavant la nouvelle version restait en attente et « Mettre à jour » ne changeait rien.
 
 ## Reste à faire côté utilisateur
 1. Coller `Code.gs` 2.4.0 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
