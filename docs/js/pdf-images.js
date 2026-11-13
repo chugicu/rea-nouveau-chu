@@ -22,17 +22,20 @@
     var url = canvas.toDataURL('image/jpeg', qualite), b64 = url.slice(url.indexOf(',') + 1);
     return { b64: b64, octets: Math.floor(b64.length * 3 / 4) };
   }
-  /** fichier : File PDF ; progression(n, total) ; renvoie { pages: [base64 JPEG], ratio, apercus: [dataURL] } */
+  /** fichier : File PDF ; progression(n, total) ; renvoie { pages: [base64 JPEG], ratio, apercus: [dataURL], texte }
+      texte : le texte lisible du PDF (pour la recherche des Documents et FAQ), vide pour un PDF scanné */
   function convertir(fichier, progression) {
     return chargerPdfJs().then(function (pdfjs) {
       return fichier.arrayBuffer().then(function (buf) { return pdfjs.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise; });
     }).then(function (doc) {
       if (doc.numPages > MAX_PAGES) throw new Error('Ce PDF a ' + doc.numPages + ' pages : ' + MAX_PAGES + ' au maximum.');
-      var pages = [], apercus = [], ratio = 1.414;
+      var pages = [], apercus = [], textes = [], ratio = 1.414;
       function page(n) {
         if (n > doc.numPages) return Promise.resolve();
         if (progression) progression(n, doc.numPages);
         return doc.getPage(n).then(function (p) {
+          return p.getTextContent().then(function (tc) { textes.push((tc.items || []).map(function (it) { return it.str || ''; }).join(' ').replace(/\s+/g, ' ').trim()); }, function () { textes.push(''); }).then(function () { return p; });
+        }).then(function (p) {
           var v1 = p.getViewport({ scale: 1 });
           if (n === 1) ratio = v1.height / v1.width;
           var echelle = Math.min(LARGEUR / v1.width, MAX_COTE / Math.max(v1.width, v1.height));
@@ -50,7 +53,7 @@
           });
         });
       }
-      return page(1).then(function () { doc.destroy(); return { pages: pages, ratio: ratio, apercus: apercus }; });
+      return page(1).then(function () { doc.destroy(); return { pages: pages, ratio: ratio, apercus: apercus, texte: textes.join('\n').trim() }; });
     });
   }
   /** Première page d'un PDF en image (dataURL PNG), côté appareil : fond de l'outil de dessin du plan */

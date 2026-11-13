@@ -10,6 +10,7 @@
  * 1.7 : jeux (jauge du déménagement, souvenirs, concours photo, nuage, QR codes, paris, escape game, bingo), activables par l'administrateur.
  * 1.6 : quiz (questions rédigées, brouillons relus par l'administrateur, compteur collectif anonyme).
  * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
+ * 2.4 : PDF dans Documents et FAQ (images + texte pour la recherche), rubriques personnalisées partagées entre services, rubriques communes.
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
  * Principes :
@@ -25,7 +26,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.3.4',
+  version: '2.4.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -137,7 +138,11 @@ function doPost(e) {
       logo: function () { verifierJeton_(req.jeton); return logoLire_(); },
       logo_envoyer: function () { exigerAdmin_(verifierJeton_(req.jeton)); return logoEnvoyer_(req.data, req.type); },
       plan_importer: function () { return planImporter_(exigerAdmin_(verifierJeton_(req.jeton)), req.texte, req.enregistrer === true); },
-      docs_liste: function () { return docsListe_(verifierJeton_(req.jeton)); },
+      docs_liste: function () { return docsListe_(verifierJeton_(req.jeton), req.rubrique); },
+      docs_pdf_envoyer: function () { exigerReferent_(verifierJeton_(req.jeton)); return docsPdfEnvoyer_(req.id, req.page, req.data); },
+      docs_pdf_page: function () { return docsPdfPage_(verifierJeton_(req.jeton), req.id, req.page); },
+      rub_etat: function () { exigerAdmin_(verifierJeton_(req.jeton)); return rubEtat_(); },
+      rub_gerer: function () { return rubGerer_(exigerAdmin_(verifierJeton_(req.jeton)), req.quoi, req.id, req.donnees); },
       docs_enregistrer: function () { return docsEnregistrer_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees || {}); },
       docs_supprimer: function () { exigerReferent_(verifierJeton_(req.jeton)); return docsSupprimer_(req.id); },
       nl_ajouter: function () { return nlAjouter_(exigerAdmin_(verifierJeton_(req.jeton)), req.donnees); },
@@ -228,6 +233,7 @@ function home_(session) {
     service: params['Nom du service'] || 'Réanimation – USC',
     messageAccueil: params["Message d'accueil"] || '',
     rubriques: rubriquesActives_(params),
+    perso: (function () { try { return rubriquesService_(ss, params); } catch (e) { console.error('rubriques : ' + e); return []; } })(), // rubriques personnalisées (2.4.0)
     logo: params['Logo du service (ID Drive)'] ? String(props_().getProperty('LOGO_VERSION') || '1') : null,
     dateJ: dateJIso,
     actualites: communActus_().concat(lireActualites_(ss)),
@@ -752,12 +758,13 @@ function nlPage_(session, id, page) {
   var octets = DriveApp.getFileById(n.fichiers[k]).getBlob().getBytes();
   return { ok: true, page: k, type: 'image/jpeg', data: Utilities.base64Encode(octets) };
 }
-function dossierNewsletters_(ss) {
-  var nom = 'Dossier des newsletters (ID Drive)', params = lireParametres_(ss), id = String(params[nom] || '').trim();
+function dossierNewsletters_(ss) { return dossierPrive_(ss, 'Dossier des newsletters (ID Drive)', 'Réa – Newsletters'); }
+function dossierPrive_(ss, nom, titre) { // dossier Drive privé, créé à côté du Google Sheets au premier envoi
+  var params = lireParametres_(ss), id = String(params[nom] || '').trim();
   if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* dossier supprimé : on en recrée un */ } }
   var parents = DriveApp.getFileById(ss.getId()).getParents();
   var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
-  var dossier = parent.createFolder('Réa – Newsletters');
+  var dossier = parent.createFolder(titre);
   ajouterParametre_(ss, nom, 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');
   var sh = ss.getSheetByName(ONGLETS.parametres), v = sh.getDataRange().getValues();
   for (var i = 1; i < v.length; i++) if (String(v[i][0]).trim() === nom) sh.getRange(i + 1, 2).setValue(dossier.getId());
@@ -2176,7 +2183,7 @@ function defiPlanEnregistrer_(bat, niv, services) {
 }
 
 /* ---------- Infos générales : contenus communs en lecture, avec un code commun choisi par le super-admin ou un créateur ---------- */
-var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
+var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, docs_pdf_page: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
 function infosEmpreinte_() { var c = PROPS_.getProperty('INFOS_CODE'); return c ? fnv_('infos|' + c).toString(36) : ''; }
 function infosOuvertes_() { return !!PROPS_.getProperty('INFOS_CODE') && !!communService_(); }
 function infosLogin_(code) {
@@ -2627,41 +2634,271 @@ function actuSupprimer_(n, titre) {
   return actuListe_();
 }
 
-/* ---------- Documents et FAQ (service + communs) ---------- */
-var DOCS = { entetes: ['ID', 'Catégorie', 'Titre ou question', 'Texte ou réponse', 'Lien (https)', 'Ordre', 'Publié', 'Par', 'Modifié le'] };
+/* ---------- Documents et FAQ (service + communs), PDF et rubriques personnalisées (moteur 2.4.0) ---------- */
+// Un document peut porter un PDF : converti en images sur le téléphone (comme les newsletters), texte extrait pour la recherche.
+// La colonne « Rubrique » range la fiche dans une rubrique personnalisée (« RUBxxxx/SRyyy ») ; vide = Documents et FAQ.
+var DOCS = { entetes: ['ID', 'Catégorie', 'Titre ou question', 'Texte ou réponse', 'Lien (https)', 'Ordre', 'Publié', 'Par', 'Modifié le',
+  'Rubrique (ID/sous-rubrique)', 'PDF : pages', 'PDF : fichiers (ID Drive)', 'PDF : format (hauteur/largeur)', 'PDF : texte (recherche)'], maxTextePdf: 30000 };
+function ongletDocs_(ss) {
+  var sh = ss.getSheetByName(ONGLETS.documents) || creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []);
+  if (sh.getLastColumn() < DOCS.entetes.length) completerEntetes_(sh, DOCS.entetes);
+  return sh;
+}
 function lireDocs_(ss) {
-  var sh = ss.getSheetByName(ONGLETS.documents) || creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []), v = sh.getDataRange().getValues(), l = [];
+  var sh = ongletDocs_(ss), v = sh.getDataRange().getValues(), l = [];
   for (var i = 1; i < v.length; i++) {
     var id = String(v[i][0] || '').trim(); if (!id || !v[i][2]) continue;
     var lien = String(v[i][4] || '').trim(); if (lien && !/^https:\/\/[^\s<>"]+$/.test(lien)) lien = '';
-    l.push({ id: id, categorie: String(v[i][1] || 'Divers'), titre: String(v[i][2]), texte: String(v[i][3] || ''), lien: lien, ordre: Number(v[i][5]) || 0, publie: v[i][6] !== false, par: String(v[i][7] || ''), ligne: i + 1 });
+    var pages = Number(v[i][10]) || 0, fichiers = [], pdf = null;
+    try { fichiers = JSON.parse(v[i][11] || '[]'); } catch (e) { fichiers = []; }
+    if (!Array.isArray(fichiers)) fichiers = [];
+    if (pages > 0) {
+      var complet = true; for (var k = 0; k < pages; k++) if (!fichiers[k]) complet = false;
+      pdf = { pages: pages, ratio: Number(v[i][12]) || 1.414, complet: complet, v: fnv_(String(v[i][11] || '')).toString(36) };
+    }
+    l.push({ id: id, categorie: String(v[i][1] || 'Divers'), titre: String(v[i][2]), texte: String(v[i][3] || ''), lien: lien, ordre: Number(v[i][5]) || 0, publie: v[i][6] !== false, par: String(v[i][7] || ''),
+      rubrique: String(v[i][9] || '').trim(), pdf: pdf, pdfTexte: pdf ? String(v[i][13] || '') : '', fichiers: fichiers, ligne: i + 1 });
   }
   return l.sort(function (a, b) { return a.categorie.localeCompare(b.categorie) || a.ordre - b.ordre || a.titre.localeCompare(b.titre); });
 }
-function docsListe_(session) {
-  var ref = session.r === 'admin' || session.r === 'referent';
-  var propres = lireDocs_(classeur_()).filter(function (d) { return d.publie || ref; }).map(function (d) { delete d.ligne; return d; });
-  var communs = communMemo_('docs', function () { return lireDocs_(classeur_()).filter(function (d) { return d.publie; }).map(function (d) { delete d.ligne; d.chu = true; return d; }); });
-  return { ok: true, documents: communs.concat(propres), peutModifier: ref };
+function docVisible_(d) { return d.publie && (!d.pdf || d.pdf.complet); } // un PDF en cours d'envoi n'est pas montré aux agents
+function docPublic_(d, chu) {
+  var o = { id: d.id, categorie: d.categorie, titre: d.titre, texte: d.texte, lien: d.lien, ordre: d.ordre, publie: d.publie, par: d.par, rubrique: d.rubrique, pdf: d.pdf, pdfTexte: d.pdfTexte };
+  if (chu) o.chu = true;
+  return o;
 }
+function docsListe_(session, rubrique) {
+  var ref = session.r === 'admin' || session.r === 'referent', ss = classeur_(), r = null;
+  rubrique = String(rubrique || '').trim();
+  if (rubrique) { r = rubriqueTrouver_(ss, rubrique); if (!r) throw erreurApp_('rubrique_introuvable'); }
+  function dansLaRubrique(d) { var x = String(d.rubrique || ''); return r ? x.split('/')[0] === r.id : !x; }
+  var communs = communMemo_('docs', function () { return lireDocs_(classeur_()).filter(docVisible_).map(function (d) { return docPublic_(d, true); }); }).filter(dansLaRubrique);
+  var propres = r && r.source === 'commune' ? [] : lireDocs_(ss).filter(function (d) { return dansLaRubrique(d) && (ref || docVisible_(d)); }).map(function (d) { return docPublic_(d, false); });
+  return { ok: true, documents: communs.concat(propres), peutModifier: ref && !(r && r.source === 'commune'), rubrique: r };
+}
+function jeterFichiers_(ids) { (ids || []).forEach(function (fid) { if (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) { /* déjà absent */ } } }); }
+function texteCellule_(t) { t = String(t || ''); return /^[=+\-@]/.test(t) ? "'" + t : t; } // jamais interprété comme une formule
 function docsEnregistrer_(session, id, d) {
   var titre = nettoyerTexte_(d.titre, 160), texte = String(d.texte == null ? '' : d.texte).replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim().slice(0, 4000);
   var lien = String(d.lien || '').trim(); if (lien && !/^https:\/\/[^\s<>"]{4,500}$/.test(lien)) throw erreurApp_('lien_invalide');
-  if (titre.length < 2 || (!texte && !lien)) throw erreurApp_('requete_invalide');
-  var ss = classeur_(), verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  var pdf = d.pdf; // absent : inchangé ; null : retiré ; { pages, ratio, texte } : nouveau PDF, dont les pages sont envoyées ensuite
+  if (pdf) {
+    var np = Number(pdf.pages), nr = Number(pdf.ratio);
+    if (!(np >= 1 && np <= NL.maxPages && Math.floor(np) === np)) throw erreurApp_('requete_invalide');
+    if (!(nr > 0.2 && nr < 5)) nr = 1.414;
+    pdf = { pages: np, ratio: Math.round(nr * 1000) / 1000, texte: String(pdf.texte || '').replace(/[\u0000-\u0009\u000b-\u001f<>]/g, ' ').slice(0, DOCS.maxTextePdf) };
+  } else if (pdf !== null) pdf = undefined;
+  var ss = classeur_(), rub;
+  if (d.rubrique !== undefined) {
+    rub = '';
+    if (d.rubrique) {
+      var p = String(d.rubrique).split('/'), r = rubriqueTrouver_(ss, p[0]);
+      if (!r || r.source === 'commune') throw erreurApp_('rubrique_introuvable');
+      rub = r.id + '/' + (p[1] && r.sous.some(function (s) { return s.id === p[1]; }) ? p[1] : '');
+    }
+  }
+  var verrou = LockService.getScriptLock(), nouvelId; verrou.waitLock(10000);
   try {
-    var l = lireDocs_(ss), sh = ss.getSheetByName(ONGLETS.documents);
-    var ligne = [null, nettoyerTexte_(d.categorie, 40) || 'Divers', titre, texte, lien, Math.round(Number(d.ordre) || 0), d.publie !== false, session.n || 'Administrateur', new Date()];
-    if (id) { var x = l.filter(function (y) { return y.id === String(id); })[0]; if (!x) throw erreurApp_('introuvable'); ligne[0] = x.id; sh.getRange(x.ligne, 1, 1, 9).setValues([ligne]); }
-    else { ligne[0] = 'DOC' + Utilities.getUuid().replace(/-/g, '').slice(0, 8); sh.appendRow(ligne); }
+    var l = lireDocs_(ss), sh = ongletDocs_(ss), x = null;
+    if (id) { x = l.filter(function (y) { return y.id === String(id); })[0]; if (!x) throw erreurApp_('introuvable'); }
+    var aPdf = pdf ? true : (pdf === null ? false : !!(x && x.pdf));
+    if (titre.length < 2 || (!texte && !lien && !aPdf)) throw erreurApp_('requete_invalide');
+    var colsPdf;
+    if (pdf) { if (x) jeterFichiers_(x.fichiers); colsPdf = [pdf.pages, '[]', pdf.ratio, texteCellule_(pdf.texte)]; }
+    else if (pdf === null) { if (x) jeterFichiers_(x.fichiers); colsPdf = ['', '', '', '']; }
+    else colsPdf = x && x.pdf ? [x.pdf.pages, JSON.stringify(x.fichiers), x.pdf.ratio, texteCellule_(x.pdfTexte)] : ['', '', '', ''];
+    nouvelId = x ? x.id : 'DOC' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    var ligne = [nouvelId, nettoyerTexte_(d.categorie, 40) || 'Divers', titre, texte, lien, Math.round(Number(d.ordre) || 0), d.publie !== false, session.n || 'Administrateur', new Date(),
+      rub !== undefined ? rub : (x ? x.rubrique : '')].concat(colsPdf);
+    if (x) sh.getRange(x.ligne, 1, 1, ligne.length).setValues([ligne]); else sh.appendRow(ligne);
+    if (rub === undefined) rub = x ? x.rubrique : '';
   } finally { verrou.releaseLock(); }
   CacheService.getScriptCache().remove('commun|docs');
-  return docsListe_(session);
+  var res = docsListe_(session, rub ? rub.split('/')[0] : '');
+  res.id = nouvelId;
+  return res;
 }
 function docsSupprimer_(id) {
   var ss = classeur_(), x = lireDocs_(ss).filter(function (y) { return y.id === String(id || ''); })[0]; if (!x) throw erreurApp_('introuvable');
+  jeterFichiers_(x.fichiers);
   ss.getSheetByName(ONGLETS.documents).deleteRow(x.ligne); CacheService.getScriptCache().remove('commun|docs');
   return { ok: true };
+}
+function jpegValide_(data) { // seules des images JPEG (signature FF D8 FF) de taille raisonnable sont acceptées
+  var octets;
+  try { octets = Utilities.base64Decode(String(data || '')); } catch (e) { throw erreurApp_('requete_invalide'); }
+  if (octets.length < 1000 || octets.length > NL.maxOctetsPage || (octets[0] & 255) !== 0xFF || (octets[1] & 255) !== 0xD8 || (octets[2] & 255) !== 0xFF) throw erreurApp_('requete_invalide');
+  return octets;
+}
+function docsPdfEnvoyer_(id, page, data) {
+  var octets = jpegValide_(data), verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    var ss = classeur_(), x = lireDocs_(ss).filter(function (y) { return y.id === String(id || ''); })[0], k = Number(page);
+    if (!x) throw erreurApp_('introuvable');
+    if (!x.pdf || !(k >= 0 && k < x.pdf.pages && Math.floor(k) === k)) throw erreurApp_('requete_invalide');
+    var dossier = dossierPrive_(ss, 'Dossier des documents PDF (ID Drive)', 'Cap NCHUG – Documents PDF');
+    if (x.fichiers[k]) jeterFichiers_([x.fichiers[k]]);
+    x.fichiers[k] = dossier.createFile(Utilities.newBlob(octets, 'image/jpeg', x.id + '-page' + (k + 1) + '.jpg')).getId();
+    ongletDocs_(ss).getRange(x.ligne, 12).setValue(JSON.stringify(x.fichiers));
+    var complet = true; for (var j = 0; j < x.pdf.pages; j++) if (!x.fichiers[j]) complet = false;
+    if (complet) CacheService.getScriptCache().remove('commun|docs');
+    return { ok: true, page: k, complet: complet };
+  } finally { verrou.releaseLock(); }
+}
+function docsPdfPage_(session, id, page) {
+  id = String(id || '');
+  if (id.indexOf('chu:') === 0) return avecCommun_(function () { return docsPdfPage_({ r: 'agent' }, id.slice(4), page); }) || { ok: false, erreur: 'introuvable' };
+  var x = lireDocs_(classeur_()).filter(function (y) { return y.id === id; })[0], k = Number(page);
+  var ref = session.r === 'admin' || session.r === 'referent';
+  if (!x || !x.pdf || (!docVisible_(x) && !ref)) throw erreurApp_('introuvable');
+  if (!(k >= 0 && k < x.pdf.pages && x.fichiers[k])) throw erreurApp_('requete_invalide');
+  return { ok: true, page: k, type: 'image/jpeg', data: Utilities.base64Encode(DriveApp.getFileById(x.fichiers[k]).getBlob().getBytes()) };
+}
+
+/* ---------- Rubriques personnalisées (moteur 2.4.0) ----------
+   Chaque service crée ses rubriques (tuile sur l'accueil) et leurs sous-rubriques ; les fiches sont dans « Documents et FAQ ».
+   Annuaire : les rubriques des services sont recopiées dans « Rubriques – Catalogue » ; un autre service peut en « adopter »
+   une : il suit la structure (nom, sous-rubriques) du service d'origine et y range ses propres fiches.
+   Les rubriques du service caché « _chu » (créateurs) sont communes : visibles d'office partout, contenu tenu par les créateurs. */
+var RUB = { onglet: 'Rubriques', entetes: ['ID', 'Nom', 'Emoji', 'Couleur', 'Sous-rubriques (JSON)', 'Ordre', 'Modifié le'],
+  catalogue: 'Rubriques – Catalogue', catEntetes: ['ID', 'Service (ID)', 'Service', 'Nom', 'Emoji', 'Couleur', 'Sous-rubriques (JSON)', 'Statut', 'Utilisée par (ID des services)', 'Modifié le'],
+  max: 6, maxSous: 12, couleurs: ['#223b80', '#40a8df', '#048e39', '#95c127'] };
+function sousValides_(s) {
+  return (Array.isArray(s) ? s : []).filter(function (x) { return x && /^SR[a-z0-9]{4,8}$/.test(String(x.id)) && x.nom; })
+    .map(function (x) { return { id: String(x.id), nom: String(x.nom).slice(0, 40) }; });
+}
+function jsonSur_(t, defaut) { try { return JSON.parse(t); } catch (e) { return defaut; } }
+function couleurRub_(c) { return RUB.couleurs.indexOf(String(c)) >= 0 ? String(c) : RUB.couleurs[0]; }
+function lireRubriques_(ss) {
+  var sh = ss.getSheetByName(RUB.onglet); if (!sh) return [];
+  var v = sh.getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!/^RUB[a-z0-9]{6,12}$/.test(id) || !v[i][1]) continue;
+    l.push({ id: id, nom: String(v[i][1]).slice(0, 40), emoji: String(v[i][2] || '📁').slice(0, 8), couleur: couleurRub_(v[i][3]), sous: sousValides_(jsonSur_(v[i][4] || '[]', [])), ordre: Number(v[i][5]) || 0, ligne: i + 1 });
+  }
+  return l.sort(function (a, b) { return a.ordre - b.ordre; });
+}
+function rubPublique_(r, source) { return { id: r.id, nom: r.nom, emoji: r.emoji, couleur: r.couleur, sous: r.sous, source: source, chu: source === 'commune' }; }
+function communRubriques_() { return communMemo_('rub', function () { return lireRubriques_(classeur_()).map(function (r) { delete r.ligne; return r; }); }); }
+function adopteesIds_(params) { return String(params['Rubriques adoptées'] || '').split(/[,;\s]+/).filter(function (x) { return /^RUB[a-z0-9]{6,12}$/.test(x); }); }
+function catalogueActif_() { return modeAnnuaire_() && !!CTX_SERVICE && CTX_SERVICE.id.charAt(0) !== '_'; }
+function catalogueOnglet_() { var ss = annuaireClasseur_(); return ss.getSheetByName(RUB.catalogue) || creerOnglet_(ss, RUB.catalogue, RUB.catEntetes, []); }
+function catalogueLire_() {
+  if (!modeAnnuaire_()) return [];
+  var c = CacheService.getScriptCache(), t = c.get('rubcat'); if (t) return JSON.parse(t);
+  var v = catalogueOnglet_().getDataRange().getValues(), l = [];
+  for (var i = 1; i < v.length; i++) {
+    var id = String(v[i][0] || '').trim(); if (!/^RUB[a-z0-9]{6,12}$/.test(id) || !v[i][3]) continue;
+    l.push({ id: id, service: String(v[i][1] || ''), serviceNom: String(v[i][2] || ''), nom: String(v[i][3]).slice(0, 40), emoji: String(v[i][4] || '📁').slice(0, 8), couleur: couleurRub_(v[i][5]),
+      sous: sousValides_(jsonSur_(v[i][6] || '[]', [])), statut: String(v[i][7] || 'active').trim() === 'retirée' ? 'retirée' : 'active',
+      utilisateurs: String(v[i][8] || '').split(/[,;\s]+/).filter(Boolean), ligne: i + 1 });
+  }
+  try { c.put('rubcat', JSON.stringify(l), 300); } catch (e) { /* trop gros : pas de cache */ }
+  return l;
+}
+function catalogueVider_() { CacheService.getScriptCache().remove('rubcat'); }
+function catalogueAJour_(propres) { // le catalogue reflète-t-il les rubriques du service courant ?
+  var sid = CTX_SERVICE.id, cat = catalogueLire_().filter(function (c) { return c.service === sid && c.statut === 'active'; });
+  if (cat.length !== propres.length) return false;
+  return propres.every(function (r) { var c = cat.filter(function (y) { return y.id === r.id; })[0];
+    return c && c.nom === r.nom && c.emoji === r.emoji && c.couleur === r.couleur && c.serviceNom === CTX_SERVICE.nom && JSON.stringify(c.sous) === JSON.stringify(r.sous); });
+}
+function catalogueSynchroniser_(propres) { // à appeler sous verrou
+  if (!catalogueActif_()) return;
+  var sh = catalogueOnglet_(), v = sh.getDataRange().getValues(), sid = CTX_SERVICE.id, vus = {}, maintenant = new Date();
+  for (var i = v.length - 1; i >= 1; i--) {
+    if (String(v[i][1]) !== sid) continue;
+    var id = String(v[i][0]), r = propres.filter(function (y) { return y.id === id; })[0];
+    if (r) { vus[id] = 1; sh.getRange(i + 1, 3, 1, 6).setValues([[CTX_SERVICE.nom, r.nom, r.emoji, r.couleur, JSON.stringify(r.sous), 'active']]); sh.getRange(i + 1, 10).setValue(maintenant); }
+    else if (!String(v[i][8] || '').trim()) sh.deleteRow(i + 1); // retirée et utilisée par aucun autre service
+    else sh.getRange(i + 1, 8).setValue('retirée');               // les services qui l'utilisent gardent sa structure
+  }
+  propres.forEach(function (r) { if (!vus[r.id]) sh.appendRow([r.id, sid, CTX_SERVICE.nom, r.nom, r.emoji, r.couleur, JSON.stringify(r.sous), 'active', '', maintenant]); });
+  catalogueVider_();
+}
+function catalogueUtilisateur_(id, sid, ajouter) { // à appeler sous verrou
+  var sh = catalogueOnglet_(), v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) !== id) continue;
+    var l = String(v[i][8] || '').split(/[,;\s]+/).filter(function (x) { return x && x !== sid; });
+    if (ajouter) l.push(sid);
+    if (!l.length && String(v[i][7]).trim() === 'retirée') sh.deleteRow(i + 1); else sh.getRange(i + 1, 9).setValue(l.join(', '));
+    break;
+  }
+  catalogueVider_();
+}
+function rubriquesService_(ss, params) { // ce que voit le service : communes, puis les siennes, puis celles adoptées
+  var chuIci = !!(CTX_SERVICE && CTX_SERVICE.id === COMMUN.id), l = [];
+  communRubriques_().forEach(function (r) { l.push(rubPublique_(r, 'commune')); });
+  lireRubriques_(ss).forEach(function (r) { var o = rubPublique_(r, 'propre'); if (chuIci) o.chu = true; l.push(o); });
+  var ids = catalogueActif_() ? adopteesIds_(params || lireParametres_(ss)) : [];
+  if (ids.length) {
+    var cat = catalogueLire_();
+    ids.forEach(function (id) { var r = cat.filter(function (c) { return c.id === id; })[0]; if (r) { var o = rubPublique_(r, 'adoptee'); o.origine = r.serviceNom; l.push(o); } });
+  }
+  return l;
+}
+function rubriqueTrouver_(ss, id) { return rubriquesService_(ss).filter(function (r) { return r.id === String(id || ''); })[0] || null; }
+function rubEtat_() {
+  var ss = classeur_(), p = lireParametres_(ss), propres = lireRubriques_(ss), annuaire = catalogueActif_(), sid = CTX_SERVICE ? CTX_SERVICE.id : '';
+  if (annuaire && !catalogueAJour_(propres)) { // ex. : service rattaché, ou nom du service changé
+    var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+    try { catalogueSynchroniser_(propres); } finally { verrou.releaseLock(); }
+  }
+  var cat = annuaire ? catalogueLire_() : [], ids = annuaire ? adopteesIds_(p) : [];
+  function pub(c) { return { id: c.id, nom: c.nom, emoji: c.emoji, couleur: c.couleur, sous: c.sous, origine: c.serviceNom, utilisateurs: c.utilisateurs.length, retiree: c.statut === 'retirée' }; }
+  return { ok: true, annuaire: annuaire, commune: !!(CTX_SERVICE && CTX_SERVICE.id === COMMUN.id), max: RUB.max, maxSous: RUB.maxSous, couleurs: RUB.couleurs,
+    propres: propres.map(function (r) { var c = cat.filter(function (y) { return y.id === r.id; })[0]; return { id: r.id, nom: r.nom, emoji: r.emoji, couleur: r.couleur, sous: r.sous, utilisateurs: c ? c.utilisateurs.length : 0 }; }),
+    adoptees: ids.map(function (id) { var c = cat.filter(function (y) { return y.id === id; })[0]; return c ? pub(c) : null; }).filter(Boolean),
+    catalogue: cat.filter(function (c) { return c.service !== sid && c.statut === 'active' && ids.indexOf(c.id) < 0; }).map(pub) };
+}
+function rubGerer_(session, quoi, id, d) {
+  var ss = classeur_(), commune = !!(CTX_SERVICE && CTX_SERVICE.id === COMMUN.id), sid = CTX_SERVICE ? CTX_SERVICE.id : '';
+  id = String(id || '');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(20000);
+  try {
+    var propres = lireRubriques_(ss), p = lireParametres_(ss), adoptees = catalogueActif_() ? adopteesIds_(p) : [];
+    var total = propres.length + adoptees.length;
+    if (quoi === 'enregistrer') {
+      d = d || {};
+      var nom = nettoyerTexte_(d.nom, 40), emoji = nettoyerTexte_(d.emoji, 8) || '📁';
+      if (nom.length < 2) throw erreurApp_('requete_invalide');
+      var x = id ? propres.filter(function (y) { return y.id === id; })[0] : null;
+      if (id && !x) throw erreurApp_('rubrique_introuvable');
+      if (!x && total >= RUB.max) throw erreurApp_('rubriques_max');
+      var anciens = x ? x.sous : [], sous = [], vus = {};
+      (Array.isArray(d.sous) ? d.sous : []).forEach(function (s) {
+        var n = nettoyerTexte_(s && s.nom, 40); if (!n) return;
+        var garde = s && s.id && !vus[s.id] && anciens.some(function (a) { return a.id === s.id; });
+        var sr = garde ? String(s.id) : 'SR' + Utilities.getUuid().replace(/-/g, '').slice(0, 6).toLowerCase();
+        vus[sr] = 1; sous.push({ id: sr, nom: n });
+      });
+      if (sous.length > RUB.maxSous) throw erreurApp_('sous_rubriques_max');
+      var sh = ss.getSheetByName(RUB.onglet) || creerOnglet_(ss, RUB.onglet, RUB.entetes, []);
+      var ordre = x ? x.ordre : propres.reduce(function (m, y) { return Math.max(m, y.ordre); }, 0) + 1;
+      var ligne = [x ? x.id : 'RUB' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toLowerCase(), nom, emoji, couleurRub_(d.couleur), JSON.stringify(sous), ordre, new Date()];
+      if (x) sh.getRange(x.ligne, 1, 1, ligne.length).setValues([ligne]); else sh.appendRow(ligne);
+    } else if (quoi === 'supprimer') { // la rubrique et ses fiches (PDF compris) ; ailleurs, les services qui l'utilisent gardent sa structure
+      var z = propres.filter(function (y) { return y.id === id; })[0]; if (!z) throw erreurApp_('rubrique_introuvable');
+      var fiches = lireDocs_(ss).filter(function (dd) { return dd.rubrique.split('/')[0] === z.id; }).sort(function (a, b) { return b.ligne - a.ligne; });
+      fiches.forEach(function (dd) { jeterFichiers_(dd.fichiers); ss.getSheetByName(ONGLETS.documents).deleteRow(dd.ligne); });
+      ss.getSheetByName(RUB.onglet).deleteRow(z.ligne);
+      if (fiches.length) CacheService.getScriptCache().remove('commun|docs');
+    } else if (quoi === 'adopter' || quoi === 'quitter') { // les fiches d'une rubrique quittée restent dans le Google Sheets : elles reviennent si on la reprend
+      if (!catalogueActif_()) throw erreurApp_('requete_invalide');
+      if (quoi === 'adopter') {
+        if (adoptees.indexOf(id) >= 0) throw erreurApp_('deja_adoptee');
+        var c = catalogueLire_().filter(function (y) { return y.id === id && y.statut === 'active' && y.service !== sid; })[0];
+        if (!c) throw erreurApp_('rubrique_introuvable');
+        if (total >= RUB.max) throw erreurApp_('rubriques_max');
+        adoptees.push(id);
+      } else adoptees = adoptees.filter(function (y) { return y !== id; });
+      ecrireParametre_(ss, 'Rubriques adoptées', adoptees.join(', '), 'Rubriques d\'autres services affichées ici : structure du service d\'origine, fiches de ce service.');
+      catalogueUtilisateur_(id, sid, quoi === 'adopter');
+    } else throw erreurApp_('requete_invalide');
+    if (quoi === 'enregistrer' || quoi === 'supprimer') { catalogueSynchroniser_(lireRubriques_(ss)); if (commune) CacheService.getScriptCache().remove('commun|rub'); }
+  } finally { verrou.releaseLock(); }
+  return rubEtat_(); // hors verrou : rubEtat_ peut le reprendre
 }
 
 /* ---------- Tableau de bord des créateurs (aucune donnée individuelle) ---------- */

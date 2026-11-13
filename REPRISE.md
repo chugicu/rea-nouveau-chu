@@ -3,11 +3,11 @@
 Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questions ici.
 
 ## Le projet
-PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.3.4) + Google Sheets/Drive. Compte : chugicu@gmail.com.
+PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.4.0) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.5.8`).
-- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.6.0`).
+- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées).
 
 ## Règles à ne jamais enfreindre
 - Pas de données de santé dans l'appli ; pas de suivi individuel ; pas de compte Google pour les agents ; pas d'e-mails.
@@ -35,8 +35,10 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 
 - Plans du CHU (appli 2.5.8, 12/11/2026) : en haut de chaque étape du Plan virtuel, ligne 1 = barre de recherche des services (sans accents, noms de « Plan – Services » + codes B), ligne 2 = liste déroulante des services de A à Z (pas de tuile à part, rien sur l'écran « Plans du CHU »). Un choix ouvre une fiche (bâtiment, niveau, entrée rue Caraïbes, autres services de l'étage) avec « Me guider » : bâtiment, porte(s) puis bouton d'ascenseur allumés, l'agent les touche (rien n'est compté), service mis en évidence à l'arrivée. B50 : « N° 32 ou 40 » tant que l'entrée par niveau n'est pas connue ; bâtiment sans entrée : ascenseur direct. Le plan du service garde sa recherche existante. Aucun changement du moteur.
 
+- PDF et rubriques (moteur 2.4.0, appli 2.6.0, 13/11/2026) : PDF dans « Documents et FAQ » (admin et référents ; images + texte extrait pour la recherche ; colonnes 10–14 de l'onglet). Rubriques personnalisées : onglet « Rubriques » par service, fiches rangées par la colonne « Rubrique » (`RUBxxx/SRyyy`) ; catalogue « Rubriques – Catalogue » dans l'annuaire ; un service reprend une rubrique d'un autre (paramètre « Rubriques adoptées ») = structure suivie, fiches propres ; rubriques du service « _chu » = communes, visibles d'office. Max 6 rubriques, 12 sous-rubriques. Actions : `docs_pdf_envoyer`, `docs_pdf_page`, `rub_etat`, `rub_gerer` ; `home` renvoie `perso`.
+
 ## Reste à faire côté utilisateur
-1. Coller `Code.gs` 2.3.4 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
+1. Coller `Code.gs` 2.4.0 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
 2. Questions : déjà importées et corrigées dans la réa. Pour Cap NCHUG (Espace créateurs), importer les fichiers corrigés, puis relire et valider. Activer le jeu Parcours quand on le souhaite. Dans Cap NCHUG : recopier l'onglet « Plan – Services », entrer une fois dans « Modifier les contenus communs », puis choisir le code Infos générales.
 3. Vérifier que Cap NCHUG répond (Espace créateurs, code super-admin ; déploiement « Exécuter en tant que : moi », « Accès : tout le monde »).
 4. Créer un service test, puis rattacher la réa (partie R du guide) et retirer `SERVICES_EXTERNES` de `config.js`.

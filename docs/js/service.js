@@ -1,4 +1,4 @@
-/* Cap NCHUG · personnaliser le service (administrateur) : nom, message, date J, logo, rubriques, import du plan.
+/* Cap NCHUG · personnaliser le service (administrateur) : nom, message, date J, logo, rubriques, rubriques personnalisées, import du plan.
    Le logo du CHU n'est jamais modifié : le logo du service s'affiche à côté, sur fond blanc. */
 (function () {
   'use strict';
@@ -9,11 +9,11 @@
   function session() { return A.stock.lire(A.CLE.session) || {}; }
   function appeler(action, d) { return A.Api.appeler(action, Object.assign({ jeton: session().jeton }, d || {})); }
   function erreurSession(e) { if (e && A.ERREURS_SESSION.indexOf(e.code) >= 0) { A.stock.effacer(A.CLE.session); A.ecranConnexion(A.message(e.code)); return true; } return false; }
-  function page(contenu) {
+  function page(contenu, titre, role) {
     A.afficher(h('div', { class: 'page page--large service-perso' },
       h('header', { class: 'entete entete--module' },
         h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { A.ecranAccueil(); }, text: '‹' }),
-        h('h1', { class: 'entete__titre', text: 'Personnaliser le service' }), h('span', { class: 'entete__role', text: 'Administrateur' })),
+        h('h1', { class: 'entete__titre', text: titre || 'Personnaliser le service' }), h('span', { class: 'entete__role', text: role || 'Administrateur' })),
       contenu));
   }
   function champ(label, el, aide) { return h('div', { class: 'champ' }, h('label', { text: label }), el, aide ? h('small', { class: 'section__note', text: aide }) : null); }
@@ -55,17 +55,138 @@
       ev.preventDefault();
       var l = cases.map(function (c) { return c.querySelector('input'); }).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
       envoyer({ rubriques: l }, 'Rubriques enregistrées : l\'accueil n\'affiche plus que celles choisies.', rubriques);
-    } }, h('h2', { text: 'Rubriques' }), h('p', { class: 'section__note', text: 'Choisissez ce qui s\'affiche sur l\'accueil. Un petit service peut n\'en garder que deux ou trois ; le Défi CHU et les actualités restent toujours visibles.' }),
+    } }, h('h2', { text: 'Rubriques de l\'appli' }), h('p', { class: 'section__note', text: 'Choisissez ce qui s\'affiche sur l\'accueil. Un petit service peut n\'en garder que deux ou trois ; le Défi CHU et les actualités restent toujours visibles.' }),
       h('div', { class: 'service-cases' }, cases), h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer' }));
 
     var plan = sectionPlan(g, texteDessin);
-    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, texteDessin ? null : identite, texteDessin ? null : sectionLogo(g), texteDessin ? null : rubriques, plan));
+    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, texteDessin ? null : identite, texteDessin ? null : sectionLogo(g), texteDessin ? null : rubriques, texteDessin ? null : sectionRubriques(), plan));
     if (texteDessin) plan.scrollIntoView({ block: 'start' });
   }
   function envoyer(d, flash, form) {
     var b = form.querySelector('[type=submit]'); if (b) b.disabled = true;
     return appeler('service_reglages', { donnees: d }).then(function () { A.stock.effacer(A.CLE.accueil); ouvrir(flash); })
       .catch(function (e) { if (b) b.disabled = false; if (!erreurSession(e)) A.alerteDouce(form, A.message(e.code)); });
+  }
+
+  /* ---------- Rubriques personnalisées (moteur 2.4.0) ----------
+     L'administrateur crée ses rubriques (tuile sur l'accueil) et leurs sous-rubriques ; il peut reprendre la structure
+     d'une rubrique d'un autre service (structure suivie automatiquement, fiches de son service). Les créateurs font de même
+     pour les rubriques communes, visibles d'office partout. */
+  var EMOJIS = ['📁', '📋', '🩺', '💊', '🛏️', '🧯', '🚨', '🧼', '🍽️', '🚗', '📞', '🎓', '🗓️', '💡', '🛠️', '👪', '❓', '🔑'];
+  var NOMS_COULEURS = { '#223b80': 'Bleu foncé', '#40a8df': 'Bleu ciel', '#048e39': 'Vert', '#95c127': 'Vert clair' };
+  function rubriquesCommunes() {
+    init(); A.definirEcran(null);
+    page(h('div', null, sectionRubriques()), 'Rubriques communes', 'Créateurs');
+  }
+  function sectionRubriques() {
+    var zone = h('section', { class: 'form-carte rub-gestion' }, h('h2', { text: 'Mes rubriques' }), h('div', { class: 'squelette', style: 'height:120px' }));
+    appeler('rub_etat').then(function (e) { remplirRub(zone, e); })
+      .catch(function (er) { if (!erreurSession(er)) zone.replaceChildren(h('h2', { text: 'Mes rubriques' }), h('p', { class: 'message-erreur', text: A.message(er.code) })); });
+    return zone;
+  }
+  function pastille(r) { return h('span', { class: 'rub-pastille', style: '--c:' + r.couleur, 'aria-hidden': 'true', text: r.emoji }); }
+  function listeSous(r) { return (r.sous || []).length ? r.sous.map(function (s) { return s.nom; }).join(' · ') : 'Pas de sous-rubrique'; }
+  function remplirRub(zone, e, flash) {
+    var total = e.propres.length + e.adoptees.length, plein = total >= e.max;
+    function action(quoi, id, donnees, bouton, msg) {
+      if (bouton) bouton.disabled = true;
+      return appeler('rub_gerer', { quoi: quoi, id: id, donnees: donnees }).then(function (n) { A.stock.effacer(A.CLE.accueil); remplirRub(zone, n, msg); zone.scrollIntoView({ block: 'start' }); })
+        .catch(function (er) { if (bouton) bouton.disabled = false; if (!erreurSession(er)) A.alerteDouce(bouton ? bouton.parentNode : zone, A.message(er.code)); });
+    }
+    var propres = e.propres.map(function (r) {
+      var li = h('li', { class: 'rub-item' }, pastille(r),
+        h('div', { class: 'rub-item__texte' }, h('b', { text: r.nom }), h('small', { class: 'section__note', text: listeSous(r) }),
+          r.utilisateurs ? h('small', { class: 'section__note', text: 'Reprise par ' + r.utilisateurs + ' autre' + (r.utilisateurs > 1 ? 's' : '') + ' service' + (r.utilisateurs > 1 ? 's' : '') }) : null),
+        h('div', { class: 'gps-boutons' },
+          h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { li.replaceChildren(formRub(r, e, action, function () { remplirRub(zone, e); })); }, text: 'Modifier' }),
+          h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', onclick: function (ev) {
+            if (!confirm('Supprimer la rubrique « ' + r.nom + ' » et toutes ses fiches (PDF compris) ?' + (r.utilisateurs ? '\n\nLes services qui l\'ont reprise gardent sa structure et leurs propres fiches.' : ''))) return;
+            action('supprimer', r.id, null, ev.currentTarget, 'Rubrique supprimée.');
+          }, text: 'Supprimer' })));
+      return li;
+    });
+    zone.replaceChildren.apply(zone, [
+      h('h2', { text: e.commune ? 'Rubriques communes' : 'Mes rubriques' }),
+      flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null,
+      h('p', { class: 'section__note', text: e.commune
+        ? 'Elles s\'affichent d\'office dans tous les services et dans Infos générales, avec l\'étiquette CHU. Leurs fiches (texte, lien, PDF) se remplissent en ouvrant la tuile, ici dans les contenus communs.'
+        : 'Chaque rubrique devient une tuile sur l\'accueil ; ses sous-rubriques rangent les fiches (texte, lien, PDF), remplies par l\'administrateur et les référents en ouvrant la tuile. ' + total + ' sur ' + e.max + ' rubriques utilisées.' }),
+      propres.length ? h('ul', { class: 'rub-liste' }, propres) : h('p', { class: 'vide', text: 'Aucune rubrique pour le moment.' }),
+      plein ? h('p', { class: 'section__note', text: 'Maximum de ' + e.max + ' rubriques atteint.' })
+        : h('details', { class: 'defi-ajout' }, h('summary', { text: '+ Nouvelle rubrique' }), formRub(null, e, action)),
+      e.commune ? null : partage(e, action, plein)].filter(Boolean));
+  }
+  function formRub(r, e, action, annuler) {
+    var nom = h('input', { type: 'text', maxlength: '40', value: r ? r.nom : '', placeholder: 'ex. Transferts patients' });
+    var emoji = h('input', { type: 'text', maxlength: '8', value: r ? r.emoji : '📁', class: 'rub-emoji', 'aria-label': 'Emoji' });
+    var palette = h('div', { class: 'rub-palette' }, EMOJIS.map(function (x) { return h('button', { type: 'button', class: 'rub-palette__e', 'aria-label': 'Choisir ' + x, onclick: function () { emoji.value = x; }, text: x }); }));
+    var couleur = r ? r.couleur : e.couleurs[0], nomGroupe = 'rub-c-' + Math.random().toString(36).slice(2, 7);
+    var couleurs = h('div', { class: 'rub-couleurs', role: 'radiogroup', 'aria-label': 'Couleur de la tuile' }, e.couleurs.map(function (c) {
+      var i = h('input', { type: 'radio', name: nomGroupe, value: c }); i.checked = c === couleur;
+      i.addEventListener('change', function () { couleur = c; });
+      return h('label', { class: 'rub-couleur', style: '--c:' + c, title: NOMS_COULEURS[c] || c }, i, h('span', { class: 'visuellement-cache', text: NOMS_COULEURS[c] || c }));
+    }));
+    var lignes = h('ol', { class: 'rub-sous' }), ajout;
+    function majAjout() { ajout.disabled = lignes.children.length >= e.maxSous; }
+    function ligneSous(s) {
+      var i = h('input', { type: 'text', maxlength: '40', value: s ? s.nom : '', placeholder: 'Nom de la sous-rubrique', 'aria-label': 'Sous-rubrique' });
+      if (s) i.dataset.id = s.id;
+      var li = h('li', null, i,
+        h('button', { type: 'button', class: 'bouton bouton--discret', 'aria-label': 'Monter', onclick: function () { if (li.previousElementSibling) lignes.insertBefore(li, li.previousElementSibling); }, text: '↑' }),
+        h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', 'aria-label': 'Retirer', onclick: function () { li.remove(); majAjout(); }, text: '✕' }));
+      lignes.appendChild(li); return i;
+    }
+    ajout = h('button', { type: 'button', class: 'bouton bouton--discret', onclick: function () { ligneSous(null).focus(); majAjout(); }, text: '+ Sous-rubrique' });
+    (r ? r.sous : []).forEach(ligneSous); majAjout();
+    var err = h('p', { class: 'message-erreur', role: 'alert' });
+    var form = h('form', { class: 'form-carte rub-form', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault(); err.textContent = '';
+      if (nom.value.trim().length < 2) { err.textContent = 'Donnez un nom à la rubrique.'; return; }
+      var sous = Array.prototype.map.call(lignes.querySelectorAll('input'), function (i) { return { id: i.dataset.id || null, nom: i.value.trim() }; }).filter(function (s) { return s.nom; });
+      action('enregistrer', r ? r.id : null, { nom: nom.value.trim(), emoji: emoji.value.trim(), couleur: couleur, sous: sous }, form.querySelector('[type=submit]'),
+        r ? 'Rubrique modifiée.' : 'Rubrique créée : elle apparaît sur l\'accueil' + (e.commune ? ' de tous les services.' : '.'));
+    } },
+      h('div', { class: 'grille-2' }, champ('Nom de la rubrique', nom), champ('Emoji', emoji)), palette,
+      h('div', { class: 'champ' }, h('label', { text: 'Couleur de la tuile' }), couleurs),
+      h('div', { class: 'champ' }, h('label', { text: 'Sous-rubriques (' + e.maxSous + ' au plus)' }), lignes, ajout,
+        r && r.utilisateurs ? h('small', { class: 'section__note', text: 'Les services qui l\'ont reprise suivent ces changements. Une sous-rubrique retirée : ses fiches passent dans « Autres ».' })
+          : h('small', { class: 'section__note', text: 'Une sous-rubrique retirée : ses fiches passent dans « Autres ».' })),
+      err, h('div', { class: 'gps-boutons' }, h('button', { class: 'bouton', type: 'submit', text: r ? 'Enregistrer' : 'Créer la rubrique' }),
+        annuler ? h('button', { class: 'bouton bouton--discret', type: 'button', onclick: annuler, text: 'Annuler' }) : null));
+    return form;
+  }
+  function partage(e, action, plein) {
+    var bloc = h('div', { class: 'rub-partage' }, h('h3', { text: 'Rubriques des autres services' }));
+    if (!e.annuaire) { bloc.appendChild(h('p', { class: 'section__note', text: 'Disponible quand le service utilise le moteur commun Cap NCHUG (après son rattachement) : vous pourrez alors reprendre les rubriques des autres services, et eux les vôtres.' })); return bloc; }
+    bloc.appendChild(h('p', { class: 'section__note', text: 'Reprendre une rubrique d\'un autre service : vous obtenez sa structure (nom, sous-rubriques), vide, à remplir avec vos fiches. Si son service la modifie, la vôtre suit.' }));
+    if (e.adoptees.length) bloc.appendChild(h('ul', { class: 'rub-liste' }, e.adoptees.map(function (r) {
+      return h('li', { class: 'rub-item' }, pastille(r),
+        h('div', { class: 'rub-item__texte' }, h('b', { text: r.nom }), h('small', { class: 'section__note', text: 'De ' + r.origine + (r.retiree ? ' (retirée par ce service : vous gardez sa structure)' : '') }), h('small', { class: 'section__note', text: listeSous(r) })),
+        h('div', { class: 'gps-boutons' }, h('button', { type: 'button', class: 'bouton bouton--discret bouton--danger', onclick: function (ev) {
+          if (!confirm('Retirer « ' + r.nom + ' » de votre accueil ?\n\nVos fiches restent gardées : elles reviendront si vous la reprenez.')) return;
+          action('quitter', r.id, null, ev.currentTarget, 'Rubrique retirée de votre accueil.');
+        }, text: 'Retirer' })));
+    })));
+    if (!e.catalogue.length) { bloc.appendChild(h('p', { class: 'vide', text: e.adoptees.length ? 'Aucune autre rubrique proposée pour l\'instant.' : 'Aucun autre service n\'a encore créé de rubrique.' })); return bloc; }
+    var recherche = e.catalogue.length > 5 ? h('input', { type: 'search', placeholder: 'Chercher une rubrique ou un service…', 'aria-label': 'Chercher une rubrique' }) : null;
+    var liste = h('ul', { class: 'rub-liste' });
+    function norm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    function remplir() {
+      var f = recherche ? norm(recherche.value) : '';
+      var l = e.catalogue.filter(function (r) { return !f || norm(r.nom + ' ' + r.origine + ' ' + listeSous(r)).indexOf(f) >= 0; });
+      liste.replaceChildren.apply(liste, l.length ? l.map(function (r) {
+        return h('li', { class: 'rub-item' }, pastille(r),
+          h('div', { class: 'rub-item__texte' }, h('b', { text: r.nom }), h('small', { class: 'section__note', text: 'De ' + r.origine + (r.utilisateurs ? ' · reprise par ' + r.utilisateurs + ' service' + (r.utilisateurs > 1 ? 's' : '') : '') }), h('small', { class: 'section__note', text: listeSous(r) })),
+          h('div', { class: 'gps-boutons' }, h('button', { type: 'button', class: 'bouton bouton--discret', disabled: plein, onclick: function (ev) {
+            action('adopter', r.id, null, ev.currentTarget, '« ' + r.nom + ' » ajoutée à votre accueil : ouvrez la tuile pour la remplir.');
+          }, text: 'Ajouter à mon service' })));
+      }) : [h('li', { class: 'vide', text: 'Aucun résultat.' })]);
+    }
+    if (recherche) recherche.addEventListener('input', remplir);
+    remplir();
+    bloc.appendChild(h('h4', { text: 'Proposées' })); if (recherche) bloc.appendChild(recherche); bloc.appendChild(liste);
+    if (plein) bloc.appendChild(h('p', { class: 'section__note', text: 'Maximum de ' + e.max + ' rubriques atteint : retirez-en une pour en ajouter.' }));
+    return bloc;
   }
 
   /* ---------- Logo : réduit sur le téléphone (300 px, moins de 150 Ko) ---------- */
@@ -168,5 +289,5 @@
     return f.text();
   }
 
-  window.ReaService = { ouvrir: function (f) { ouvrir(f); }, logo: logo };
+  window.ReaService = { ouvrir: function (f) { ouvrir(f); }, logo: logo, rubriquesCommunes: function () { rubriquesCommunes(); } };
 })();

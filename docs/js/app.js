@@ -130,6 +130,10 @@
     question_introuvable: 'Cette question n\'existe plus.',
     jeu_inactif: 'Cette rubrique n\'est pas ouverte pour le moment.',
     introuvable: 'Élément introuvable (peut-être retiré).',
+    rubrique_introuvable: 'Cette rubrique n\'existe plus (elle a peut-être été retirée). Revenez à l\'accueil.',
+    rubriques_max: 'Maximum de rubriques atteint pour ce service : retirez-en une d\'abord.',
+    sous_rubriques_max: 'Trop de sous-rubriques : 12 au maximum.',
+    deja_adoptee: 'Cette rubrique est déjà dans votre service.',
     consentement: 'Cochez les règles pour la photo.',
     mot_refuse: 'Ce mot n\'est pas accepté.',
     pseudo_pris: 'Ce pseudo est déjà pris.',
@@ -359,7 +363,15 @@
     var liste = MODULES.filter(function (m) { return !rub || m.toujours || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
     if (role === 'visiteur') liste = MODULES.filter(function (m) { return ['plan-chu', 'newsletter', 'docs'].indexOf(m.id) >= 0; }); // Infos générales
     var commun = !!(window.ReaCap && window.ReaCap.enCommun());
-    if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#40a8df', sombre: true, e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
+    // Rubriques personnalisées (moteur 2.4.0) : communes au CHU, celles du service, puis celles reprises d'autres services
+    ((d && d.perso) || []).forEach(function (r, i) {
+      if (!window.ReaCommuns) return;
+      var sous = (r.sous || []).map(function (x) { return x.nom; });
+      liste.push({ id: 'rub:' + r.id, c: r.couleur || '#223b80', sombre: r.couleur === '#40a8df' || r.couleur === '#95c127', e: r.emoji || '📁', t: i % 2 ? -1.5 : 1.5, chu: !!r.chu, nom: r.nom,
+        desc: sous.length ? sous.slice(0, 4).join(' · ') + (sous.length > 4 ? ' …' : '') : 'Fiches, liens et documents', ouvrir: function () { window.ReaCommuns.rubrique(r); } });
+    });
+    if (role === 'admin' && window.ReaService && commun) liste.push({ id: 'rub-communes', c: '#223b80', e: '🗂️', t: -1, nom: 'Rubriques communes', desc: 'Créer les rubriques et sous-rubriques visibles dans tous les services', ouvrir: function () { window.ReaService.rubriquesCommunes(); } });
+    if (role === 'admin' && window.ReaService && !commun) liste.push({ id: 'perso', c: '#40a8df', sombre: true, e: '🎨', t: 1, nom: 'Personnaliser le service', desc: 'Nom, logo, rubriques et sous-rubriques, import du plan', ouvrir: function () { window.ReaService.ouvrir(); } });
     if (role === 'admin' && window.ReaCap && !commun) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Administration', desc: 'Codes d\'accès des agents et des référents', ouvrir: function () { window.ReaCap.ecranCodes(); } });
     // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
     if (role === 'admin' && (!Api.multi || (Api.service() && Api.service().api)) && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#95c127', sombre: true, e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
@@ -369,6 +381,7 @@
       h('ul', { class: 'modules' }, liste.map(function (m) {
         var contenu = [
           m.id === 'newsletter' && nlNeuve ? h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }) : null,
+          m.chu ? h('span', { class: 'etiquette etiquette--chu module__nouveau', text: 'CHU' }) : null,
           h('span', { class: 'module__nom', text: m.nom }),
           h('span', { class: 'module__desc', text: m.ouvrir ? m.desc : 'Bientôt' }),
           h('span', { class: 'module__icone', 'aria-hidden': 'true', text: m.e })];

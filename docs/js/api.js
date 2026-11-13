@@ -13,7 +13,7 @@
     defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, defi_parcours_actif: 1, defi_plan_services: 1, commun_jeton: 1, tableau_bord: 1, infos_login: 1, infos_code: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
-    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1 };
+    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, docs_pdf_page: 1, rub_etat: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1 };
   var ATTENTES = [1200, 2500, 5000]; // nouveaux essais en cas d'affluence
 
   function ErreurApi(code) { this.code = code; this.message = code; }
@@ -137,14 +137,14 @@
     if (['DEMO', 'ADMDEMO', 'REFDEMO', 'SUPDEMO', 'CREADEMO'].indexOf(c) >= 0) throw new ErreurApi('code_deja_utilise');
     return c;
   }
-  var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
+  var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, docs_pdf_page: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
   function demo(action, d) {
     return new Promise(function (ok, ko) {
       setTimeout(function () {
         if (d.jeton === 'demo.visiteur' && !INFOS_ACTIONS[action]) return ko(new ErreurApi('non_autorise'));
         try {
           if (/^defi_/.test(action)) return ok(demoDefi(action, d));
-          if (/^(actu_|docs_|service_reglages|logo|plan_importer|commun_jeton|tableau_bord)/.test(action)) return ok(demoLots(action, d));
+          if (/^(actu_|docs_|rub_|service_reglages|logo|plan_importer|commun_jeton|tableau_bord)/.test(action)) return ok(demoLots(action, d));
           if (ACTIONS_ANNUAIRE[action]) return ok(demoAnnuaire(action, d));
           if (action === 'codes_etat' || action === 'codes_changer') return ok(demoCodes(action, d));
         } catch (e) { return ko(e); }
@@ -517,6 +517,7 @@
     if (g.nom) o.service = g.nom; if (g.message != null) o.messageAccueil = g.message; if (g.dateJ) o.dateJ = g.dateJ;
     o.rubriques = g.rubriques && g.rubriques.length < 6 ? g.rubriques : null; if (SERVICE && SERVICE.id === '_chu') { o.rubriques = ['newsletter', 'docs']; o.service = 'Contenus communs du CHU'; } o.logo = g.logo ? String(g.logoV || 1) : null;
     if (a) o.actualites = a.filter(function (x) { return x.publiee; }).map(function (x) { return { date: x.date, titre: x.titre, texte: x.texte, epinglee: x.epinglee }; });
+    o.perso = rubVuesDemo(sidDemo()).map(function (r) { return { id: r.id, nom: r.nom, emoji: r.emoji, couleur: r.couleur, sous: r.sous, source: r.source, chu: r.chu, origine: r.origine }; });
     o.actualites = [{ date: '', titre: 'Exemple d\'actualité commune au CHU', texte: 'Publiée une fois par les créateurs, visible dans tous les services.', epinglee: false, chu: true }].concat(o.actualites || []);
     return o;
   }
@@ -538,17 +539,11 @@
         l.forEach(function (q) { delete q.ligne; }); demoEcrire('actus', l);
         return { ok: true, actualites: l.map(function (q, i) { return Object.assign({ ligne: i + 2 }, q); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }) };
       }
-      case 'docs_liste': case 'docs_enregistrer': case 'docs_supprimer': {
-        var ld = demoLire('docs', [{ id: 'DOCdemo1', categorie: 'FAQ', titre: 'Où trouver le plan du service ?', texte: 'Dans la rubrique « Plan du service » de l\'appli.', lien: '', publie: true }]);
-        if (action !== 'docs_liste' && !ref) throw new ErreurApi('non_autorise');
-        if (action === 'docs_enregistrer') { var z = d.donnees || {}; if (z.lien && !/^https:\/\//.test(z.lien)) throw new ErreurApi('lien_invalide');
-          var nv = { id: d.id || 'DOC' + Math.random().toString(36).slice(2, 8), categorie: z.categorie || 'Divers', titre: z.titre, texte: z.texte || '', lien: z.lien || '', ordre: Number(z.ordre) || 0, publie: z.publie !== false };
-          ld = ld.filter(function (q) { return q.id !== d.id; }); ld.push(nv); }
-        if (action === 'docs_supprimer') ld = ld.filter(function (q) { return q.id !== d.id; });
-        demoEcrire('docs', ld);
-        var communs = [{ id: 'chu1', categorie: 'Accès au site', titre: 'Plan d\'accès (exemple commun au CHU)', texte: 'Document publié par les créateurs pour tous les services.', lien: '', publie: true, chu: true }];
-        return { ok: true, documents: communs.concat(ld.filter(function (q) { return q.publie || ref; })), peutModifier: ref };
-      }
+      case 'docs_liste': case 'docs_enregistrer': case 'docs_supprimer': case 'docs_pdf_envoyer': case 'docs_pdf_page':
+        return demoDocs(action, d, ref);
+      case 'rub_etat': case 'rub_gerer':
+        if (!admin) throw new ErreurApi('non_autorise');
+        return demoRub(action, d);
       case 'service_reglages': {
         if (!admin) throw new ErreurApi('non_autorise');
         var g = demoLire('reglages', {}), x2 = d.donnees;
@@ -569,6 +564,134 @@
       }
     }
     throw new ErreurApi('action_inconnue');
+  }
+
+  /* Démonstration 2.6 : PDF dans les documents, rubriques personnalisées (par service, sur ce téléphone ; images des PDF en mémoire) */
+  function sidDemo() { return SERVICE && SERVICE.id ? SERVICE.id : 'rea'; }
+  function cleDocs(sid) { return sid === 'rea' ? 'docs' : 'docs.' + sid; }
+  function docsDe(sid) {
+    var defaut = sid === 'rea' ? [{ id: 'DOCdemo1', categorie: 'FAQ', titre: 'Où trouver le plan du service ?', texte: 'Dans la rubrique « Plan du service » de l\'appli.', lien: '', publie: true }]
+      : sid === '_chu' ? [{ id: 'chu1', categorie: 'Accès au site', titre: 'Plan d\'accès (exemple commun au CHU)', texte: 'Document publié par les créateurs pour tous les services.', lien: '', publie: true, rubrique: '',
+          pdf: { pages: 2, ratio: 1.414, recues: [1, 1] }, pdfTexte: 'Plan d\'accès au nouveau CHU Belle-Plaine. Parkings du personnel, navettes, badge d\'accès, rue Caraïbes.' },
+        { id: 'chu2', categorie: '', titre: 'Que faire en cas d\'alarme incendie ?', texte: 'Fermer les portes, prévenir, suivre les consignes du guide-file. (Exemple de démonstration.)', lien: '', publie: true, rubrique: 'RUBchudemo1/SRsec001' }] : [];
+    return demoLire(cleDocs(sid), defaut);
+  }
+  var DPDF = {}; // images des PDF de démonstration : { 'sid|id': [base64] }
+  function pdfDemo(x) { var p = x.pdf; if (!p) return null; var r = p.recues || []; var c = true; for (var k = 0; k < p.pages; k++) if (!r[k]) c = false; return { pages: p.pages, ratio: p.ratio || 1.414, complet: c, v: String(p.v || 1) }; }
+  function docPublicDemo(x, chu) { var o = { id: x.id, categorie: x.categorie || 'Divers', titre: x.titre, texte: x.texte || '', lien: x.lien || '', ordre: 0, publie: x.publie !== false, rubrique: x.rubrique || '', pdf: pdfDemo(x), pdfTexte: x.pdf ? x.pdfTexte || '' : '' }; if (chu) o.chu = true; return o; }
+  function visibleDemo(o) { return o.publie && (!o.pdf || o.pdf.complet); }
+  function demoDocs(action, d, ref) {
+    var sid = sidDemo(), l = docsDe(sid), id = String(d.id || '');
+    if (action === 'docs_pdf_page') {
+      var chu = id.indexOf('chu:') === 0, s2 = chu ? '_chu' : sid, x0 = docsDe(s2).filter(function (q) { return q.id === (chu ? id.slice(4) : id); })[0];
+      if (!x0 || !x0.pdf) throw new ErreurApi('introuvable');
+      var im = (DPDF[s2 + '|' + x0.id] || [])[d.page];
+      return { ok: true, page: d.page, type: 'image/jpeg', data: im || pageDemoPdf(x0.titre, d.page + 1, x0.pdf.pages) };
+    }
+    if (action !== 'docs_liste' && !ref) throw new ErreurApi('non_autorise');
+    var r = null, rubId = String(d.rubrique || '').split('/')[0];
+    if (action === 'docs_liste' && rubId) { r = rubVuesDemo(sid).filter(function (y) { return y.id === rubId; })[0]; if (!r) throw new ErreurApi('rubrique_introuvable'); }
+    if (action === 'docs_enregistrer') {
+      var z = d.donnees || {}; if (z.lien && !/^https:\/\//.test(z.lien)) throw new ErreurApi('lien_invalide');
+      var avant = l.filter(function (q) { return q.id === d.id; })[0], rub = avant ? avant.rubrique || '' : '';
+      if (z.rubrique !== undefined) {
+        rub = '';
+        if (z.rubrique) { var p = String(z.rubrique).split('/'), rr = rubVuesDemo(sid).filter(function (y) { return y.id === p[0]; })[0];
+          if (!rr || rr.source === 'commune') throw new ErreurApi('rubrique_introuvable');
+          rub = rr.id + '/' + (p[1] && rr.sous.some(function (s) { return s.id === p[1]; }) ? p[1] : ''); }
+      }
+      var nv = { id: avant ? avant.id : 'DOC' + Math.random().toString(36).slice(2, 10), categorie: z.categorie || 'Divers', titre: z.titre, texte: z.texte || '', lien: z.lien || '', publie: z.publie !== false, rubrique: rub,
+        pdf: avant ? avant.pdf : null, pdfTexte: avant ? avant.pdfTexte : '' };
+      if (z.pdf) { nv.pdf = { pages: z.pdf.pages, ratio: z.pdf.ratio, recues: [], v: Date.now() }; nv.pdfTexte = String(z.pdf.texte || '').slice(0, 30000); delete DPDF[sid + '|' + nv.id]; }
+      else if (z.pdf === null) { nv.pdf = null; nv.pdfTexte = ''; delete DPDF[sid + '|' + nv.id]; }
+      if (!nv.titre || String(nv.titre).length < 2 || (!nv.texte.trim() && !nv.lien && !nv.pdf)) throw new ErreurApi('requete_invalide');
+      l = l.filter(function (q) { return q.id !== nv.id; }); l.push(nv); demoEcrire(cleDocs(sid), l);
+      var res = demoDocs('docs_liste', { jeton: d.jeton, rubrique: rub }, ref); res.id = nv.id; return res;
+    }
+    if (action === 'docs_pdf_envoyer') {
+      var x = l.filter(function (q) { return q.id === id; })[0]; if (!x) throw new ErreurApi('introuvable');
+      if (!x.pdf || !(d.page >= 0 && d.page < x.pdf.pages) || !/^\/9j\//.test(d.data || '')) throw new ErreurApi('requete_invalide');
+      (DPDF[sid + '|' + x.id] = DPDF[sid + '|' + x.id] || [])[d.page] = d.data;
+      x.pdf.recues = x.pdf.recues || []; x.pdf.recues[d.page] = 1; demoEcrire(cleDocs(sid), l);
+      return { ok: true, page: d.page, complet: !!pdfDemo(x).complet };
+    }
+    if (action === 'docs_supprimer') { l = l.filter(function (q) { return q.id !== id; }); demoEcrire(cleDocs(sid), l); delete DPDF[sid + '|' + id]; return { ok: true }; }
+    function dans(o) { var x = String(o.rubrique || ''); return r ? x.split('/')[0] === r.id : !x; }
+    var communs = sid === '_chu' ? [] : docsDe('_chu').map(function (q) { return docPublicDemo(q, true); }).filter(function (o) { return visibleDemo(o) && dans(o); });
+    var propres = r && r.source === 'commune' ? [] : l.map(function (q) { return docPublicDemo(q, false); }).filter(function (o) { return dans(o) && (ref || visibleDemo(o)); });
+    return { ok: true, documents: communs.concat(propres), peutModifier: ref && !(r && r.source === 'commune'), rubrique: r };
+  }
+  function pageDemoPdf(titre, n, total) {
+    var c = document.createElement('canvas'); c.width = 1240; c.height = 1754; var g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#048e39'; g.fillRect(0, 0, c.width, 200);
+    g.fillStyle = '#fff'; g.font = 'bold 64px sans-serif'; g.fillText(String(titre || 'Document').slice(0, 30), 60, 120);
+    g.fillStyle = '#1b2a52'; g.font = '40px sans-serif'; g.fillText('PDF de démonstration – page ' + n + ' sur ' + total, 60, 300);
+    g.fillStyle = '#c9d3e6'; for (var i = 0; i < 18; i++) g.fillRect(60, 380 + i * 66, i % 5 === 4 ? 620 : 1120, 24);
+    return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+  }
+  function rubDe(sid) {
+    var defaut = { cardiologie: [{ id: 'RUBcardio001', nom: 'Transferts patients', emoji: '🛏️', couleur: '#048e39', sous: [{ id: 'SRtrf001', nom: 'Avant le transfert' }, { id: 'SRtrf002', nom: 'Le jour J' }, { id: 'SRtrf003', nom: 'Après' }] }],
+      neonat: [{ id: 'RUBneonat01', nom: 'Accueil des familles', emoji: '👪', couleur: '#40a8df', sous: [{ id: 'SRfam001', nom: 'Horaires' }, { id: 'SRfam002', nom: 'Accès' }] }],
+      _chu: [{ id: 'RUBchudemo1', nom: 'Sécurité', emoji: '🧯', couleur: '#223b80', sous: [{ id: 'SRsec001', nom: 'Incendie' }, { id: 'SRsec002', nom: 'Évacuation' }] }] }[sid] || [];
+    return demoLire('rub.' + sid, defaut);
+  }
+  function adoptDe(sid) { return demoLire('rubadopt.' + sid, []); }
+  function externeDemo() { return !!(SERVICE && SERVICE.api) || !MULTI || (cfg.SERVICES_EXTERNES || []).some(function (x) { return x && x.id === sidDemo(); }); } // service sur son propre moteur (la réa) : pas de catalogue
+  function catalogueDemo() {
+    var l = [], retirees = demoLire('rubretirees', {});
+    demoServices().filter(function (s) { return s.actif && s.id !== 'rea'; }).forEach(function (s) {
+      rubDe(s.id).forEach(function (r) { l.push(Object.assign({}, r, { service: s.id, origine: s.nom, statut: 'active' })); });
+    });
+    Object.keys(retirees).forEach(function (k) { l.push(Object.assign({}, retirees[k], { statut: 'retirée' })); });
+    l.forEach(function (r) { r.utilisateurs = demoServices().filter(function (s) { return s.id !== r.service && adoptDe(s.id).indexOf(r.id) >= 0; }).length; });
+    return l;
+  }
+  function rubVuesDemo(sid) {
+    var l = [];
+    if (sid !== '_chu' && !externeDemo()) rubDe('_chu').forEach(function (r) { l.push(Object.assign({}, r, { source: 'commune', chu: true })); });
+    rubDe(sid).forEach(function (r) { l.push(Object.assign({}, r, { source: 'propre', chu: sid === '_chu' })); });
+    if (!externeDemo() && sid !== '_chu') { var cat = catalogueDemo(); adoptDe(sid).forEach(function (id) { var c = cat.filter(function (y) { return y.id === id; })[0]; if (c) l.push({ id: c.id, nom: c.nom, emoji: c.emoji, couleur: c.couleur, sous: c.sous, source: 'adoptee', chu: false, origine: c.origine }); }); }
+    return l;
+  }
+  function demoRub(action, d) {
+    var sid = sidDemo(), propres = rubDe(sid), annuaire = !externeDemo() && sid !== '_chu', adopt = annuaire ? adoptDe(sid) : [], MAX = 6;
+    if (action === 'rub_gerer') {
+      var id = String(d.id || ''), total = propres.length + adopt.length;
+      if (d.quoi === 'enregistrer') {
+        var z = d.donnees || {}, nom = String(z.nom || '').trim().slice(0, 40); if (nom.length < 2) throw new ErreurApi('requete_invalide');
+        var x = id ? propres.filter(function (y) { return y.id === id; })[0] : null; if (id && !x) throw new ErreurApi('rubrique_introuvable');
+        if (!x && total >= MAX) throw new ErreurApi('rubriques_max');
+        var vus = {}, sous = (z.sous || []).filter(function (s) { return s && String(s.nom || '').trim(); }).map(function (s) {
+          var garde = s.id && !vus[s.id] && x && x.sous.some(function (a) { return a.id === s.id; }), i = garde ? s.id : 'SR' + Math.random().toString(36).slice(2, 8);
+          vus[i] = 1; return { id: i, nom: String(s.nom).trim().slice(0, 40) }; });
+        if (sous.length > 12) throw new ErreurApi('sous_rubriques_max');
+        var nv = { id: x ? x.id : 'RUB' + Math.random().toString(36).slice(2, 12), nom: nom, emoji: String(z.emoji || '📁').slice(0, 8) || '📁', couleur: ['#223b80', '#40a8df', '#048e39', '#95c127'].indexOf(z.couleur) >= 0 ? z.couleur : '#223b80', sous: sous };
+        if (x) propres[propres.indexOf(x)] = nv; else propres.push(nv);
+        demoEcrire('rub.' + sid, propres);
+      } else if (d.quoi === 'supprimer') {
+        var y = propres.filter(function (q) { return q.id === id; })[0]; if (!y) throw new ErreurApi('rubrique_introuvable');
+        var util = demoServices().filter(function (s) { return s.id !== sid && adoptDe(s.id).indexOf(id) >= 0; }).length;
+        if (util) { var ret = demoLire('rubretirees', {}); ret[id] = Object.assign({}, y, { service: sid, origine: (demoServices().filter(function (s) { return s.id === sid; })[0] || {}).nom || sid }); demoEcrire('rubretirees', ret); }
+        demoEcrire('rub.' + sid, propres.filter(function (q) { return q.id !== id; }));
+        demoEcrire(cleDocs(sid), docsDe(sid).filter(function (q) { return String(q.rubrique || '').split('/')[0] !== id; }));
+      } else if (d.quoi === 'adopter' || d.quoi === 'quitter') {
+        if (!annuaire) throw new ErreurApi('requete_invalide');
+        if (d.quoi === 'adopter') {
+          if (adopt.indexOf(id) >= 0) throw new ErreurApi('deja_adoptee');
+          if (!catalogueDemo().some(function (c) { return c.id === id && c.statut === 'active' && c.service !== sid; })) throw new ErreurApi('rubrique_introuvable');
+          if (total >= MAX) throw new ErreurApi('rubriques_max');
+          adopt.push(id);
+        } else adopt = adopt.filter(function (q) { return q !== id; });
+        demoEcrire('rubadopt.' + sid, adopt);
+      } else throw new ErreurApi('requete_invalide');
+      propres = rubDe(sid);
+    }
+    var cat = annuaire ? catalogueDemo() : [];
+    function pub(c) { return { id: c.id, nom: c.nom, emoji: c.emoji, couleur: c.couleur, sous: c.sous, origine: c.origine, utilisateurs: c.utilisateurs, retiree: c.statut === 'retirée' }; }
+    return { ok: true, annuaire: annuaire, commune: sid === '_chu', max: MAX, maxSous: 12, couleurs: ['#223b80', '#40a8df', '#048e39', '#95c127'],
+      propres: propres.map(function (r) { var c = cat.filter(function (y) { return y.id === r.id; })[0]; return Object.assign({}, r, { utilisateurs: c ? c.utilisateurs : 0 }); }),
+      adoptees: adopt.map(function (id) { var c = cat.filter(function (y) { return y.id === id; })[0]; return c ? pub(c) : null; }).filter(Boolean),
+      catalogue: cat.filter(function (c) { return c.service !== sid && c.statut === 'active' && adopt.indexOf(c.id) < 0; }).map(pub) };
   }
 
   /* Plan fictif du mode démonstration : le vrai plan n'est jamais publié sur GitHub */

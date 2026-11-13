@@ -472,6 +472,26 @@ Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique
 
 **3. Importer un fichier** `.json` au format Cap NCHUG (partie S).
 
+## Partie U – PDF dans Documents et FAQ, rubriques personnalisées (moteur 2.4.0, appli 2.6.0)
+
+**Mise à jour :** collez `Code.gs` 2.4.0 dans le projet de l'annuaire Cap NCHUG **et** dans celui de la réa, puis « Nouvelle version » de chaque déploiement. Rien d'autre à faire : les nouvelles colonnes de « Documents et FAQ » et les onglets « Rubriques » (dans chaque service) et « Rubriques – Catalogue » (dans l'annuaire) se créent tout seuls, sans rien effacer. L'appli se met à jour automatiquement.
+
+**PDF dans « Documents et FAQ »** (administrateur et référents)
+- Dans « + Ajouter un document ou une question » (ou « Modifier »), champ « PDF (facultatif) ». Le PDF est converti en images sur l'appareil, comme une newsletter (16 pages et 40 Mo au plus), avec un aperçu. Son texte est extrait : la barre de recherche le trouve (« 🔎 trouvé dans le PDF »). Un PDF scanné n'a pas de texte : la recherche porte alors sur le titre et la réponse.
+- Les agents voient « 📄 Lire le PDF (n pages) » : liseuse avec zoom, pages gardées pour la lecture sans réseau jusqu'à la déconnexion.
+- Une fiche dont l'envoi du PDF a été interrompu reste invisible pour les agents (message « PDF incomplet » pour les référents) : la modifier et choisir à nouveau le PDF.
+- Remplacer ou retirer le PDF, ou supprimer la fiche, met les images à la corbeille du Drive (dossier privé « Cap NCHUG – Documents PDF », créé au premier envoi).
+- Fonctionne aussi dans les contenus communs (créateurs) et donc dans Infos générales.
+
+**Rubriques personnalisées** (tuile 🎨 « Personnaliser le service » › « Mes rubriques », administrateur)
+- « + Nouvelle rubrique » : nom, emoji, couleur de la charte, sous-rubriques (12 au plus, ordre réglable). Chaque rubrique devient une tuile sur l'accueil du service. 6 rubriques au plus par service (reprises comprises).
+- Contenu : en ouvrant la tuile, l'administrateur et les référents ajoutent des fiches (titre, texte, lien, PDF) dans chaque sous-rubrique, avec la recherche en haut. Une sous-rubrique retirée : ses fiches passent dans « Autres ». Supprimer une rubrique supprime ses fiches et leurs PDF.
+- « Rubriques des autres services » : la liste des rubriques créées ailleurs, avec le nom du service d'origine. « Ajouter à mon service » donne la structure (nom, sous-rubriques), vide, à remplir avec ses propres fiches. La structure suit automatiquement le service d'origine (renommage, sous-rubrique ajoutée). Si celui-ci supprime sa rubrique, les services qui l'ont reprise la gardent. « Retirer » enlève la tuile ; les fiches restent dans le Google Sheets et reviennent si on la reprend.
+- Réservé aux services sur le moteur commun : tant que la réa a son propre moteur, elle crée ses rubriques mais ne voit pas celles des autres (et inversement) ni les rubriques communes.
+
+**Rubriques communes** (Espace créateurs › « Modifier les contenus communs » › tuile 🗂️ « Rubriques communes »)
+- Même fonctionnement ; elles s'affichent d'office dans tous les services et dans Infos générales, avec l'étiquette CHU, avant les rubriques du service. Les créateurs remplissent les fiches en ouvrant la tuile ; les services les lisent seulement.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |
