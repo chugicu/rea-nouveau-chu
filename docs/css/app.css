@@ -676,3 +676,14 @@ button.nuage__mot { cursor: pointer; }
 .reglage .grille-2 { gap: 8px; }
 .reglage-case select { max-width: 140px; }
 .quiz-carte > *, .form-carte > * { min-width: 0; }
+
+/* Visite virtuelle (photos 360°, module street.js) */
+.quiz-theme--street { border-color: var(--chu-violet, var(--chu-bleu-fonce)); }
+.street-barre { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.street-aller { flex: 1 1 auto; min-width: 0; padding: 10px 12px; border: 2px solid var(--trait); border-radius: 12px; background: var(--surface); color: var(--texte); font: inherit; }
+.street-visor { width: 100%; border-radius: var(--r-m); overflow: hidden; background: #000; }
+.street-aide { min-height: 1.2em; }
+.street-marqueur { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(34, 59, 128, .85); color: #fff; font-size: 1.1rem; cursor: pointer; }
+.street-marqueur--info { background: rgba(4, 142, 57, .85); }
+.street-formulaire { margin-top: 12px; }
+.street-formulaire__actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }

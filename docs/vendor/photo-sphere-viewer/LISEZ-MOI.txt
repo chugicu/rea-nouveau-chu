@@ -1,0 +1,17 @@
+Bibliothèques vendues pour la visite virtuelle (rubrique « Visite virtuelle », module docs/js/street.js).
+- Photo Sphere Viewer 5.15.1 (core + plugins Virtual Tour et Markers), licence MIT.
+- three.js 0.185.1 (dépendance de Photo Sphere Viewer), licence MIT.
+Regroupées et minifiées (esbuild, format ESM) en psv.bundle.min.js + psv.bundle.min.css.
+
+Pour mettre à jour :
+  mkdir psv-fetch && cd psv-fetch && npm init -y
+  npm install --no-save @photo-sphere-viewer/core @photo-sphere-viewer/virtual-tour-plugin @photo-sphere-viewer/markers-plugin
+  cat > entry.js <<'JS'
+  export { Viewer, utils, events } from '@photo-sphere-viewer/core';
+  export { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
+  export { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
+  JS
+  npx esbuild entry.js --bundle --minify --format=esm --outfile=psv.bundle.min.js
+  cat node_modules/@photo-sphere-viewer/core/index.css node_modules/@photo-sphere-viewer/markers-plugin/index.css node_modules/@photo-sphere-viewer/virtual-tour-plugin/index.css > psv.bundle.css
+  npx esbuild psv.bundle.css --minify --outfile=psv.bundle.min.css
+Puis copier les deux fichiers ici et augmenter VERSION dans docs/sw.js.

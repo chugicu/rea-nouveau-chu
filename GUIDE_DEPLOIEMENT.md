@@ -492,6 +492,20 @@ Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique
 **Rubriques communes** (Espace créateurs › « Modifier les contenus communs » › tuile 🗂️ « Rubriques communes »)
 - Même fonctionnement ; elles s'affichent d'office dans tous les services et dans Infos générales, avec l'étiquette CHU, avant les rubriques du service. Les créateurs remplissent les fiches en ouvrant la tuile ; les services les lisent seulement.
 
+## Partie V – Visite virtuelle : photos 360° (moteur 2.5.0, appli 2.7.0)
+
+**Mise à jour :** collez `Code.gs` 2.5.0 dans le projet de la réa (et des autres services qui voudront la visite virtuelle plus tard), puis « Nouvelle version » du déploiement. Les deux nouveaux onglets « Street – Points » et « Street – Liens », et le paramètre « Visite virtuelle (activée) », se créent tout seuls (bouton « Installer / réparer la base »), sans rien effacer.
+
+**Remplir « Street – Points »** (un point de prise de vue = une ligne) : `ID` (même numérotation que le plan : `E-01`, `C-02`…, `CH-301`, `L-01`), `Nom`, `Zone`, `ID photo (Drive)` et `ID vignette (Drive)` (identifiants des fichiers déposés dans le dossier Drive partagé « toute personne disposant du lien »), `ID illustration (Drive)` (laisser vide pour l'instant, réservé à la vue dessinée), `Cap initial` (`decalage_deg` du fichier de caps), `Date de prise de vue`, `Pris par`. Rien à remplir dans « Street – Liens » : les flèches et points d'info se posent directement dans l'appli (voir plus bas).
+
+**Activer la rubrique** (tuile 🎨 « Personnaliser le service », administrateur) : section « Visite virtuelle », cocher « Afficher la tuile « Visite virtuelle » ». Elle n'apparaît alors, dans « Plan du service », qu'en dessous de « Plan interactif ». Désactivée par défaut pour tout nouveau service.
+
+**Poser les flèches et les points d'info** (référents et administrateur, directement dans la visionneuse) : bouton « Modifier les liens » en haut de la visite virtuelle, puis toucher la photo à l'endroit voulu → choisir « Flèche » (avec le point d'arrivée) ou « Point d'info » (avec un texte). Toucher un repère existant pour le modifier ou le « Retirer ». Les agents ne voient pas ce bouton.
+
+**Si les photos ne s'affichent pas dans la visionneuse** (écran noir ou erreur de chargement) : le format d'image utilisé (`https://lh3.googleusercontent.com/d/ID=sTAILLE`) fonctionne pour un fichier Drive partagé « toute personne disposant du lien », sans être republié ailleurs. Si cela ne suffit pas, la solution de repli prévue (décision 4 du document de décisions) est de servir les photos depuis l'Apps Script plutôt que directement depuis Drive ; cela ne changerait que la fonction `urlDrive_()` de `docs/js/street.js`, rien d'autre.
+
+**Mettre à jour la visionneuse 360°** (Photo Sphere Viewer, vendue dans `docs/vendor/photo-sphere-viewer/`, jamais chargée depuis un site extérieur) : voir `docs/vendor/photo-sphere-viewer/LISEZ-MOI.txt` pour la commande exacte (npm + esbuild), puis augmenter `VERSION` dans `sw.js`.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

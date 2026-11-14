@@ -3,11 +3,11 @@
 Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questions ici.
 
 ## Le projet
-PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.4.0) + Google Sheets/Drive. Compte : chugicu@gmail.com.
+PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.5.0) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.6.2`).
-- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.7.0`).
+- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées, V visite virtuelle 360°).
 
 ## Règles à ne jamais enfreindre
 - Pas de données de santé dans l'appli ; pas de suivi individuel ; pas de compte Google pour les agents ; pas d'e-mails.
@@ -39,8 +39,10 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 
 - Mises à jour (appli 2.6.2) : `sw.js` fait `skipWaiting()` à l'installation et relit les fichiers avec `cache: 'reload'` ; l'appli affiche le bandeau « Mettre à jour » (rechargement) et vérifie les mises à jour au retour dans l'appli. Auparavant la nouvelle version restait en attente et « Mettre à jour » ne changeait rien.
 
+- Visite virtuelle (moteur 2.5.0, appli 2.7.0, 14/11/2026) : nouvelle rubrique, dans « Plan du service », tuile sous « Plan interactif », visible seulement si « Visite virtuelle (activée) » est VRAI (réglage par service, « Personnaliser le service », masquée par défaut — pour l'instant seule la réa a des photos). Onglets `Street – Points` (id, nom, zone, id photo/vignette/illustration Drive, cap initial, date, auteur) et `Street – Liens` (id, départ, type flèche/info, arrivée, position horizontale/verticale en %, texte) dans le classeur de chaque service. Visionneuse Photo Sphere Viewer 5.15.1 + three.js 0.185.1, vendues (jamais de CDN) dans `docs/vendor/photo-sphere-viewer/` (bundle esbuild, voir son `LISEZ-MOI.txt`), module `docs/js/street.js`. Photos et vignettes jamais sur GitHub, servies depuis le Drive du compte dédié via `https://lh3.googleusercontent.com/d/ID=sTAILLE` (à vérifier avec de vraies photos : repli prévu côté Apps Script si WebGL/CORS pose problème, voir Partie V du guide). Flèches et points d'info posés par clic direct dans la photo (référents/admin, bouton « Modifier les liens »), actions `street_liste` et `street_lien_modifier`. Prise de vue des 90 premiers points faite le 13/11 (E-01 à C-90 ; chambres et locaux restants) ; dépôt sur Drive et remplissage de `Street – Points` pas encore fait.
+
 ## Reste à faire côté utilisateur
-1. Coller `Code.gs` 2.4.0 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
+1. Coller `Code.gs` 2.5.0 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base », puis Nouvelle version du déploiement.
 2. Questions : déjà importées et corrigées dans la réa. Pour Cap NCHUG (Espace créateurs), importer les fichiers corrigés, puis relire et valider. Activer le jeu Parcours quand on le souhaite. Dans Cap NCHUG : recopier l'onglet « Plan – Services », entrer une fois dans « Modifier les contenus communs », puis choisir le code Infos générales.
 3. Vérifier que Cap NCHUG répond (Espace créateurs, code super-admin ; déploiement « Exécuter en tant que : moi », « Accès : tout le monde »).
 4. Créer un service test, puis rattacher la réa (partie R du guide) et retirer `SERVICES_EXTERNES` de `config.js`.
