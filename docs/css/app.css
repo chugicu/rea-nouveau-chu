@@ -684,6 +684,16 @@ button.nuage__mot { cursor: pointer; }
 .street-visor { width: 100%; border-radius: var(--r-m); overflow: hidden; background: #000; }
 .street-aide { min-height: 1.2em; }
 .street-marqueur { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(34, 59, 128, .85); color: #fff; font-size: 1.1rem; cursor: pointer; }
+.street-marqueur svg { display: block; width: 20px; height: 20px; }
+/* Chevrons de navigation posés au sol (plugin Virtual Tour, mode 3D) : blancs, sans cadre, pointe vers la destination. */
+.street-chevron { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, .88); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.street-chevron svg { display: block; width: 100%; height: 100%; }
+.psv-virtual-tour-link:hover .street-chevron, .street-chevron:active { color: #fff; }
+/* En mode modification, on ne voit que les repères modifiables (les chevrons sont masqués). */
+.street-visor--edition .psv-virtual-tour-arrows { display: none; }
+/* Plein écran simulé (iPhone) : cadre sans arrondi, barre du bas au-dessus de la zone du geste d'accueil. */
+.street-visor.psv-fullscreen-emulation { border-radius: 0; }
+.street-visor.psv-fullscreen-emulation .psv-navbar { bottom: env(safe-area-inset-bottom, 0px); }
 .street-marqueur--info { background: rgba(4, 142, 57, .85); }
 .street-formulaire { margin-top: 12px; }
 .street-formulaire__actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }

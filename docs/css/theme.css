@@ -218,7 +218,10 @@ details.detail-jauge summary::after { color: #223b80; }
 
 /* ---------- Transitions entre écrans ---------- */
 @media (prefers-reduced-motion: no-preference) {
-  .entree { animation: entree .28s cubic-bezier(.2, .8, .2, 1) both; }
+  /* « backwards » et non « both » : avec « both », la page garde un transform à l'arrivée de l'animation et
+     devient la référence de tout élément en position:fixed qu'elle contient (plein écran de la visite
+     virtuelle et du plan interactif sur iPhone : le cadre se calait sur la page au lieu de l'écran). */
+  .entree { animation: entree .28s cubic-bezier(.2, .8, .2, 1) backwards; }
   @keyframes entree { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   .module, .quiz-theme { animation: pop .4s cubic-bezier(.3, 1.4, .5, 1) both; }
   .module:nth-child(2), .quiz-theme:nth-child(2) { animation-delay: .04s; } .module:nth-child(3), .quiz-theme:nth-child(3) { animation-delay: .08s; }
