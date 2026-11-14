@@ -492,7 +492,7 @@ Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique
 **Rubriques communes** (Espace créateurs › « Modifier les contenus communs » › tuile 🗂️ « Rubriques communes »)
 - Même fonctionnement ; elles s'affichent d'office dans tous les services et dans Infos générales, avec l'étiquette CHU, avant les rubriques du service. Les créateurs remplissent les fiches en ouvrant la tuile ; les services les lisent seulement.
 
-## Partie V – Visite virtuelle : photos 360° (moteur 2.5.1, appli 2.7.1)
+## Partie V – Visite virtuelle : photos 360° (moteur 2.5.1, appli 2.7.2)
 
 **Mise à jour :** collez `Code.gs` 2.5.1 dans le projet de la réa (et des autres services qui voudront la visite virtuelle plus tard), puis « Nouvelle version » du déploiement. Les deux nouveaux onglets « Street – Points » et « Street – Liens », et le paramètre « Visite virtuelle (activée) », se créent tout seuls (bouton « Installer / réparer la base »), sans rien effacer.
 
