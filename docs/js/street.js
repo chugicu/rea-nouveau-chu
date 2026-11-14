@@ -8,8 +8,10 @@
 (function () {
   'use strict';
   // Chemins relatifs à la page (docs/index.html), comme les autres bibliothèques vendues (vendor/qrcode.js, etc.) :
-  // un script classique (non « module ») résout import() de la même façon qu'un lien <link>, par rapport au document.
-  var PSV_JS = 'vendor/photo-sphere-viewer/psv.bundle.min.js';
+  // un script classique (non « module ») résout import() par rapport au document, comme un lien <link>.
+  // Le « ./ » est obligatoire pour import() : sans lui, le navigateur y voit un nom de module (comme « three »)
+  // et refuse tout de suite (« Failed to resolve module specifier »), sans jamais demander le fichier.
+  var PSV_JS = './vendor/photo-sphere-viewer/psv.bundle.min.js';
   var PSV_CSS = 'vendor/photo-sphere-viewer/psv.bundle.min.css';
   var cssChargee = false, modulePromesse = null;
 
