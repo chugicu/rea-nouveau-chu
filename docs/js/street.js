@@ -37,6 +37,10 @@
   // Repli prévu si besoin (voir street-view-decisions-et-plan.md, décision 4) : servir la photo depuis l'Apps
   // Script (action dédiée) plutôt que depuis Drive, sans rien changer d'autre dans ce fichier.
   function urlDrive_(id, taille) { return id ? 'https://lh3.googleusercontent.com/d/' + id + '=s' + (taille || 2048) : ''; }
+  // Les photos sont déposées en 6144 × 3072 : il faut demander cette taille. Sans elle, Google renvoie une
+  // image de 2048 px de large, nettement floue dès qu'on zoome. Les appareils dont WebGL plafonne plus bas
+  // (vieux iPhone : 4096) sont gérés par la visionneuse, qui réduit l'image d'elle-même.
+  var TAILLE_PHOTO = 6144;
 
   var DEUX_PI = Math.PI * 2;
   function versAngles_(xPct, yPct) { return { yaw: (xPct / 100) * DEUX_PI - Math.PI, pitch: Math.PI / 2 - (yPct / 100) * Math.PI }; }
@@ -94,7 +98,7 @@
     function aller(id) {
       if (!points[id] || !visor) return;
       idCourant = id; selecteur.value = id;
-      visor.setPanorama(urlDrive_(points[id].photo), { caption: nomPoint_(points, id) }).catch(function () {});
+      visor.setPanorama(urlDrive_(points[id].photo, TAILLE_PHOTO), { caption: nomPoint_(points, id) }).catch(function () {});
       dessinerMarqueurs();
     }
 

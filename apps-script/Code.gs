@@ -26,7 +26,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.5.0',
+  version: '2.5.1',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -265,6 +265,15 @@ function lireParametres_(ss) {
   return p;
 }
 
+/** Vrai/faux d'un paramètre, quelle que soit la façon dont il a été saisi.
+   Le classeur est en français : une case cochée, un VRAI tapé à la main et un TRUE importé donnent trois
+   valeurs différentes (booléen, texte « VRAI », texte « TRUE »). Toutes comptent pour « activé ». */
+function parametreVrai_(v) {
+  if (v === true) return true;
+  var s = String(v == null ? '' : v).trim().toUpperCase();
+  return s === 'VRAI' || s === 'TRUE' || s === 'OUI';
+}
+
 function lireActualites_(ss) {
   var valeurs = ss.getSheetByName(ONGLETS.actualites).getDataRange().getValues();
   var liste = [];
@@ -321,7 +330,7 @@ function plan_(session) {
 }
 
 function visiteVirtuelleActive_() {
-  return String(lireParametres_(classeur_())['Visite virtuelle (activée)'] || '').trim() === 'VRAI';
+  return parametreVrai_(lireParametres_(classeur_())['Visite virtuelle (activée)']);
 }
 
 /* ---------- GPS : calage du plan (admin), partagé avec tous ----------
@@ -3021,14 +3030,14 @@ function serviceReglages_(d) {
       ecrireParametre_(ss, 'Rubriques actives', r.length === RUBRIQUES.length ? '' : r.join(', '), 'Rubriques affichées sur l\'accueil (vide = toutes) : ' + RUBRIQUES.join(', '));
     }
     if (d.logo === null) { ecrireParametre_(ss, 'Logo du service (ID Drive)', ''); props_().setProperty('LOGO_VERSION', String(Date.now())); cache_().remove('logo'); }
-    if (d.visiteVirtuelle != null) ecrireParametre_(ss, 'Visite virtuelle (activée)', d.visiteVirtuelle ? 'VRAI' : '',
+    if (d.visiteVirtuelle != null) ecrireParametre_(ss, 'Visite virtuelle (activée)', d.visiteVirtuelle === true,
       'VRAI pour afficher la tuile « Visite virtuelle » dans Plan du service (réglable aussi dans Personnaliser le service).');
     p = lireParametres_(ss);
   }
   var dj = p['Date J'];
   return { ok: true, reglages: { nom: String(p['Nom du service'] || ''), message: String(p["Message d'accueil"] || ''), dateJ: dj instanceof Date && !isNaN(dj) ? formaterDate_(dj) : '',
     rubriques: rubriquesActives_(p) || RUBRIQUES.slice(), logo: !!p['Logo du service (ID Drive)'], plan: !!String(p['Fichier du plan (ID Drive)'] || '').trim(),
-    visiteVirtuelle: String(p['Visite virtuelle (activée)'] || '').trim() === 'VRAI' }, toutes: RUBRIQUES };
+    visiteVirtuelle: parametreVrai_(p['Visite virtuelle (activée)']) }, toutes: RUBRIQUES };
 }
 function dossierService_(ss) { var parents = DriveApp.getFileById(ss.getId()).getParents(); return parents.hasNext() ? parents.next() : DriveApp.getRootFolder(); }
 function logoEnvoyer_(data, type) {
