@@ -667,6 +667,7 @@
   /* ---------- Rubrique Plan : plan interactif (avec GPS) et jeux pour apprendre le service ---------- */
   var sansUnites = false; // plan sans unités ni couleurs (la plupart des services) : jeux de couleurs masqués
   var visiteVirtuelleActive = false; // réglable par service (admin), affiche ou masque la tuile « Visite virtuelle »
+  var streetDernier = null;          // dernier point de la visite virtuelle visité : le bonhomme du plan y reste posé (mémoire de la session, rien n'est enregistré)
   function verifierUnites(d) { var n = d && d.donnees ? Object.keys(d.donnees.unites || {}).length : 2, avant = sansUnites; sansUnites = n < 2; return avant !== sansUnites; }
   function verifierVisite(d) { var v = !!(d && d.visiteVirtuelle), avant = visiteVirtuelleActive; visiteVirtuelleActive = v; return avant !== v; }
   function ecranPlanHub(flash) {
@@ -702,8 +703,9 @@
     window.scrollTo(0, 0);
   }
 
-  function ecranPlan() {
+  function ecranPlan(opts) {
     ecranCourant = ecranPlan;
+    var recentrer = !!(opts && opts.recentrer === true); // retour de la visite virtuelle : le plan se centre sur le bonhomme (attention : « Réessayer » passe l'événement du clic en argument)
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
     var zone = h('div', { class: 'zone-plan' }, h('div', { class: 'squelette', style: 'height:60vh' })), zoneGps = h('div', { class: 'zone-gps' });
@@ -718,6 +720,22 @@
     var zoneDecouverte = document.querySelector('.decouverte');
     window.scrollTo(0, 0);
     var monte = false;
+    // Bonhomme de la visite virtuelle : seulement si la visite est activée pour le service et que les points ont une position.
+    // Les points sont lus une seule fois ; sans réseau ou sans positions, le plan reste tel quel.
+    var promesseStreet = null;
+    function chargerStreet() {
+      if (!promesseStreet) promesseStreet = Api.appeler('street_liste', { jeton: session.jeton }).then(function (s) { return s && s.actif ? s : null; }, function () { return null; });
+      return promesseStreet;
+    }
+    function brancherBonhomme(r, plan) {
+      if (!r.visiteVirtuelle || !window.ReaStreetPlan) return;
+      var svg = zone.querySelector('.plan__svg');
+      chargerStreet().then(function (s) {
+        if (!s || !svg || !svg.isConnected || zone.querySelector('.plan__svg') !== svg) return; // le plan a été redessiné entre-temps
+        window.ReaStreetPlan.brancher({ zone: zone, plan: plan, points: s.points, liens: s.liens, poseId: streetDernier, recentrer: recentrer,
+          surPoser: function (id) { try { plan.pleinEcran(false); } catch (e) { /* sans importance */ } ecranStreet({ depart: id, depuisPlan: true }); } });
+      });
+    }
     function monter(r, depuisCache) {
       monte = true;
       var vus = stock.lire(CLE.planVu);       // { pieces: {P012: 1, …}, lieux: {poste: 1, …} }
@@ -765,6 +783,7 @@
       });
       function majCache() { mettrePlanEnCache({ donnees: r.donnees, reglages: plan.reglages, peutModifier: r.peutModifier, gps: r.gps }); }
       majDecouverte();
+      brancherBonhomme(r, plan);
       // Position GPS (calculée sur le téléphone, jamais envoyée) ; calage par un administrateur
       zoneGps.replaceChildren();
       if (window.ReaGps) {
@@ -790,20 +809,25 @@
   }
 
   /* ---------- Visite virtuelle (photos 360°) ---------- */
-  function ecranStreet() {
+  // opts (facultatif) : { depart: 'C-18', depuisPlan: true } quand on arrive par le bonhomme du plan ; la flèche de retour
+  // ramène alors au plan interactif. Attention : « Réessayer » passe l'événement du clic en argument, d'où les tests de type.
+  function ecranStreet(opts) {
     ecranCourant = ecranStreet;
+    var depart = opts && typeof opts.depart === 'string' ? opts.depart : null, depuisPlan = !!(opts && opts.depuisPlan === true);
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
     var zone = h('div', { class: 'zone-street' }, h('div', { class: 'squelette', style: 'height:60vh' }));
     afficher(h('div', { class: 'page page--large' },
       h('header', { class: 'entete entete--module' },
-        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { ecranPlanHub(); }, text: '‹' }),
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { if (depuisPlan) ecranPlan({ recentrer: true }); else ecranPlanHub(); }, text: '‹' }),
         h('h1', { class: 'entete__titre', text: 'Visite virtuelle' }),
         h('span', { class: 'entete__role', text: session.role === 'agent' ? 'Niveau 3' : 'Mode référent' })),
       zone,
       h('p', { class: 'plan-note', text: 'Suivez les flèches pour vous déplacer ; touchez un point d\'info pour en savoir plus.' })));
     window.scrollTo(0, 0);
-    Api.appeler('street_liste', { jeton: session.jeton }).then(function (r) {
+    // Le contour du bâtiment et les patios viennent du plan gardé sur le téléphone (jamais du dépôt) ; sans lui, le mini-plan s'en passe.
+    Promise.all([Api.appeler('street_liste', { jeton: session.jeton }), planEnCache()]).then(function (res) {
+      var r = res[0], D = res[1] && res[1].donnees;
       if (!zone.isConnected) return;
       if (!r.actif || !Object.keys(r.points).length) {
         zone.replaceChildren(h('p', { class: 'vide', text: 'La visite virtuelle n\'est pas encore prête : aucune photo n\'est disponible.' }));
@@ -811,6 +835,8 @@
       }
       window.ReaStreet.creer(zone, {
         points: r.points, liens: r.liens, peutModifier: !!r.peutModifier,
+        depart: depart, surPoint: function (id) { streetDernier = id; },
+        plan: D ? { contour: D.batiment, patios: D.patios } : null,
         enregistrerLien: function (id, d) {
           return Api.appeler('street_lien_modifier', { jeton: session.jeton, id: id, donnees: d }).then(function () {}, function (e) { throw new Error(message(e.code)); });
         }

@@ -8,7 +8,14 @@
    et enchaîne rotation, zoom léger et fondu. Pour qu'on arrive toujours face à la direction du déplacement,
    chaque photo est tournée vers le nord du plan grâce à son cap (correction de sphère) : les positions
    enregistrées (en % de la photo) ne changent pas, elles sont converties à l'affichage.
-   Utilisation : ReaStreet.creer(conteneur, { points, liens, peutModifier, enregistrerLien(id, donnees) }) */
+   2.7.7 : mini-plan en bas à gauche de la visionneuse (point actuel et cône de vue qui suit le regard) ; un toucher
+   l'agrandit sur tout l'étage, et toucher un point du plan y emmène. Le plan est dessiné à partir des points et des
+   flèches (couloirs en traits), avec le contour du bâtiment et les patios du plan interactif quand ils sont connus.
+   Les positions des points sur le plan (colonnes « X (plan) » et « Y (plan) » de Street – Points) sont dans les
+   mêmes unités que le plan interactif ; les fonctions de recherche du point le plus proche servent aussi au
+   bonhomme du plan (street-plan.js).
+   Utilisation : ReaStreet.creer(conteneur, { points, liens, peutModifier, enregistrerLien(id, donnees),
+                                              depart (point d'ouverture), surPoint(id), plan: { contour, patios } }) */
 (function () {
   'use strict';
   // Chargée par une balise <script> ordinaire, comme les autres bibliothèques vendues (vendor/qrcode.js…),
@@ -19,7 +26,7 @@
   var PSV_JS = 'vendor/photo-sphere-viewer/psv.bundle.min.js';
   var PSV_CSS = 'vendor/photo-sphere-viewer/psv.bundle.min.css';
   // Affichée en cas d'erreur : elle dit tout de suite si l'appareil a bien reçu la dernière version du fichier.
-  var VERSION = '2.7.6';
+  var VERSION = '2.7.7';
   var cssChargee = false, modulePromesse = null;
 
   function chargerCss() {
@@ -95,6 +102,79 @@
   function nomPoint_(points, id) { var p = points[id]; return p ? (p.nom || id) + (p.zone && p.zone !== p.nom ? ' – ' + p.zone : '') : id; }
   function echapper_(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
+  /* ---------- Position sur le plan : recherche du point le plus proche, tracé des couloirs ---------- */
+  var NS_SVG = 'http://www.w3.org/2000/svg';
+  // Distance (unités du plan ; deux points voisins sont à environ 140) en deçà de laquelle un point est « touché ».
+  var SEUIL_POINT = 100;
+
+  function svgEl_(tag, attrs, parent) {
+    var e = document.createElementNS(NS_SVG, tag);
+    Object.keys(attrs || {}).forEach(function (k) { if (attrs[k] != null) e.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  // Un point a une position sur le plan s'il a deux nombres. (isFinite(null) vaut vrai : on teste le type.)
+  function aXY_(p) { return !!p && typeof p.x === 'number' && typeof p.y === 'number' && isFinite(p.x) && isFinite(p.y); }
+  // Point le plus proche de (x, y) parmi ceux qui ont une photo et une position ; null au-delà du rayon.
+  function plusProche_(points, x, y, rayon) {
+    var meilleur = null, dm = Infinity;
+    Object.keys(points).forEach(function (id) {
+      var p = points[id]; if (!p || !p.photo || !aXY_(p)) return;
+      var d = Math.hypot(p.x - x, p.y - y);
+      if (d < dm) { dm = d; meilleur = id; }
+    });
+    return meilleur && dm <= rayon ? { id: meilleur, distance: dm } : null;
+  }
+  // Couloirs : un trait par paire de points voisins (les flèches existent dans les deux sens, une seule suffit).
+  function troncons_(points, liens) {
+    var vus = {}, t = [];
+    (liens || []).forEach(function (l) {
+      if (l.type !== 'fleche') return;
+      var a = points[l.depart], b = points[l.arrivee];
+      if (!a || !b || !a.photo || !b.photo || !aXY_(a) || !aXY_(b)) return;
+      var k = l.depart < l.arrivee ? l.depart + '|' + l.arrivee : l.arrivee + '|' + l.depart;
+      if (vus[k]) return; vus[k] = 1; t.push([a.x, a.y, b.x, b.y]);
+    });
+    return t;
+  }
+  // Secteur de disque centré sur un cap (0 = haut du plan, sens horaire), demi-angle en radians (< 90°).
+  function conePath_(cx, cy, rayon, cap, demi) {
+    var a1 = cap - demi, a2 = cap + demi;
+    var x1 = cx + rayon * Math.sin(a1), y1 = cy - rayon * Math.cos(a1), x2 = cx + rayon * Math.sin(a2), y2 = cy - rayon * Math.cos(a2);
+    return 'M' + cx + ',' + cy + ' L' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' A' + rayon + ',' + rayon + ' 0 0 1 ' + x2.toFixed(1) + ',' + y2.toFixed(1) + ' Z';
+  }
+  // Épaisseur de trait en pixels d'écran, quel que soit le zoom du dessin.
+  var TRAIT_FIXE = 'vector-effect:non-scaling-stroke';
+  function contourValide_(c) { return Array.isArray(c) && c.length >= 4 && c.slice(0, 4).every(function (n) { return typeof n === 'number' && isFinite(n); }) && c[2] > c[0] && c[3] > c[1]; }
+  // Dessin du fond : contour, patios, couloirs, points. Renvoie le cône et le point actuel, à placer ensuite.
+  function dessinerPlan_(svg, d) {
+    svg.replaceChildren();
+    if (contourValide_(d.contour)) svgEl_('rect', { x: d.contour[0], y: d.contour[1], width: d.contour[2] - d.contour[0], height: d.contour[3] - d.contour[1], rx: 14, fill: '#f4f7fb', stroke: '#223b80', 'stroke-width': 2.5, style: TRAIT_FIXE }, svg);
+    (d.patios || []).forEach(function (pa) {
+      if (contourValide_(pa)) svgEl_('rect', { x: pa[0], y: pa[1], width: pa[2] - pa[0], height: pa[3] - pa[1], rx: 10, fill: '#e3edcb' }, svg);
+    });
+    d.troncons.forEach(function (t) { svgEl_('line', { x1: t[0], y1: t[1], x2: t[2], y2: t[3], stroke: '#40a8df', 'stroke-width': 3.5, 'stroke-linecap': 'round', style: TRAIT_FIXE }, svg); });
+    d.ids.forEach(function (id) { var p = d.points[id]; svgEl_('circle', { cx: p.x, cy: p.y, r: d.rayonPoint, fill: '#fff', stroke: '#223b80', 'stroke-width': 1.5, style: TRAIT_FIXE }, svg); });
+    return {
+      cone: svgEl_('path', { fill: 'rgba(217,96,11,.38)', stroke: 'rgba(217,96,11,.9)', 'stroke-width': 1.5, style: TRAIT_FIXE }, svg),
+      courant: svgEl_('circle', { r: d.rayonCourant, fill: '#d9600b', stroke: '#fff', 'stroke-width': 2.5, style: TRAIT_FIXE }, svg)
+    };
+  }
+  // Ramène un point d'écran en coordonnées du dessin.
+  function ecranVersPlan_(svg, cx, cy) {
+    var m = svg.getScreenCTM(); if (!m) return null;
+    var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+    var q = pt.matrixTransform(m.inverse());
+    return [q.x, q.y];
+  }
+  // Un élément posé par-dessus la visionneuse ne doit rien transmettre à celle-ci (sinon un toucher sur le
+  // mini-plan ferait aussi tourner ou cliquer la photo).
+  function isoler_(e) {
+    ['pointerdown', 'pointerup', 'pointermove', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'touchmove', 'click', 'dblclick', 'wheel', 'contextmenu']
+      .forEach(function (t) { e.addEventListener(t, function (ev) { ev.stopPropagation(); }); });
+    return e;
+  }
+
   // Chevron pointant vers le haut : le plugin le pose à plat sur le sol, pointe vers la destination.
   var CHEVRON_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path fill="currentColor" d="M50 14 94 60 80 74 50 44 20 74 6 60Z"/></svg>';
   function elementFleche_(lien) {
@@ -118,7 +198,10 @@
     var barre = el('div', { class: 'street-barre' }, [selecteur, boutonModifier]);
     conteneur.replaceChildren(barre, zoneVisor, zoneAide);
 
-    var visor = null, mp = null, vt = null, enEdition = false, idCourant = idsTriees[0], zoomAvant = null;
+    // Point d'ouverture : celui demandé (bonhomme posé sur le plan) s'il a une photo, sinon le premier de la liste.
+    var visor = null, mp = null, vt = null, enEdition = false, zoomAvant = null, mini = null;
+    var idCourant = opt.depart && points[opt.depart] && points[opt.depart].photo ? opt.depart : idsTriees[0];
+    selecteur.value = idCourant;
 
     chargerCss();
     zoneVisor.appendChild(el('div', { class: 'squelette', style: 'height:100%' }));
@@ -148,6 +231,8 @@
           vt = visor.getPlugin(PSV.VirtualTourPlugin);
           mp.addEventListener('select-marker', surClicMarqueur);
           visor.addEventListener('click', surClicPhoto);
+          mini = monterMiniPlan();
+          if (mini) { visor.addEventListener('position-updated', mini.regarder); visor.addEventListener('zoom-updated', mini.regarder); }
           vt.addEventListener('node-changed', surNoeud);
           if (vt.getCurrentNode && vt.getCurrentNode()) surNoeud({ node: vt.getCurrentNode() });
         } catch (e) { throw etiqueter_(e, 'La visionneuse 360° n\'a pas pu démarrer'); }
@@ -196,11 +281,109 @@
       vt.setCurrentNode(id, { rotation: false }).catch(function () {});
     }
 
+    /* ----- Mini-plan : où l'on est et vers où l'on regarde ----- */
+    // Petit plan dans le coin bas-gauche (zone proche, nord en haut) ; un toucher l'agrandit sur tout l'étage,
+    // et toucher un point du plan y emmène. Rien n'est affiché si le point courant n'a pas de position.
+    function monterMiniPlan() {
+      var rayonMini = 430;          // demi-largeur de la zone montrée dans le petit plan (unités du plan)
+      var avecXY = idsTriees.filter(function (id) { return aXY_(points[id]); });
+      if (avecXY.length < 2) return null;
+      var decor = opt.plan || {};
+      var cap = 0, demiCone = 0.6, courantId = idCourant, planifie = false, grand = null, troncons = troncons_(points, liens);
+
+      // Zone montrée en grand : tout l'étage (contour du plan) ou, à défaut, l'étendue des points avec une marge.
+      function zoneGrand() {
+        if (contourValide_(decor.contour)) { var c = decor.contour; return [c[0] - 30, c[1] - 30, c[2] - c[0] + 60, c[3] - c[1] + 60]; }
+        var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        avecXY.forEach(function (id) { var p = points[id]; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+        return [x0 - 150, y0 - 150, x1 - x0 + 300, y1 - y0 + 300];
+      }
+      function donneesPlan(rayonPoint, rayonCourant) {
+        return { points: points, ids: avecXY.filter(function (id) { return points[id].photo; }), troncons: troncons, contour: decor.contour, patios: decor.patios, rayonPoint: rayonPoint, rayonCourant: rayonCourant };
+      }
+
+      var racine = isoler_(el('div', { class: 'street-mini', role: 'button', tabindex: '0', 'aria-label': 'Plan du service : agrandir', title: 'Agrandir le plan' }));
+      var svgMini = svgEl_('svg', { 'aria-hidden': 'true', focusable: 'false', preserveAspectRatio: 'xMidYMid slice' });
+      racine.appendChild(svgMini);
+      racine.appendChild(el('span', { class: 'street-mini__agrandir', 'aria-hidden': 'true', html: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>' }));
+      var refsMini = null;
+      function tracerMini() { refsMini = dessinerPlan_(svgMini, donneesPlan(14, 26)); placer(); }
+      function placer() {
+        var p = points[courantId];
+        if (!aXY_(p)) { racine.hidden = true; return; }
+        racine.hidden = false;
+        svgMini.setAttribute('viewBox', (p.x - rayonMini) + ' ' + (p.y - rayonMini) + ' ' + (2 * rayonMini) + ' ' + (2 * rayonMini));
+        [[refsMini, 260], [grand && grand.refs, 330]].forEach(function (r) {
+          if (!r[0]) return;
+          r[0].courant.setAttribute('cx', p.x); r[0].courant.setAttribute('cy', p.y);
+          r[0].cone.setAttribute('d', conePath_(p.x, p.y, r[1], cap, demiCone));
+        });
+      }
+      // Le cône suit le regard : le yaw de la visionneuse est le cap sur le plan (photos tournées vers le nord du plan).
+      function lire() {
+        planifie = false;
+        try {
+          var pos = visor.getPosition(); if (pos && isFinite(pos.yaw)) cap = pos.yaw;
+          var f = visor.state && visor.state.hFov; if (typeof f === 'number' && isFinite(f)) demiCone = Math.max(0.3, Math.min(1.2, (f * Math.PI / 180) / 2));
+        } catch (e) { /* on garde la dernière direction connue */ }
+        placer();
+      }
+      function regarder() { if (planifie) return; planifie = true; (window.requestAnimationFrame || window.setTimeout)(lire); }
+
+      function agrandir() {
+        if (grand) return;
+        var fond = isoler_(el('div', { class: 'street-grand', role: 'dialog', 'aria-label': 'Plan du service' }));
+        var fermer = el('button', { type: 'button', class: 'street-grand__fermer', 'aria-label': 'Fermer le plan', text: '×' });
+        var legende = el('p', { class: 'street-grand__legende', 'aria-live': 'polite', text: 'Touchez un point du plan pour y aller.' });
+        var z = zoneGrand();
+        var svg = svgEl_('svg', { class: 'street-grand__svg', viewBox: z.join(' '), 'aria-label': 'Plan de l\'étage' });
+        fond.appendChild(el('div', { class: 'street-grand__entete' }, [el('strong', { text: 'Où aller ?' }), fermer]));
+        fond.appendChild(svg); fond.appendChild(legende);
+        var refs = dessinerPlan_(svg, donneesPlan(20, 34));
+        var anneau = svgEl_('circle', { r: 46, fill: 'rgba(217,96,11,.18)', stroke: '#d9600b', 'stroke-width': 3, visibility: 'hidden', style: TRAIT_FIXE }, svg);
+        grand = { fond: fond, refs: refs };
+        var cible = null;
+        function viser(e) {
+          var q = ecranVersPlan_(svg, e.clientX, e.clientY), c = q ? plusProche_(points, q[0], q[1], SEUIL_POINT + 20) : null;
+          cible = c && c.id;
+          if (cible) { anneau.setAttribute('cx', points[cible].x); anneau.setAttribute('cy', points[cible].y); anneau.setAttribute('visibility', 'visible'); legende.textContent = nomPoint_(points, cible); }
+          else { anneau.setAttribute('visibility', 'hidden'); legende.textContent = 'Pas de photo ici. Touchez un point du plan.'; }
+        }
+        svg.addEventListener('pointerdown', function (e) { try { svg.setPointerCapture(e.pointerId); } catch (x) { /* ignoré */ } viser(e); });
+        svg.addEventListener('pointermove', function (e) { if (e.buttons || e.pointerType === 'touch') viser(e); });
+        svg.addEventListener('pointerup', function (e) { viser(e); var id = cible; if (id) { fermerGrand(); if (id !== idCourant) aller(id); } });
+        svg.addEventListener('pointercancel', function () { cible = null; anneau.setAttribute('visibility', 'hidden'); });
+        fermer.addEventListener('click', fermerGrand);
+        zoneVisor.appendChild(fond); placer(); fermer.focus();
+      }
+      function fermerGrand() { if (!grand) return; grand.fond.remove(); grand = null; racine.focus(); }
+      function surTouche(e) {
+        if (e.key === 'Escape' && grand) { e.stopPropagation(); fermerGrand(); }
+        else if ((e.key === 'Enter' || e.key === ' ') && e.target === racine) { e.preventDefault(); agrandir(); }
+      }
+      racine.addEventListener('click', agrandir);
+      zoneVisor.addEventListener('keydown', surTouche);
+
+      zoneVisor.appendChild(racine);
+      tracerMini(); lire();
+      return {
+        maj: function (id) { courantId = id; placer(); regarder(); },
+        regarder: regarder,
+        // Une flèche posée ou retirée change les couloirs dessinés.
+        rafraichir: function () {
+          troncons = troncons_(points, liens); tracerMini();
+          if (grand) { var ouvert = grand; fermerGrand(); if (ouvert) agrandir(); }
+        }
+      };
+    }
+
     // Arrivée sur une photo : liste à jour, repères redessinés, zoom ramené doucement à son niveau d'avant.
     function surNoeud(e) {
       if (!e || !e.node) return;
       idCourant = e.node.id; selecteur.value = idCourant;
       dessinerMarqueurs();
+      if (mini) mini.maj(idCourant);
+      if (opt.surPoint) { try { opt.surPoint(idCourant); } catch (err) { /* sans importance pour la visite */ } }
       if (zoomAvant != null && visor) {
         var z = zoomAvant; zoomAvant = null;
         try { visor.animate({ zoom: z, speed: 700 }).catch(function () {}); } catch (err) { /* sans importance */ }
@@ -279,6 +462,7 @@
         form.remove();
         if (vt) vt.updateNode({ id: idCourant, links: flechesDe(idCourant) });
         dessinerMarqueurs();
+        if (mini) mini.rafraichir();
       }).catch(function (e) {
         if (b) b.disabled = false;
         form.querySelector('.message-erreur').textContent = (e && e.message) || 'Enregistrement impossible.';
@@ -286,5 +470,9 @@
     }
   }
 
-  window.ReaStreet = { creer: creer, version: VERSION };
+  window.ReaStreet = {
+    creer: creer, version: VERSION,
+    // Utilisés aussi par le bonhomme du plan interactif (street-plan.js)
+    seuilPoint: SEUIL_POINT, plusProche: plusProche_, aPosition: aXY_, troncons: troncons_, nomPoint: nomPoint_
+  };
 })();
