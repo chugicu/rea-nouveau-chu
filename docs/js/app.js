@@ -682,7 +682,7 @@
     function jeu(cle) { return function () { window.ReaQuiz.jeu(cle, ecranPlanHub); }; }
     var tuiles = [
       { ic: '🗺️', nom: 'Plan interactif', desc: 'Toutes les pièces, les équipements et votre position GPS', ouvrir: ecranPlan, classe: 'quiz-theme--plan' },
-      visiteVirtuelleActive ? { ic: '🏞️', nom: 'Visite virtuelle', desc: 'Se promener dans le service en photos à 360°', ouvrir: ecranStreet, classe: 'quiz-theme--street' } : null,
+      visiteVirtuelleActive ? { ic: '🏞️', nom: 'Visite virtuelle', desc: 'Se promener dans le service en photos à 360°, by Paillette et Emeric', ouvrir: ecranStreet, classe: 'quiz-theme--street' } : null,
       { ic: '🏷️', nom: 'Placer le nom des unités', desc: 'Glisser chaque nom d\'unité au bon endroit' + record('etiquettes'), ouvrir: jeu('etiquettes'), unites: true },
       { ic: '🖍️', nom: 'Colorier les unités', desc: 'Glisser chaque couleur sur la bonne étiquette' + record('couleurs'), ouvrir: jeu('couleurs'), unites: true },
       { ic: '🎨', nom: 'Colorier les chambres', desc: 'Chaque chambre avec la couleur de son unité' + record('chambres'), ouvrir: jeu('chambres'), unites: true },
