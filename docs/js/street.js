@@ -13,6 +13,8 @@
   // et refuse tout de suite (« Failed to resolve module specifier »), sans jamais demander le fichier.
   var PSV_JS = './vendor/photo-sphere-viewer/psv.bundle.min.js';
   var PSV_CSS = 'vendor/photo-sphere-viewer/psv.bundle.min.css';
+  // Affichée en cas d'erreur : elle dit tout de suite si l'appareil a bien reçu la dernière version du fichier.
+  var VERSION = '2.7.4';
   var cssChargee = false, modulePromesse = null;
 
   function chargerCss() {
@@ -58,6 +60,15 @@
     return s;
   }
 
+  // Garde le message technique du navigateur à côté d'une phrase compréhensible : c'est lui qui permet
+  // de dire au premier coup d'œil si le fichier manque, si le réseau est coupé ou si le code est fautif.
+  function etiqueter_(e, resume) {
+    var detail = e && (e.name || e.message) ? ((e.name ? e.name + ' : ' : '') + (e.message || '')) : String(e);
+    var err = e instanceof Error ? e : new Error(detail);
+    err.resume = resume; err.detail = detail;
+    return err;
+  }
+
   function nomPoint_(points, id) { var p = points[id]; return p ? (p.nom || id) + (p.zone ? ' – ' + p.zone : '') : id; }
 
   function creer(conteneur, opt) {
@@ -77,16 +88,25 @@
 
     chargerCss();
     zoneVisor.appendChild(el('div', { class: 'squelette', style: 'height:100%' }));
-    chargerModule().then(function (PSV) {
-      zoneVisor.replaceChildren();
-      visor = new PSV.Viewer({ container: zoneVisor, navbar: ['zoom', 'caption', 'fullscreen'], plugins: [[PSV.MarkersPlugin, {}]] });
-      mp = visor.getPlugin(PSV.MarkersPlugin);
-      mp.addEventListener('select-marker', surClicMarqueur);
-      visor.addEventListener('click', surClicPhoto);
-      aller(idCourant);
-    }).catch(function () {
-      zoneVisor.replaceChildren(el('p', { class: 'vide', text: 'La visionneuse 360° n\'a pas pu être chargée (hors ligne ?).' }));
-    });
+    // Deux étapes séparées : un échec au chargement du fichier et un échec au démarrage de la visionneuse
+    // n'ont ni la même cause ni le même remède. Le détail technique est affiché : sans lui, un simple
+    // « hors ligne ? » a déjà fait chercher du côté du réseau un défaut qui était dans le code.
+    chargerModule().catch(function (e) { throw etiqueter_(e, 'Le fichier de la visionneuse 360° n\'a pas pu être chargé'); })
+      .then(function (PSV) {
+        try {
+          zoneVisor.replaceChildren();
+          visor = new PSV.Viewer({ container: zoneVisor, navbar: ['zoom', 'caption', 'fullscreen'], plugins: [[PSV.MarkersPlugin, {}]] });
+          mp = visor.getPlugin(PSV.MarkersPlugin);
+          mp.addEventListener('select-marker', surClicMarqueur);
+          visor.addEventListener('click', surClicPhoto);
+          aller(idCourant);
+        } catch (e) { throw etiqueter_(e, 'La visionneuse 360° n\'a pas pu démarrer'); }
+      }).catch(function (e) {
+        zoneVisor.replaceChildren(
+          el('p', { class: 'vide', text: (e && e.resume) || 'La visionneuse 360° n\'a pas pu être chargée.' }),
+          el('p', { class: 'section__note', style: 'text-align:center', text: ((e && e.detail) || '') + ' (version ' + VERSION + ')' }),
+          el('p', { class: 'section__note', style: 'text-align:center', text: 'Si le problème persiste, fermez puis rouvrez l\'application pour en recevoir la dernière version.' }));
+      });
 
     selecteur.addEventListener('change', function () { aller(selecteur.value); });
     if (boutonModifier) boutonModifier.addEventListener('click', function () {
@@ -178,5 +198,5 @@
     }
   }
 
-  window.ReaStreet = { creer: creer };
+  window.ReaStreet = { creer: creer, version: VERSION };
 })();
