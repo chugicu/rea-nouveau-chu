@@ -58,8 +58,17 @@
     } }, h('h2', { text: 'Rubriques de l\'appli' }), h('p', { class: 'section__note', text: 'Choisissez ce qui s\'affiche sur l\'accueil. Un petit service peut n\'en garder que deux ou trois ; le Défi CHU et les actualités restent toujours visibles.' }),
       h('div', { class: 'service-cases' }, cases), h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer' }));
 
+    var caseVisite = h('input', { type: 'checkbox' }); caseVisite.checked = !!g.visiteVirtuelle;
+    var visite = h('form', { class: 'form-carte', onsubmit: function (ev) {
+      ev.preventDefault();
+      envoyer({ visiteVirtuelle: caseVisite.checked }, caseVisite.checked ? 'Visite virtuelle activée : la tuile apparaît dans Plan du service.' : 'Visite virtuelle masquée.', visite);
+    } }, h('h2', { text: 'Visite virtuelle' }),
+      h('p', { class: 'section__note', text: 'Promenade en photos à 360°, dans Plan du service. À activer une fois les photos et les liens en place (voir le guide de déploiement).' }),
+      h('label', { class: 'case' }, caseVisite, ' Afficher la tuile « Visite virtuelle »'),
+      h('button', { class: 'bouton', type: 'submit', text: 'Enregistrer' }));
+
     var plan = sectionPlan(g, texteDessin);
-    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, texteDessin ? null : identite, texteDessin ? null : sectionLogo(g), texteDessin ? null : rubriques, texteDessin ? null : sectionRubriques(), plan));
+    page(h('div', null, flash ? h('p', { class: 'flash', role: 'status', text: flash }) : null, texteDessin ? null : identite, texteDessin ? null : sectionLogo(g), texteDessin ? null : rubriques, texteDessin ? null : visite, texteDessin ? null : sectionRubriques(), plan));
     if (texteDessin) plan.scrollIntoView({ block: 'start' });
   }
   function envoyer(d, flash, form) {

@@ -666,12 +666,14 @@
   }
   /* ---------- Rubrique Plan : plan interactif (avec GPS) et jeux pour apprendre le service ---------- */
   var sansUnites = false; // plan sans unités ni couleurs (la plupart des services) : jeux de couleurs masqués
+  var visiteVirtuelleActive = false; // réglable par service (admin), affiche ou masque la tuile « Visite virtuelle »
   function verifierUnites(d) { var n = d && d.donnees ? Object.keys(d.donnees.unites || {}).length : 2, avant = sansUnites; sansUnites = n < 2; return avant !== sansUnites; }
+  function verifierVisite(d) { var v = !!(d && d.visiteVirtuelle), avant = visiteVirtuelleActive; visiteVirtuelleActive = v; return avant !== v; }
   function ecranPlanHub(flash) {
     ecranCourant = ecranPlanHub;
     planEnCache().then(function (c) {
-      if (c) { if (verifierUnites(c) && ecranCourant === ecranPlanHub) ecranPlanHub(flash); return; }
-      Api.appeler('plan', { jeton: (stock.lire(CLE.session) || {}).jeton }).then(function (d) { mettrePlanEnCache(d); if (verifierUnites(d) && ecranCourant === ecranPlanHub) ecranPlanHub(flash); }).catch(function () {});
+      if (c) { var changeC = verifierUnites(c) || verifierVisite(c); if (changeC && ecranCourant === ecranPlanHub) ecranPlanHub(flash); return; }
+      Api.appeler('plan', { jeton: (stock.lire(CLE.session) || {}).jeton }).then(function (d) { mettrePlanEnCache(d); var change = verifierUnites(d) || verifierVisite(d); if (change && ecranCourant === ecranPlanHub) ecranPlanHub(flash); }).catch(function () {});
     });
     var session = stock.lire(CLE.session);
     if (!session) return ecranConnexion();
@@ -680,6 +682,7 @@
     function jeu(cle) { return function () { window.ReaQuiz.jeu(cle, ecranPlanHub); }; }
     var tuiles = [
       { ic: '🗺️', nom: 'Plan interactif', desc: 'Toutes les pièces, les équipements et votre position GPS', ouvrir: ecranPlan, classe: 'quiz-theme--plan' },
+      visiteVirtuelleActive ? { ic: '🏞️', nom: 'Visite virtuelle', desc: 'Se promener dans le service en photos à 360°', ouvrir: ecranStreet, classe: 'quiz-theme--street' } : null,
       { ic: '🏷️', nom: 'Placer le nom des unités', desc: 'Glisser chaque nom d\'unité au bon endroit' + record('etiquettes'), ouvrir: jeu('etiquettes'), unites: true },
       { ic: '🖍️', nom: 'Colorier les unités', desc: 'Glisser chaque couleur sur la bonne étiquette' + record('couleurs'), ouvrir: jeu('couleurs'), unites: true },
       { ic: '🎨', nom: 'Colorier les chambres', desc: 'Chaque chambre avec la couleur de son unité' + record('chambres'), ouvrir: jeu('chambres'), unites: true },
@@ -783,6 +786,40 @@
         if (!monte) zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }),
           h('button', { class: 'bouton', type: 'button', onclick: ecranPlan, text: 'Réessayer' }));
       });
+    });
+  }
+
+  /* ---------- Visite virtuelle (photos 360°) ---------- */
+  function ecranStreet() {
+    ecranCourant = ecranStreet;
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var zone = h('div', { class: 'zone-street' }, h('div', { class: 'squelette', style: 'height:60vh' }));
+    afficher(h('div', { class: 'page page--large' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour', onclick: function () { ecranPlanHub(); }, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: 'Visite virtuelle' }),
+        h('span', { class: 'entete__role', text: session.role === 'agent' ? 'Niveau 3' : 'Mode référent' })),
+      zone,
+      h('p', { class: 'plan-note', text: 'Suivez les flèches pour vous déplacer ; touchez un point d\'info pour en savoir plus.' })));
+    window.scrollTo(0, 0);
+    Api.appeler('street_liste', { jeton: session.jeton }).then(function (r) {
+      if (!zone.isConnected) return;
+      if (!r.actif || !Object.keys(r.points).length) {
+        zone.replaceChildren(h('p', { class: 'vide', text: 'La visite virtuelle n\'est pas encore prête : aucune photo n\'est disponible.' }));
+        return;
+      }
+      window.ReaStreet.creer(zone, {
+        points: r.points, liens: r.liens, peutModifier: !!r.peutModifier,
+        enregistrerLien: function (id, d) {
+          return Api.appeler('street_lien_modifier', { jeton: session.jeton, id: id, donnees: d }).then(function () {}, function (e) { throw new Error(message(e.code)); });
+        }
+      });
+    }).catch(function (e) {
+      if (!zone.isConnected) return;
+      if (ERREURS_SESSION.indexOf(e.code) >= 0) { stock.effacer(CLE.session); return ecranConnexion(message(e.code)); }
+      zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }),
+        h('button', { class: 'bouton', type: 'button', onclick: ecranStreet, text: 'Réessayer' }));
     });
   }
 

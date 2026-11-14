@@ -26,7 +26,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.4.0',
+  version: '2.5.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -49,7 +49,17 @@ var ONGLETS = {
   points: 'Équipements',
   quiz: 'Quiz',
   jeux: 'Jeux', souvenirs: 'Souvenirs', nuage: 'Nuage', qr: 'QR codes', paris: 'Paris', pronostics: 'Pronostics', retours: 'Retours',
-  escape: 'Escape game', documents: 'Documents et FAQ'
+  escape: 'Escape game', documents: 'Documents et FAQ',
+  streetPoints: 'Street – Points', streetLiens: 'Street – Liens'
+};
+
+// Visite virtuelle (visionneuse photo 360°) : points de prise de vue et liens entre eux (flèches, infos).
+var STREET = {
+  entetesPoints: ['ID', 'Nom', 'Zone', 'ID photo (Drive)', 'ID vignette (Drive)', 'ID illustration (Drive)', 'Cap initial', 'Date de prise de vue', 'Pris par'],
+  entetesLiens: ['ID', 'Point de départ', 'Type', 'Point d\'arrivée', 'Position horizontale', 'Position verticale', 'Texte', 'Modifié le', 'Par'],
+  reId: /^(E-\d{2}|C-\d{2,3}|CH-\d{3}|L-\d{2})$/,
+  reLien: /^S[a-z0-9]{6,12}$/,
+  types: ['fleche', 'info']
 };
 
 var NL = { maxPages: 16, maxOctetsPage: 3 * 1024 * 1024, entetes: ['ID', 'Titre', 'Parution', 'Pages', 'Fichiers (ID Drive)', 'Statut', 'Ajoutée le', 'Par', 'Format (largeur/hauteur)'] };
@@ -123,6 +133,8 @@ function doPost(e) {
       gps_calage: function () { return gpsCalage_(exigerAdmin_(verifierJeton_(req.jeton)), req.calage); },
       plan_point: function () { return planPoint_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       plan_categorie: function () { return planCategorie_(exigerReferent_(verifierJeton_(req.jeton)), req.categorie, req.donnees); },
+      street_liste: function () { return streetListe_(verifierJeton_(req.jeton)); },
+      street_lien_modifier: function () { return streetLienModifier_(exigerReferent_(verifierJeton_(req.jeton)), req.id, req.donnees); },
       visites: function () { return visites_(verifierJeton_(req.jeton)); },
       visite_inscrire: function () { return visiteInscrire_(verifierJeton_(req.jeton), req.creneau, req.donnees); },
       visite_statut: function () { verifierJeton_(req.jeton); return visiteStatut_(req.reservations); },
@@ -304,7 +316,12 @@ function calculerJauge_(ss) {
 // ============================================================================
 /** Géométrie (fichier JSON du Drive, jamais publié sur GitHub) + réglages des référents. */
 function plan_(session) {
-  return { ok: true, donnees: geometriePlan_(), reglages: reglagesPlan_(), peutModifier: session.r !== 'agent', gps: lireGpsCalage_(), admin: session.r === 'admin' };
+  return { ok: true, donnees: geometriePlan_(), reglages: reglagesPlan_(), peutModifier: session.r !== 'agent', gps: lireGpsCalage_(), admin: session.r === 'admin',
+    visiteVirtuelle: visiteVirtuelleActive_() };
+}
+
+function visiteVirtuelleActive_() {
+  return String(lireParametres_(classeur_())['Visite virtuelle (activée)'] || '').trim() === 'VRAI';
 }
 
 /* ---------- GPS : calage du plan (admin), partagé avec tous ----------
@@ -458,6 +475,58 @@ function planCategorie_(session, categorie, d) {
     if (!couleur) { if (ligne > 0) sh.deleteRow(ligne); return { ok: true }; }
     var valeurs = [[categorie, couleur, new Date(), session.n || 'Administrateur']];
     if (ligne > 0) sh.getRange(ligne, 1, 1, 4).setValues(valeurs); else sh.appendRow(valeurs[0]);
+    return { ok: true };
+  } finally { verrou.releaseLock(); }
+}
+
+/* ---------- Visite virtuelle : points de prise de vue (Street – Points) et liens entre eux (Street – Liens) ----------
+   Les photos et vignettes restent sur le Drive (jamais sur GitHub) ; seuls leurs identifiants Drive sont ici.
+   Une nouvelle version du fichier du plan ne retouche pas ces identifiants : les points de prise de vue sont
+   indépendants des pièces du plan schématique. */
+function streetListe_(session) {
+  var ss = classeur_(), shP = ss.getSheetByName(ONGLETS.streetPoints), shL = ss.getSheetByName(ONGLETS.streetLiens);
+  if (!shP || !shL) return { ok: true, actif: false, points: {}, liens: [], peutModifier: session.r !== 'agent' };
+  var points = {}, p = shP.getDataRange().getValues();
+  for (var i = 1; i < p.length; i++) {
+    var id = String(p[i][0] || '').trim(); if (!id) continue;
+    points[id] = {
+      nom: String(p[i][1] || ''), zone: String(p[i][2] || ''),
+      photo: String(p[i][3] || ''), vignette: String(p[i][4] || ''), illustration: String(p[i][5] || ''),
+      cap: isFinite(Number(p[i][6])) ? Number(p[i][6]) : 0
+    };
+  }
+  var liens = [], l = shL.getDataRange().getValues();
+  for (var j = 1; j < l.length; j++) {
+    var lid = String(l[j][0] || '').trim(); if (!lid) continue;
+    liens.push({
+      id: lid, depart: String(l[j][1] || ''), type: String(l[j][2] || ''), arrivee: String(l[j][3] || ''),
+      x: Number(l[j][4]), y: Number(l[j][5]), texte: String(l[j][6] || '')
+    });
+  }
+  return { ok: true, actif: true, points: points, liens: liens, peutModifier: session.r !== 'agent' };
+}
+
+/** Ajoute, modifie ou supprime (donnees = null) un lien (flèche ou point d'info) entre deux points de prise de vue. */
+function streetLienModifier_(session, id, d) {
+  id = String(id || '');
+  if (!STREET.reLien.test(id)) throw erreurApp_('requete_invalide');
+  var verrou = LockService.getScriptLock(); verrou.waitLock(10000);
+  try {
+    var ss = classeur_(), sh = ss.getSheetByName(ONGLETS.streetLiens);
+    if (!sh) throw erreurApp_('non_installe');
+    var v = sh.getDataRange().getValues(), ligne = -1;
+    for (var i = 1; i < v.length; i++) if (String(v[i][0]) === id) { ligne = i + 1; break; }
+    if (d == null) { if (ligne > 0) sh.deleteRow(ligne); return { ok: true }; }
+    var depart = String(d.depart || ''), type = String(d.type || ''), arrivee = String(d.arrivee || '');
+    if (!STREET.reId.test(depart) || STREET.types.indexOf(type) < 0) throw erreurApp_('requete_invalide');
+    if (type === 'fleche' && !STREET.reId.test(arrivee)) throw erreurApp_('requete_invalide');
+    if (type === 'info') arrivee = '';
+    var x = Number(d.x), y = Number(d.y);
+    if (!isFinite(x) || !isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100) throw erreurApp_('requete_invalide');
+    var texte = nettoyerTexte_(d.texte, 300);
+    if (type === 'info' && texte.length < 2) throw erreurApp_('requete_invalide');
+    var valeurs = [[id, depart, type, arrivee, Math.round(x * 10) / 10, Math.round(y * 10) / 10, texte, new Date(), session.n || 'Administrateur']];
+    if (ligne > 0) sh.getRange(ligne, 1, 1, 9).setValues(valeurs); else sh.appendRow(valeurs[0]);
     return { ok: true };
   } finally { verrou.releaseLock(); }
 }
@@ -1544,6 +1613,9 @@ function installerBase_(ss, nomService) {
   creerOnglet_(ss, ONGLETS.escape, ESCAPE.entetes, []);
   creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []);
   ajouterParametre_(ss, 'Objectif quiz équipe', 'Nombre total de réponses visé par l\'équipe (compteur anonyme). Par défaut : 3000.');
+  creerOnglet_(ss, ONGLETS.streetPoints, STREET.entetesPoints, []);
+  creerOnglet_(ss, ONGLETS.streetLiens, STREET.entetesLiens, []);
+  ajouterParametre_(ss, 'Visite virtuelle (activée)', 'VRAI pour afficher la tuile « Visite virtuelle » dans Plan du service (réglable aussi dans Personnaliser le service).');
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
   creerOnglet_(ss, ONGLETS.newsletters, NL.entetes, []);
   ajouterParametre_(ss, 'Dossier des newsletters (ID Drive)', 'Créé automatiquement au premier envoi. Dossier privé : ne pas le partager.');
@@ -2949,11 +3021,14 @@ function serviceReglages_(d) {
       ecrireParametre_(ss, 'Rubriques actives', r.length === RUBRIQUES.length ? '' : r.join(', '), 'Rubriques affichées sur l\'accueil (vide = toutes) : ' + RUBRIQUES.join(', '));
     }
     if (d.logo === null) { ecrireParametre_(ss, 'Logo du service (ID Drive)', ''); props_().setProperty('LOGO_VERSION', String(Date.now())); cache_().remove('logo'); }
+    if (d.visiteVirtuelle != null) ecrireParametre_(ss, 'Visite virtuelle (activée)', d.visiteVirtuelle ? 'VRAI' : '',
+      'VRAI pour afficher la tuile « Visite virtuelle » dans Plan du service (réglable aussi dans Personnaliser le service).');
     p = lireParametres_(ss);
   }
   var dj = p['Date J'];
   return { ok: true, reglages: { nom: String(p['Nom du service'] || ''), message: String(p["Message d'accueil"] || ''), dateJ: dj instanceof Date && !isNaN(dj) ? formaterDate_(dj) : '',
-    rubriques: rubriquesActives_(p) || RUBRIQUES.slice(), logo: !!p['Logo du service (ID Drive)'], plan: !!String(p['Fichier du plan (ID Drive)'] || '').trim() }, toutes: RUBRIQUES };
+    rubriques: rubriquesActives_(p) || RUBRIQUES.slice(), logo: !!p['Logo du service (ID Drive)'], plan: !!String(p['Fichier du plan (ID Drive)'] || '').trim(),
+    visiteVirtuelle: String(p['Visite virtuelle (activée)'] || '').trim() === 'VRAI' }, toutes: RUBRIQUES };
 }
 function dossierService_(ss) { var parents = DriveApp.getFileById(ss.getId()).getParents(); return parents.hasNext() ? parents.next() : DriveApp.getRootFolder(); }
 function logoEnvoyer_(data, type) {
