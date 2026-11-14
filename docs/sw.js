@@ -1,6 +1,6 @@
 /* Service worker : rend l'application utilisable hors ligne.
    Pensez à augmenter VERSION à chaque mise en ligne d'une nouvelle version. */
-var VERSION = 'rea-app-v2.7.4';
+var VERSION = 'rea-app-v2.7.5';
 var FICHIERS = [
   './',
   'index.html',

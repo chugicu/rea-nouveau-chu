@@ -7,14 +7,15 @@
    Utilisation : ReaStreet.creer(conteneur, { points, liens, peutModifier, enregistrerLien(id, donnees) }) */
 (function () {
   'use strict';
-  // Chemins relatifs à la page (docs/index.html), comme les autres bibliothèques vendues (vendor/qrcode.js, etc.) :
-  // un script classique (non « module ») résout import() par rapport au document, comme un lien <link>.
-  // Le « ./ » est obligatoire pour import() : sans lui, le navigateur y voit un nom de module (comme « three »)
-  // et refuse tout de suite (« Failed to resolve module specifier »), sans jamais demander le fichier.
-  var PSV_JS = './vendor/photo-sphere-viewer/psv.bundle.min.js';
+  // Chargée par une balise <script> ordinaire, comme les autres bibliothèques vendues (vendor/qrcode.js…),
+  // et non comme un module : le bundle est au format « iife » et pose la variable globale PSV.
+  // C'est volontaire. En module, Safari refusait le fichier entier (« Importing a module script failed »)
+  // à cause d'une syntaxe que les iPhone d'avant iOS 16.4 ne connaissent pas ; le bundle est désormais
+  // construit pour es2020 (voir LISEZ-MOI.txt du dossier), et un script classique est moins exigeant.
+  var PSV_JS = 'vendor/photo-sphere-viewer/psv.bundle.min.js';
   var PSV_CSS = 'vendor/photo-sphere-viewer/psv.bundle.min.css';
   // Affichée en cas d'erreur : elle dit tout de suite si l'appareil a bien reçu la dernière version du fichier.
-  var VERSION = '2.7.4';
+  var VERSION = '2.7.5';
   var cssChargee = false, modulePromesse = null;
 
   function chargerCss() {
@@ -22,7 +23,19 @@
     cssChargee = true;
     var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = PSV_CSS; document.head.appendChild(l);
   }
-  function chargerModule() { return modulePromesse || (modulePromesse = import(PSV_JS)); }
+  function chargerModule() {
+    return modulePromesse || (modulePromesse = new Promise(function (resoudre, rejeter) {
+      if (window.PSV) return resoudre(window.PSV);
+      var s = document.createElement('script');
+      s.src = PSV_JS;
+      s.onload = function () {
+        if (window.PSV) resoudre(window.PSV);
+        else rejeter(new Error('Fichier reçu mais la visionneuse ne s\'y trouve pas.'));
+      };
+      s.onerror = function () { rejeter(new Error('Fichier introuvable ou refusé par le navigateur.')); };
+      document.head.appendChild(s);
+    }));
+  }
 
   function el(tag, attrs, enfants) {
     var e = document.createElement(tag);

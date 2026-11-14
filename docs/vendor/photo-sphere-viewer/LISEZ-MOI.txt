@@ -1,7 +1,15 @@
 Bibliothèques vendues pour la visite virtuelle (rubrique « Visite virtuelle », module docs/js/street.js).
 - Photo Sphere Viewer 5.15.1 (core + plugins Virtual Tour et Markers), licence MIT.
 - three.js 0.185.1 (dépendance de Photo Sphere Viewer), licence MIT.
-Regroupées et minifiées (esbuild, format ESM) en psv.bundle.min.js + psv.bundle.min.css.
+Regroupées et minifiées (esbuild) en psv.bundle.min.js + psv.bundle.min.css.
+
+Deux points à ne pas changer sans raison :
+- format « iife » et variable globale PSV : le fichier se charge par une balise <script> ordinaire,
+  comme les autres bibliothèques vendues, et non comme un module.
+- cible « es2020 » : sans elle, le fichier contient des blocs « static { } », que les iPhone d'avant
+  iOS 16.4 refusent. Safari rejetait alors le fichier entier (« Importing a module script failed »),
+  sans rien afficher de plus précis. Viser plus récent que es2020 ramènerait la panne.
+  (esbuild ne sait pas descendre jusqu'à safari14 : il s'arrête sur la déstructuration.)
 
 Pour mettre à jour :
   mkdir psv-fetch && cd psv-fetch && npm init -y
@@ -11,7 +19,7 @@ Pour mettre à jour :
   export { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
   export { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
   JS
-  npx esbuild entry.js --bundle --minify --format=esm --outfile=psv.bundle.min.js
+  npx esbuild entry.js --bundle --minify --format=iife --global-name=PSV --target=es2020 --outfile=psv.bundle.min.js
   cat node_modules/@photo-sphere-viewer/core/index.css node_modules/@photo-sphere-viewer/markers-plugin/index.css node_modules/@photo-sphere-viewer/virtual-tour-plugin/index.css > psv.bundle.css
   npx esbuild psv.bundle.css --minify --outfile=psv.bundle.min.css
 Puis copier les deux fichiers ici et augmenter VERSION dans docs/sw.js.
