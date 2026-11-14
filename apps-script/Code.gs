@@ -26,7 +26,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.5.1',
+  version: '2.5.2',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -55,7 +55,7 @@ var ONGLETS = {
 
 // Visite virtuelle (visionneuse photo 360°) : points de prise de vue et liens entre eux (flèches, infos).
 var STREET = {
-  entetesPoints: ['ID', 'Nom', 'Zone', 'ID photo (Drive)', 'ID vignette (Drive)', 'ID illustration (Drive)', 'Cap initial', 'Date de prise de vue', 'Pris par'],
+  entetesPoints: ['ID', 'Nom', 'Zone', 'ID photo (Drive)', 'ID vignette (Drive)', 'ID illustration (Drive)', 'Cap initial', 'Date de prise de vue', 'Pris par', 'X (plan)', 'Y (plan)'],
   entetesLiens: ['ID', 'Point de départ', 'Type', 'Point d\'arrivée', 'Position horizontale', 'Position verticale', 'Texte', 'Modifié le', 'Par'],
   reId: /^(E-\d{2}|C-\d{2,3}|CH-\d{3}|L-\d{2})$/,
   reLien: /^S[a-z0-9]{6,12}$/,
@@ -501,7 +501,9 @@ function streetListe_(session) {
     points[id] = {
       nom: String(p[i][1] || ''), zone: String(p[i][2] || ''),
       photo: String(p[i][3] || ''), vignette: String(p[i][4] || ''), illustration: String(p[i][5] || ''),
-      cap: isFinite(Number(p[i][6])) ? Number(p[i][6]) : 0
+      cap: isFinite(Number(p[i][6])) ? Number(p[i][6]) : 0,
+      // Position sur le plan interactif (mêmes unités que le plan) : sert au bonhomme et au mini-plan ; null = pas placé
+      x: coordPlan_(p[i][9]), y: coordPlan_(p[i][10])
     };
   }
   var liens = [], l = shL.getDataRange().getValues();
@@ -513,6 +515,13 @@ function streetListe_(session) {
     });
   }
   return { ok: true, actif: true, points: points, liens: liens, peutModifier: session.r !== 'agent' };
+}
+
+/** Coordonnée de plan lue dans une cellule : nombre, ou null si la cellule est vide ou n'est pas un nombre. */
+function coordPlan_(v) {
+  if (v === '' || v == null) return null;
+  var n = Number(v);
+  return isFinite(n) ? n : null;
 }
 
 /** Ajoute, modifie ou supprime (donnees = null) un lien (flèche ou point d'info) entre deux points de prise de vue. */
@@ -1623,6 +1632,7 @@ function installerBase_(ss, nomService) {
   creerOnglet_(ss, ONGLETS.documents, DOCS.entetes, []);
   ajouterParametre_(ss, 'Objectif quiz équipe', 'Nombre total de réponses visé par l\'équipe (compteur anonyme). Par défaut : 3000.');
   creerOnglet_(ss, ONGLETS.streetPoints, STREET.entetesPoints, []);
+  completerEntetes_(ss.getSheetByName(ONGLETS.streetPoints), STREET.entetesPoints); // 2.5.2 : colonnes X (plan) et Y (plan)
   creerOnglet_(ss, ONGLETS.streetLiens, STREET.entetesLiens, []);
   ajouterParametre_(ss, 'Visite virtuelle (activée)', 'VRAI pour afficher la tuile « Visite virtuelle » dans Plan du service (réglable aussi dans Personnaliser le service).');
   creerOnglet_(ss, ONGLETS.creneaux, ['ID', 'Date', 'Heure', 'Durée (min)', 'Lieu de rendez-vous', 'Guide', 'Places', 'Statut', 'Créé par', 'Modifié le'], []);
