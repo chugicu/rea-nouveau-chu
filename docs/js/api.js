@@ -139,6 +139,7 @@
   }
   function demoVideos() { // vidéos fictives : pas de lecteur YouTube en démonstration
     var j = Date.now(), t = ['Le nouveau CHU vu du ciel (exemple)', 'Visite de l\'entrée rue Caraïbes (exemple)', 'Le déménagement en 1 minute (exemple)', 'Questions-réponses sur le transfert (exemple)', 'Les ascenseurs du NCHUG (exemple)'];
+    for (var n = 6; n <= 27; n++) t.push('Vidéo d\'exemple n° ' + n);
     return { ok: true, demo: true, chaine: 'https://www.youtube.com/@chuguadeloupe8235/videos', lu: new Date().toISOString(),
       videos: t.map(function (x, i) { return { id: 'demo' + ('0000000' + i).slice(-7), titre: x, date: new Date(j - (i * 9 + 1) * 864e5).toISOString(), description: 'Vidéo de démonstration : en vrai, ce sont les vidéos de la chaîne YouTube du CHU.', court: i === 2 }; }) };
   }

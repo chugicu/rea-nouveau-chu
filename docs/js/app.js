@@ -937,8 +937,8 @@
     });
   }
 
-  /* ---------- Vidéos : chaîne YouTube du CHU (15 dernières vidéos, lues par le moteur Cap NCHUG) ---------- */
-  var VIDEOS_FRAICHEUR_MS = 30 * 60 * 1000, VIDEOS_NOUVEAU_J = 30;
+  /* ---------- Vidéos : chaîne YouTube du CHU (toutes les vidéos publiques, lues par le moteur Cap NCHUG) ---------- */
+  var VIDEOS_FRAICHEUR_MS = 30 * 60 * 1000, VIDEOS_NOUVEAU_J = 30, VIDEOS_PAR_PAGE = 20;
   function videosCache() { var c = stock.lire(CLE.videos); return c && c.d && Array.isArray(c.d.videos) ? c : null; }
   function videoVue(id) { return !!(stock.lire(CLE.videosVues) || {})[id]; }
   function videoNeuve(v) { // « Nouveau » : pas encore ouverte sur ce téléphone et publiée depuis moins de 30 jours
@@ -974,7 +974,7 @@
         h('span', { class: 'entete__role', text: 'Chaîne YouTube du CHU' })),
       lecteur, zone));
     window.scrollTo(0, 0);
-    var chaine = 'https://www.youtube.com/@chuguadeloupe8235/videos';
+    var chaine = 'https://www.youtube.com/@chuguadeloupe8235/videos', nbAffiche = VIDEOS_PAR_PAGE;
     function lire(v, d) {
       var vues = stock.lire(CLE.videosVues) || {}; vues[v.id] = 1; stock.ecrire(CLE.videosVues, vues);
       var carte = zone.querySelector('[data-video="' + v.id + '"] .etiquette--nouveau'); if (carte) carte.remove();
@@ -994,7 +994,7 @@
     }
     function dessiner(d) {
       if (!zone.isConnected) return;
-      var l = d.videos || [];
+      var tout = d.videos || [], l = tout.slice(0, nbAffiche);
       zone.replaceChildren.apply(zone, [
         l.length ? h('ul', { class: 'nl__liste' }, l.map(function (v, i) {
           return h('li', { 'data-video': v.id }, h('div', { class: 'carte-nl carte-video' },
@@ -1009,7 +1009,9 @@
                 h('span', { class: 'carte-nl__info', text: (v.court ? 'Short · ' : '') + dateVideo(v.date) }),
                 h('span', { class: 'carte-nl__lire', text: 'Regarder ›' })))));
         })) : h('p', { class: 'vide', text: 'Aucune vidéo pour le moment.' }),
-        h('p', { class: 'section__note nl__note' }, 'Les 15 dernières vidéos de la chaîne YouTube du CHU, mises à jour automatiquement. Il faut du réseau pour les regarder. ',
+        tout.length > nbAffiche ? h('button', { type: 'button', class: 'bouton bouton--discret videos__plus', onclick: function () { nbAffiche += VIDEOS_PAR_PAGE; dessiner(d); },
+          text: 'Voir plus de vidéos (' + (tout.length - nbAffiche) + ' de plus)' }) : null,
+        h('p', { class: 'section__note nl__note' }, 'Toutes les vidéos de la chaîne YouTube du CHU (' + tout.length + '), mises à jour automatiquement. Il faut du réseau pour les regarder. ',
           h('a', { href: d.chaine || chaine, target: '_blank', rel: 'noopener', text: 'Toute la chaîne sur YouTube ↗' }))]);
     }
     var c = videosCache();

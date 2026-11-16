@@ -10,7 +10,7 @@
  * 1.7 : jeux (jauge du déménagement, souvenirs, concours photo, nuage, QR codes, paris, escape game, bingo), activables par l'administrateur.
  * 1.6 : quiz (questions rédigées, brouillons relus par l'administrateur, compteur collectif anonyme).
  * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
- * 2.6 : vidéos de la chaîne YouTube du CHU (flux RSS public, lu par le moteur, 1 h en cache).
+ * 2.6 : vidéos de la chaîne YouTube du CHU (API YouTube, service avancé d'Apps Script, 1 h en cache).
  * 2.4 : PDF dans Documents et FAQ (images + texte pour la recherche), rubriques personnalisées partagées entre services, rubriques communes.
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
@@ -27,7 +27,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.6.0',
+  version: '2.6.1',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -2276,12 +2276,13 @@ function defiPlanEnregistrer_(bat, niv, services) {
 }
 
 /* ---------- Vidéos : chaîne YouTube du CHU de la Guadeloupe ----------
-   Flux RSS public de la chaîne (YouTube y met les 15 dernières vidéos, Shorts compris), lu ici car le téléphone
-   ne peut pas le lire lui-même (CORS). Gardé 1 h en cache ; copie de secours 6 h si YouTube ne répond pas.
-   Autorisation nécessaire : « script.external_request » (appsscript.json), accordée en exécutant testerVideos. */
-var YOUTUBE = { chaine: 'UCs_vtbwwyznZLshqglwj-ZQ', lien: 'https://www.youtube.com/@chuguadeloupe8235/videos', cacheS: 3600, secoursS: 21600 };
+   Toutes les vidéos publiques de la chaîne, lues par l'API YouTube (service avancé « YouTube » d'Apps Script,
+   déclaré dans appsscript.json ; aucune clé). Le flux RSS de YouTube n'est plus utilisé : en panne trop souvent.
+   Liste gardée 1 h en cache ; copie de secours 6 h si YouTube ne répond pas.
+   Autorisation nécessaire : « youtube.readonly », accordée en exécutant testerVideos une fois dans l'éditeur. */
+var YOUTUBE = { chaine: 'UCs_vtbwwyznZLshqglwj-ZQ', lien: 'https://www.youtube.com/@chuguadeloupe8235/videos', cacheS: 3600, secoursS: 21600, max: 300 };
 function videosListe_() {
-  var c = CacheService.getScriptCache(), k = 'videos|' + YOUTUBE.chaine, t = c.get(k);
+  var c = CacheService.getScriptCache(), k = 'videos2|' + YOUTUBE.chaine, t = c.get(k);
   if (t) return JSON.parse(t);
   var l;
   try { l = videosLire_(); } catch (e) {
@@ -2290,37 +2291,39 @@ function videosListe_() {
     throw erreurApp_('videos_indisponibles');
   }
   var r = { ok: true, chaine: YOUTUBE.lien, videos: l, lu: new Date().toISOString() }, s = JSON.stringify(r);
-  try { c.put(k, s, YOUTUBE.cacheS); c.put(k + '|secours', s, YOUTUBE.secoursS); } catch (e) { /* trop gros pour le cache : sans gravité */ }
+  try { c.put(k, s, YOUTUBE.cacheS); c.put(k + '|secours', s, YOUTUBE.secoursS); } catch (e) { console.warn('Liste des vidéos trop grosse pour le cache'); }
   return r;
 }
-function videosLire_() {
-  var rep = UrlFetchApp.fetch('https://www.youtube.com/feeds/videos.xml?channel_id=' + YOUTUBE.chaine, { muteHttpExceptions: true, followRedirects: true });
-  if (rep.getResponseCode() !== 200) throw new Error('YouTube a répondu ' + rep.getResponseCode());
-  return videosAnalyser_(rep.getContentText('UTF-8'));
+function videosPlaylist_(id, max) { // éléments d'une playlist (50 par page)
+  var l = [], page = '';
+  do {
+    var r = YouTube.PlaylistItems.list('snippet,contentDetails,status', { playlistId: id, maxResults: 50, pageToken: page || undefined });
+    (r.items || []).forEach(function (x) { l.push(x); });
+    page = r.nextPageToken || '';
+  } while (page && l.length < max);
+  return l;
 }
-function videosAnalyser_(xml) { // [{ id, titre, date, description, court }], les plus récentes en premier
-  function balise(bloc, nom) { var m = new RegExp('<' + nom + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + nom + '>').exec(bloc); return m ? videosTexte_(m[1]) : ''; }
-  var l = [], re = /<entry>([\s\S]*?)<\/entry>/g, m;
-  while ((m = re.exec(String(xml || '')))) {
-    var b = m[1], id = balise(b, 'yt:videoId');
-    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) continue;
-    var lien = /<link[^>]*href="([^"]*)"/.exec(b), d = balise(b, 'media:description');
-    l.push({ id: id, titre: balise(b, 'title').slice(0, 200) || 'Vidéo', date: balise(b, 'published').slice(0, 25),
-      description: d.length > 300 ? d.slice(0, 297) + '…' : d, court: !!(lien && lien[1].indexOf('/shorts/') >= 0) });
-  }
+function videosLire_() { // [{ id, titre, date, description, court }], les plus récentes en premier
+  if (typeof YouTube === 'undefined') throw new Error('Service avancé YouTube absent : recoller appsscript.json');
+  var suffixe = YOUTUBE.chaine.slice(2), shorts = {};
+  try { videosPlaylist_('UUSH' + suffixe, YOUTUBE.max).forEach(function (x) { shorts[x.contentDetails && x.contentDetails.videoId] = 1; }); } catch (e) { /* pas de Shorts ou playlist inaccessible : sans gravité */ }
+  var l = [];
+  videosPlaylist_('UU' + suffixe, YOUTUBE.max).forEach(function (x) {
+    var sn = x.snippet || {}, cd = x.contentDetails || {}, id = cd.videoId || (sn.resourceId && sn.resourceId.videoId) || '';
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
+    if (x.status && x.status.privacyStatus && x.status.privacyStatus !== 'public') return;
+    var d = String(sn.description || '').trim();
+    l.push({ id: id, titre: String(sn.title || 'Vidéo').slice(0, 200), date: String(cd.videoPublishedAt || sn.publishedAt || '').slice(0, 25),
+      description: d.length > 200 ? d.slice(0, 197) + '…' : d, court: !!shorts[id] });
+  });
   l.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
   return l;
 }
-function videosTexte_(t) {
-  return String(t).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, function (x, n) { return String.fromCharCode(+n); }).replace(/&#x([0-9a-f]+);/gi, function (x, n) { return String.fromCharCode(parseInt(n, 16)); })
-    .replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim();
-}
-/** À exécuter une fois depuis l'éditeur Apps Script : accorde l'autorisation de lire la chaîne YouTube et vérifie le flux. */
+/** À exécuter une fois depuis l'éditeur Apps Script : accorde l'autorisation de lire YouTube et vérifie la chaîne. */
 function testerVideos() {
-  CacheService.getScriptCache().removeAll(['videos|' + YOUTUBE.chaine]);
+  CacheService.getScriptCache().removeAll(['videos2|' + YOUTUBE.chaine]);
   var l = videosLire_();
-  console.log(l.length + ' vidéo(s) lue(s). La plus récente : ' + (l[0] ? l[0].titre + ' (' + l[0].date + ')' : 'aucune'));
+  console.log(l.length + ' vidéo(s) lue(s), dont ' + l.filter(function (v) { return v.court; }).length + ' Short(s). La plus récente : ' + (l[0] ? l[0].titre + ' (' + l[0].date + ')' : 'aucune'));
 }
 
 /* ---------- Infos générales : contenus communs en lecture, avec un code commun choisi par le super-admin ou un créateur ---------- */
