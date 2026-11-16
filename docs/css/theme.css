@@ -463,6 +463,7 @@ details.defi-ajout > summary { font-weight: 800; color: var(--titre); cursor: po
 .escape-gestion { margin-top: 16px; }
 /* Lot 5 : contenus communs au CHU, documents et FAQ */
 .etiquette--chu { background: #048e39; color: #fff; font-weight: 800; letter-spacing: .04em; }
+.module__nouveau--gauche { right: auto; left: -4px; } /* tuile Vidéos : « CHU » à gauche quand « Nouveau » est à droite */
 .actu--chu { box-shadow: inset 6px 0 0 #048e39, var(--clay); }
 .actu--brouillon { opacity: .7; }
 .communs .actus { margin-top: 12px; }

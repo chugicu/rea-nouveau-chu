@@ -5,7 +5,7 @@
   var Api = window.ReaApi;
   var cfg = window.REA_CONFIG || {};
   var FUSEAU = 'America/Guadeloupe';
-  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites', nlLues: 'rea.nl-lues' };
+  var CLE = { session: 'rea.session', accueil: 'rea.accueil', badges: 'rea.badges', planVu: 'rea.plan-vu', planMode: 'rea.plan-mode', visites: 'rea.visites', nlLues: 'rea.nl-lues', videos: 'rea.videos', videosVues: 'rea.videos-vues' };
   var LOGO_CHU = 'assets/logos/chu-guadeloupe.png'; // logo officiel, jamais modifié (charte FI/COM/001, p. 10 à 18)
   var app = document.getElementById('app');
   var zoneBandeaux = document.getElementById('bandeaux');
@@ -71,6 +71,8 @@
     { id: 'jeux', c: '#048e39', e: '🎮', t: 2, nom: 'Quiz et jeux', desc: 'Quiz, concours photo, nuage, QR codes, escape game, bingo, paris', etape: 4, ouvrir: function () { window.ReaJeux.hub(); } },
     { id: 'simulations', c: '#223b80', e: '🚑', t: 1.5, nom: 'Simulations in situ', desc: 'S\'entraîner aux situations critiques sur place', etape: 5 },
     { id: 'docs', c: '#95c127', sombre: true, e: '📚', t: -1.5, nom: 'Documents et FAQ', desc: 'Procédures, liens utiles, questions-réponses', etape: 6, ouvrir: function () { window.ReaCommuns.documents(); } },
+    // Vidéos de la chaîne YouTube du CHU : contenu commun, visible dans Infos générales et dans tous les services
+    { id: 'videos', c: '#223b80', e: '🎬', t: 1.5, toujours: true, chu: true, nom: 'Vidéos', desc: 'Les vidéos du CHU sur YouTube, les plus récentes en premier', ouvrir: function () { ecranVideos(); } },
     { id: 'pret', c: '#40a8df', sombre: true, e: '✅', t: 1, nom: 'Je suis prêt(e)', desc: 'Ma check-list personnelle avant le jour J', etape: 6 }
   ];
 
@@ -117,6 +119,7 @@
     session_expiree: 'Votre session a expiré. Saisissez à nouveau votre code.',
     non_installe: 'L\'application n\'est pas encore installée. Prévenez l\'administrateur.',
     reseau: 'Pas de connexion au serveur. Vérifiez le réseau puis réessayez.',
+    videos_indisponibles: 'Les vidéos YouTube ne sont pas disponibles pour le moment. Réessayez un peu plus tard.',
     plan_absent: 'Le plan n\'est pas encore installé. Prévenez l\'administrateur.',
     non_autorise: 'Seuls les référents peuvent modifier le plan.',
     requete_invalide: 'Certaines informations ne sont pas valides. Vérifiez la saisie.',
@@ -361,7 +364,7 @@
     var nl = d && d.newsletter, nlNeuve = !!(nl && !(stock.lire(CLE.nlLues) || {})[nl.id]);
     var rub = d && d.rubriques; // lot 2 : rubriques choisies par l'administrateur (null = toutes)
     var liste = MODULES.filter(function (m) { return !rub || m.toujours || (m.ouvrir ? rub.indexOf(m.id) >= 0 : false); });
-    if (role === 'visiteur') liste = MODULES.filter(function (m) { return ['plan-chu', 'newsletter', 'docs'].indexOf(m.id) >= 0; }); // Infos générales
+    if (role === 'visiteur') liste = MODULES.filter(function (m) { return ['plan-chu', 'newsletter', 'docs', 'videos'].indexOf(m.id) >= 0; }); // Infos générales
     var commun = !!(window.ReaCap && window.ReaCap.enCommun());
     // Rubriques personnalisées (moteur 2.4.0) : communes au CHU, celles du service, puis celles reprises d'autres services
     ((d && d.perso) || []).forEach(function (r, i) {
@@ -376,17 +379,18 @@
     // Service seul (sans Cap NCHUG) : son administrateur gère le Défi CHU ; sinon ce sont le super-admin et les créateurs
     if (role === 'admin' && (!Api.multi || (Api.service() && Api.service().api)) && window.ReaDefiGestion) liste.push({ id: 'defi-gestion', c: '#95c127', sombre: true, e: '🏆', t: 1, nom: 'Gestion du Défi CHU', desc: 'Phase de test, validation des questions, vue du ciel', ouvrir: function () { window.ReaDefiGestion.ouvrir({ jeton: stock.lire(CLE.session).jeton, role: 'Administrateur', retour: function (m) { m ? ecranConnexion(m) : ecranAccueil(); } }); } });
     else if (role !== 'agent' && role !== 'visiteur' && !commun && !rub) liste.push({ id: 'admin', c: '#223b80', e: '⚙️', t: -1, nom: 'Espace référent', desc: 'Bientôt' });
+    if (liste.some(function (m) { return m.id === 'videos'; })) setTimeout(videosRafraichirTuile, 0);
     return h('section', { class: 'section', 'aria-labelledby': 'titre-modules' },
       h('div', { class: 'section__tete' }, h('h2', { id: 'titre-modules', text: 'Se préparer' })),
       h('ul', { class: 'modules' }, liste.map(function (m) {
         var contenu = [
-          m.id === 'newsletter' && nlNeuve ? h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }) : null,
-          m.chu ? h('span', { class: 'etiquette etiquette--chu module__nouveau', text: 'CHU' }) : null,
+          (m.id === 'newsletter' && nlNeuve) || (m.id === 'videos' && videosNeuves()) ? h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }) : null,
+          m.chu ? h('span', { class: 'etiquette etiquette--chu module__nouveau' + (m.id === 'videos' && videosNeuves() ? ' module__nouveau--gauche' : ''), text: 'CHU' }) : null,
           h('span', { class: 'module__nom', text: m.nom }),
           h('span', { class: 'module__desc', text: m.ouvrir ? m.desc : 'Bientôt' }),
           h('span', { class: 'module__icone', 'aria-hidden': 'true', text: m.e })];
         var style = '--c:' + m.c + ';--t:' + (m.t || 0) + 'deg';
-        return h('li', { class: 'module' + (m.ouvrir ? ' module--actif' : ' module--bientot') + (m.sombre ? ' module--clair' : ''), style: style },
+        return h('li', { class: 'module' + (m.ouvrir ? ' module--actif' : ' module--bientot') + (m.sombre ? ' module--clair' : ''), style: style, 'data-module': m.id },
           m.ouvrir ? h('button', { type: 'button', class: 'module__bouton', onclick: m.ouvrir }, contenu) : h('div', { class: 'module__bouton' }, contenu));
       })));
   }
@@ -930,6 +934,89 @@
         if (e.code === 'reseau') majBandeaux({ horsLigne: true, depuis: null });
         if (!c) zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }), h('button', { class: 'bouton', type: 'button', onclick: function () { ecranNewsletters(); }, text: 'Réessayer' }));
       });
+    });
+  }
+
+  /* ---------- Vidéos : chaîne YouTube du CHU (15 dernières vidéos, lues par le moteur Cap NCHUG) ---------- */
+  var VIDEOS_FRAICHEUR_MS = 30 * 60 * 1000, VIDEOS_NOUVEAU_J = 30;
+  function videosCache() { var c = stock.lire(CLE.videos); return c && c.d && Array.isArray(c.d.videos) ? c : null; }
+  function videoVue(id) { return !!(stock.lire(CLE.videosVues) || {})[id]; }
+  function videoNeuve(v) { // « Nouveau » : pas encore ouverte sur ce téléphone et publiée depuis moins de 30 jours
+    var t = Date.parse(v.date); return !videoVue(v.id) && !isNaN(t) && Date.now() - t < VIDEOS_NOUVEAU_J * 864e5;
+  }
+  function videosNeuves() { var c = videosCache(); return !!(c && c.d.videos.some(videoNeuve)); }
+  function videosCharger() {
+    return Api.appeler('videos', {}).then(function (d) { stock.ecrire(CLE.videos, { t: Date.now(), d: { videos: d.videos || [], chaine: d.chaine, demo: !!d.demo } }); return d; });
+  }
+  function videosRafraichirTuile() { // en arrière-plan, au plus toutes les 30 min : fait apparaître « Nouveau » sur la tuile
+    var c = videosCache(); if (c && Date.now() - c.t < VIDEOS_FRAICHEUR_MS) return;
+    videosCharger().then(function () {
+      var li = document.querySelector('[data-module="videos"]'); if (!li || !videosNeuves() || li.querySelector('.etiquette--nouveau')) return;
+      var b = li.querySelector('.module__bouton'), chu = li.querySelector('.etiquette--chu');
+      if (chu) chu.classList.add('module__nouveau--gauche');
+      b.insertBefore(h('span', { class: 'etiquette etiquette--nouveau module__nouveau', text: 'Nouveau' }), b.firstChild);
+    }).catch(function () { /* sans réseau : la tuile reste telle quelle */ });
+  }
+  function dateVideo(iso) {
+    var t = Date.parse(iso); if (isNaN(t)) return '';
+    return new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(t));
+  }
+  function ecranVideos() {
+    ecranCourant = ecranVideos;
+    var session = stock.lire(CLE.session);
+    if (!session) return ecranConnexion();
+    var lecteur = h('div', { class: 'video-lecteur', hidden: true });
+    var zone = h('div', { class: 'nl' }, h('div', { class: 'squelette', style: 'height:96px' }), h('div', { class: 'squelette', style: 'height:96px;margin-top:12px' }));
+    afficher(h('div', { class: 'page' },
+      h('header', { class: 'entete entete--module' },
+        h('button', { type: 'button', class: 'retour', 'aria-label': 'Retour à l\'accueil', onclick: ecranAccueil, text: '‹' }),
+        h('h1', { class: 'entete__titre', text: 'Vidéos' }),
+        h('span', { class: 'entete__role', text: 'Chaîne YouTube du CHU' })),
+      lecteur, zone));
+    window.scrollTo(0, 0);
+    var chaine = 'https://www.youtube.com/@chuguadeloupe8235/videos';
+    function lire(v, d) {
+      var vues = stock.lire(CLE.videosVues) || {}; vues[v.id] = 1; stock.ecrire(CLE.videosVues, vues);
+      var carte = zone.querySelector('[data-video="' + v.id + '"] .etiquette--nouveau'); if (carte) carte.remove();
+      var lien = 'https://www.youtube.com/watch?v=' + encodeURIComponent(v.id);
+      lecteur.replaceChildren(
+        d.demo ? h('div', { class: 'video-lecteur__cadre video-lecteur__cadre--demo' }, h('p', { text: 'Mode démonstration : la vraie vidéo YouTube s\'affiche ici.' }))
+          : navigator.onLine === false ? h('div', { class: 'video-lecteur__cadre video-lecteur__cadre--demo' }, h('p', { text: 'Pas de réseau : les vidéos ne se regardent qu\'avec une connexion.' }))
+          : h('div', { class: 'video-lecteur__cadre' }, h('iframe', { src: 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v.id) + '?autoplay=1&rel=0&playsinline=1&modestbranding=1',
+            title: v.titre, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: true, referrerpolicy: 'strict-origin-when-cross-origin' })),
+        h('div', { class: 'video-lecteur__texte' },
+          h('b', { class: 'carte-nl__titre', text: v.titre }),
+          v.date ? h('span', { class: 'carte-nl__info', text: dateVideo(v.date) }) : null,
+          v.description ? h('p', { class: 'video-lecteur__desc', text: v.description }) : null,
+          d.demo ? null : h('a', { class: 'bouton bouton--discret', href: lien, target: '_blank', rel: 'noopener', text: 'Ouvrir dans YouTube ↗' })));
+      lecteur.hidden = false;
+      lecteur.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function dessiner(d) {
+      if (!zone.isConnected) return;
+      var l = d.videos || [];
+      zone.replaceChildren.apply(zone, [
+        l.length ? h('ul', { class: 'nl__liste' }, l.map(function (v, i) {
+          return h('li', { 'data-video': v.id }, h('div', { class: 'carte-nl carte-video' },
+            h('button', { type: 'button', class: 'carte-nl__ouvrir', onclick: function () { lire(v, d); } },
+              h('span', { class: 'carte-nl__vignette carte-video__vignette' },
+                d.demo ? h('span', { class: 'carte-video__demo', 'aria-hidden': 'true', text: '🎬' })
+                  : h('img', { alt: '', loading: 'lazy', src: 'https://i.ytimg.com/vi/' + encodeURIComponent(v.id) + '/mqdefault.jpg', onerror: function (ev) { ev.currentTarget.remove(); } }),
+                h('span', { class: 'carte-video__play', 'aria-hidden': 'true', text: '▶' })),
+              h('span', { class: 'carte-nl__texte' },
+                videoNeuve(v) ? h('span', { class: 'etiquette etiquette--nouveau', text: 'Nouveau' }) : (i === 0 ? h('span', { class: 'etiquette', text: 'La plus récente' }) : null),
+                h('b', { class: 'carte-nl__titre', text: v.titre }),
+                h('span', { class: 'carte-nl__info', text: (v.court ? 'Short · ' : '') + dateVideo(v.date) }),
+                h('span', { class: 'carte-nl__lire', text: 'Regarder ›' })))));
+        })) : h('p', { class: 'vide', text: 'Aucune vidéo pour le moment.' }),
+        h('p', { class: 'section__note nl__note' }, 'Les 15 dernières vidéos de la chaîne YouTube du CHU, mises à jour automatiquement. Il faut du réseau pour les regarder. ',
+          h('a', { href: d.chaine || chaine, target: '_blank', rel: 'noopener', text: 'Toute la chaîne sur YouTube ↗' }))]);
+    }
+    var c = videosCache();
+    if (c) dessiner(c.d);
+    videosCharger().then(function (d) { majBandeaux({ horsLigne: false }); dessiner({ videos: d.videos || [], chaine: d.chaine, demo: !!d.demo }); }).catch(function (e) {
+      if (e.code === 'reseau') majBandeaux({ horsLigne: true, depuis: null });
+      if (!c) zone.replaceChildren(h('p', { class: 'vide', text: message(e.code) }), h('button', { class: 'bouton', type: 'button', onclick: function () { ecranVideos(); }, text: 'Réessayer' }));
     });
   }
 

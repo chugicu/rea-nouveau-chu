@@ -10,6 +10,7 @@
  * 1.7 : jeux (jauge du déménagement, souvenirs, concours photo, nuage, QR codes, paris, escape game, bingo), activables par l'administrateur.
  * 1.6 : quiz (questions rédigées, brouillons relus par l'administrateur, compteur collectif anonyme).
  * 1.5 : sections WC, Pharmacie, DM, Biomed, Secrétariats, Entretiens ; équipements placés sur le plan (chariots d'urgence, échographes, imprimantes).
+ * 2.6 : vidéos de la chaîne YouTube du CHU (flux RSS public, lu par le moteur, 1 h en cache).
  * 2.4 : PDF dans Documents et FAQ (images + texte pour la recherche), rubriques personnalisées partagées entre services, rubriques communes.
  * 1.4 : newsletters (PDF converti en images sur le téléphone de l'administrateur, pages stockées dans le Drive).
  *
@@ -26,7 +27,7 @@
 // ============================================================================
 var APP = {
   nom: 'Réa – Nouveau CHU',
-  version: '2.5.2',
+  version: '2.6.0',
   dureeJetonJours: { agent: 30, referent: 14, admin: 1, visiteur: 30 },
   longueurMinCode: 6,
   // Anti-force brute : au-delà de N échecs en 10 min, connexion bloquée 5 min pour tous
@@ -94,6 +95,7 @@ function doPost(e) {
   }
   try {
     var action = String(req.action || ''); ACTION_COURANTE_ = action;
+    if (action === 'videos') return json_(videosListe_()); // vidéos YouTube du CHU : publiques, sans jeton, pour tous les services
     // Annuaire (Cap NCHUG) : routes communes, puis entrée dans le service demandé
     if (action !== 'ping' && serviceDeplace_()) return json_({ ok: false, erreur: 'service_deplace' }); // rattaché à Cap NCHUG
     if (ROUTES_DEFI_GESTION[action]) return json_(ROUTES_DEFI_GESTION[action](req)); // Défi CHU : gestion commune
@@ -2271,6 +2273,54 @@ function defiPlanEnregistrer_(bat, niv, services) {
   } finally { verrou.releaseLock(); }
   defiViderCache_();
   return defiGestionEtat_();
+}
+
+/* ---------- Vidéos : chaîne YouTube du CHU de la Guadeloupe ----------
+   Flux RSS public de la chaîne (YouTube y met les 15 dernières vidéos, Shorts compris), lu ici car le téléphone
+   ne peut pas le lire lui-même (CORS). Gardé 1 h en cache ; copie de secours 6 h si YouTube ne répond pas.
+   Autorisation nécessaire : « script.external_request » (appsscript.json), accordée en exécutant testerVideos. */
+var YOUTUBE = { chaine: 'UCs_vtbwwyznZLshqglwj-ZQ', lien: 'https://www.youtube.com/@chuguadeloupe8235/videos', cacheS: 3600, secoursS: 21600 };
+function videosListe_() {
+  var c = CacheService.getScriptCache(), k = 'videos|' + YOUTUBE.chaine, t = c.get(k);
+  if (t) return JSON.parse(t);
+  var l;
+  try { l = videosLire_(); } catch (e) {
+    console.error(e && e.stack || e);
+    var sec = c.get(k + '|secours'); if (sec) return JSON.parse(sec);
+    throw erreurApp_('videos_indisponibles');
+  }
+  var r = { ok: true, chaine: YOUTUBE.lien, videos: l, lu: new Date().toISOString() }, s = JSON.stringify(r);
+  try { c.put(k, s, YOUTUBE.cacheS); c.put(k + '|secours', s, YOUTUBE.secoursS); } catch (e) { /* trop gros pour le cache : sans gravité */ }
+  return r;
+}
+function videosLire_() {
+  var rep = UrlFetchApp.fetch('https://www.youtube.com/feeds/videos.xml?channel_id=' + YOUTUBE.chaine, { muteHttpExceptions: true, followRedirects: true });
+  if (rep.getResponseCode() !== 200) throw new Error('YouTube a répondu ' + rep.getResponseCode());
+  return videosAnalyser_(rep.getContentText('UTF-8'));
+}
+function videosAnalyser_(xml) { // [{ id, titre, date, description, court }], les plus récentes en premier
+  function balise(bloc, nom) { var m = new RegExp('<' + nom + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + nom + '>').exec(bloc); return m ? videosTexte_(m[1]) : ''; }
+  var l = [], re = /<entry>([\s\S]*?)<\/entry>/g, m;
+  while ((m = re.exec(String(xml || '')))) {
+    var b = m[1], id = balise(b, 'yt:videoId');
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) continue;
+    var lien = /<link[^>]*href="([^"]*)"/.exec(b), d = balise(b, 'media:description');
+    l.push({ id: id, titre: balise(b, 'title').slice(0, 200) || 'Vidéo', date: balise(b, 'published').slice(0, 25),
+      description: d.length > 300 ? d.slice(0, 297) + '…' : d, court: !!(lien && lien[1].indexOf('/shorts/') >= 0) });
+  }
+  l.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+  return l;
+}
+function videosTexte_(t) {
+  return String(t).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, function (x, n) { return String.fromCharCode(+n); }).replace(/&#x([0-9a-f]+);/gi, function (x, n) { return String.fromCharCode(parseInt(n, 16)); })
+    .replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim();
+}
+/** À exécuter une fois depuis l'éditeur Apps Script : accorde l'autorisation de lire la chaîne YouTube et vérifie le flux. */
+function testerVideos() {
+  CacheService.getScriptCache().removeAll(['videos|' + YOUTUBE.chaine]);
+  var l = videosLire_();
+  console.log(l.length + ' vidéo(s) lue(s). La plus récente : ' + (l[0] ? l[0].titre + ' (' + l[0].date + ')' : 'aucune'));
 }
 
 /* ---------- Infos générales : contenus communs en lecture, avec un code commun choisi par le super-admin ou un créateur ---------- */

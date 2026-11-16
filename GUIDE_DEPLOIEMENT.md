@@ -512,6 +512,19 @@ Rien à coller dans Apps Script : seule l'appli change (mise à jour automatique
 
 **Mettre à jour la visionneuse 360°** (Photo Sphere Viewer, vendue dans `docs/vendor/photo-sphere-viewer/`, jamais chargée depuis un site extérieur) : voir `docs/vendor/photo-sphere-viewer/LISEZ-MOI.txt` pour la commande exacte (npm + esbuild), puis augmenter `VERSION` dans `sw.js`.
 
+## Partie W – Tuile « Vidéos » : chaîne YouTube du CHU (moteur 2.6.0, appli 2.8.0)
+
+**Ce que voient les agents :** une tuile 🎬 « Vidéos » (étiquette CHU) sur l'accueil d'Infos générales et sur l'accueil de chaque service, toujours visible. Elle ouvre la liste des **15 dernières vidéos** de la chaîne YouTube du CHU (@chuguadeloupe8235), les plus récentes en premier (Shorts compris, marqués « Short »). Une vidéo se regarde dans l'appli (lecteur YouTube sans cookies, `youtube-nocookie.com`), avec un lien « Ouvrir dans YouTube » et un lien vers toute la chaîne. « Nouveau » s'affiche sur la tuile et sur les vidéos de moins de 30 jours pas encore ouvertes sur ce téléphone (rien n'est compté côté serveur). Il faut du réseau pour regarder ; la liste reste lisible hors ligne.
+
+**Mise à jour automatique :** rien à faire à chaque nouvelle vidéo. Le moteur lit le flux RSS public de la chaîne (`https://www.youtube.com/feeds/videos.xml?channel_id=UCs_vtbwwyznZLshqglwj-ZQ`) au plus une fois par heure ; une vidéo publiée apparaît donc dans l'heure. Si YouTube ne répond pas, le moteur renvoie la dernière liste lue (jusqu'à 6 h). Le téléphone ne peut pas lire ce flux lui-même (le navigateur le bloque) : c'est pour cela que la lecture passe par le moteur. L'action `videos` est publique (sans code) et va toujours au moteur **Cap NCHUG**, y compris depuis la réa tant qu'elle a son propre moteur.
+
+**Mise à jour du moteur (Cap NCHUG, et la réa pour garder le même fichier) :**
+1. Collez `Code.gs` **2.6.0** **et** `appsscript.json` (nouvelle autorisation : « Se connecter à un service externe », pour lire le flux YouTube). **Enregistrer**.
+2. Dans l'éditeur Apps Script, en haut : liste des fonctions › `testerVideos` › **Exécuter**. Google demande la nouvelle autorisation : **Autoriser**. Le journal affiche le nombre de vidéos lues et la plus récente.
+3. **Déployer › Gérer les déploiements › Modifier › Nouvelle version**.
+
+Sans l'étape 2, la tuile affiche « Les vidéos YouTube ne sont pas disponibles pour le moment ». **Changer de chaîne :** modifier `YOUTUBE.chaine` (identifiant `UC…`) et `YOUTUBE.lien` en haut de la partie « Vidéos » de `Code.gs`.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |

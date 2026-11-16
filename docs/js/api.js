@@ -10,10 +10,10 @@
   var DELAI_MS = 15000;
   var SERVICE = null; // { id, nom, api? } : service choisi (Cap NCHUG)
   var ACTIONS_ANNUAIRE = { services: 1, annuaire_login: 1, annuaire_etat: 1, service_creer: 1, service_modifier: 1, service_code: 1, createur: 1, service_rattacher: 1,
-    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, defi_parcours_actif: 1, defi_plan_services: 1, commun_jeton: 1, tableau_bord: 1, infos_login: 1, infos_code: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
+    defi_gestion: 1, defi_mode: 1, defi_question: 1, defi_statut: 1, defi_site: 1, defi_importer: 1, defi_raz: 1, defi_parcours_actif: 1, defi_plan_services: 1, commun_jeton: 1, tableau_bord: 1, infos_login: 1, infos_code: 1, videos: 1 }; // gestion du Défi CHU, contenus communs : moteur commun
   // Lectures : on peut les refaire sans risque si le réseau a coupé
   var LECTURES = { ping: 1, home: 1, plan: 1, services: 1, quiz_liste: 1, jeux_etat: 1, souvenirs: 1, souvenir_photo: 1, nuage: 1, paris: 1, qr_liste: 1,
-    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, docs_pdf_page: 1, rub_etat: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1 };
+    visites: 1, visite_statut: 1, nl_liste: 1, nl_page: 1, codes_etat: 1, annuaire_etat: 1, defi_jour: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1, defi_gestion: 1, actu_liste: 1, docs_liste: 1, docs_pdf_page: 1, rub_etat: 1, logo: 1, escape_scenarios: 1, tableau_bord: 1, videos: 1 };
   var ATTENTES = [1200, 2500, 5000]; // nouveaux essais en cas d'affluence
 
   function ErreurApi(code) { this.code = code; this.message = code; }
@@ -137,12 +137,18 @@
     if (['DEMO', 'ADMDEMO', 'REFDEMO', 'SUPDEMO', 'CREADEMO'].indexOf(c) >= 0) throw new ErreurApi('code_deja_utilise');
     return c;
   }
+  function demoVideos() { // vidéos fictives : pas de lecteur YouTube en démonstration
+    var j = Date.now(), t = ['Le nouveau CHU vu du ciel (exemple)', 'Visite de l\'entrée rue Caraïbes (exemple)', 'Le déménagement en 1 minute (exemple)', 'Questions-réponses sur le transfert (exemple)', 'Les ascenseurs du NCHUG (exemple)'];
+    return { ok: true, demo: true, chaine: 'https://www.youtube.com/@chuguadeloupe8235/videos', lu: new Date().toISOString(),
+      videos: t.map(function (x, i) { return { id: 'demo' + ('0000000' + i).slice(-7), titre: x, date: new Date(j - (i * 9 + 1) * 864e5).toISOString(), description: 'Vidéo de démonstration : en vrai, ce sont les vidéos de la chaîne YouTube du CHU.', court: i === 2 }; }) };
+  }
   var INFOS_ACTIONS = { home: 1, logo: 1, nl_liste: 1, nl_page: 1, docs_liste: 1, docs_pdf_page: 1, defi_jour: 1, defi_repondre: 1, defi_classement: 1, defi_parcours: 1, defi_plan: 1 };
   function demo(action, d) {
     return new Promise(function (ok, ko) {
       setTimeout(function () {
         if (d.jeton === 'demo.visiteur' && !INFOS_ACTIONS[action]) return ko(new ErreurApi('non_autorise'));
         try {
+          if (action === 'videos') return ok(demoVideos());
           if (/^defi_/.test(action)) return ok(demoDefi(action, d));
           if (/^(actu_|docs_|rub_|service_reglages|logo|plan_importer|commun_jeton|tableau_bord)/.test(action)) return ok(demoLots(action, d));
           if (ACTIONS_ANNUAIRE[action]) return ok(demoAnnuaire(action, d));

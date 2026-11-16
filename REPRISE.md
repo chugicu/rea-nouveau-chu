@@ -3,11 +3,11 @@
 Dépôt public : aucun code d'accès, aucun plan réel, aucune banque de questions ici.
 
 ## Le projet
-PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.5.2) + Google Sheets/Drive. Compte : chugicu@gmail.com.
+PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + moteur Apps Script (`apps-script/Code.gs`, v2.6.0) + Google Sheets/Drive. Compte : chugicu@gmail.com.
 - **Appli réa** (réanimation – USC) : moteur propre, adresse dans `docs/js/config.js` (`SERVICES_EXTERNES`).
 - **Cap NCHUG** : annuaire commun à tous les services (`CAP_URL` dans `config.js`), un moteur en `MODE='annuaire'`.
-- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.7.7`).
-- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées, V visite virtuelle 360°).
+- Service worker : `VERSION` dans `docs/sw.js` (à augmenter à chaque mise en ligne ; actuellement `rea-app-v2.8.0`).
+- Procédures : `GUIDE_DEPLOIEMENT.md` (P install Cap NCHUG, Q Défi, R rattachement de la réa, S lots 4/5/2, T plan et deux plans, U PDF des documents et rubriques personnalisées, V visite virtuelle 360°, W vidéos YouTube).
 
 ## Règles à ne jamais enfreindre
 - Pas de données de santé dans l'appli ; pas de suivi individuel ; pas de compte Google pour les agents ; pas d'e-mails.
@@ -43,7 +43,10 @@ PWA française gratuite pour le CHU de la Guadeloupe (GitHub Pages `/docs`) + mo
 - Visite virtuelle, appli 2.7.6 (14/11/2026) : navigation façon Street View. Chevrons posés au sol par le plugin Virtual Tour (mode 3D), transition rotation + léger zoom + fondu, photos tournées vers le nord du plan par leur `Cap initial` (`sphereCorrection.pan = -cap`) : le yaw de la visionneuse = le cap sur le plan, on arrive face à la direction du déplacement. Les positions en base restent en % de la photo ; `street.js` les convertit (`versAngles_`/`versPourcent_`, décalage = cap). Modification des liens : les flèches sont alors des repères du plugin Markers (chevrons du plugin masqués). Plein écran iPhone réparé : `.entree` en `animation … backwards` (avec `both`, le cadre fixe se calait sur la page). Légende sans doublon nom/zone.
 - Visite virtuelle, appli 2.7.7 / moteur 2.5.2 (14/11/2026) : bonhomme à glisser-déposer sur le plan interactif (`docs/js/street-plan.js`, calque par-dessus le plan comme le GPS, `plan.js` inchangé) et mini-plan dans la visionneuse (`street.js`, cône de vue = yaw de la visionneuse). Positions des points : colonnes `X (plan)` / `Y (plan)` de `Street – Points` (les coordonnées ne sont jamais dans le dépôt), lues par `street_liste` (`x`, `y`, null si vide). Le bonhomme ouvre le point le plus proche à moins de `ReaStreet.seuilPoint` (100 unités) ; la visite garde en mémoire le dernier point (`streetDernier` dans `app.js`) pour reposer le bonhomme au retour. Le contour du bâtiment et les patios du mini-plan viennent du plan en cache sur le téléphone. Essais faits sans écran (Chrome, iPhone simulé, souris et tactile) ; pas encore sur vrai iPhone.
 
+- Vidéos (moteur 2.6.0, appli 2.8.0, 15/11/2026) : tuile 🎬 « Vidéos » (étiquette CHU, `toujours`) dans Infos générales et dans tous les services ; 15 dernières vidéos de la chaîne YouTube du CHU (@chuguadeloupe8235, `UCs_vtbwwyznZLshqglwj-ZQ`) par le flux RSS public, lu par le moteur (action publique `videos`, sans jeton, aiguillée vers Cap NCHUG via `ACTIONS_ANNUAIRE`), cache 1 h + secours 6 h. Lecture dans l'appli (`youtube-nocookie`), « Nouveau » = pas ouverte sur ce téléphone et < 30 jours (`rea.videos-vues`). Nouvelle autorisation `script.external_request` : exécuter `testerVideos` une fois dans l'éditeur.
+
 ## Reste à faire côté utilisateur
+0. Vidéos : coller `Code.gs` 2.6.0 et `appsscript.json` dans Cap NCHUG (et la réa), exécuter `testerVideos` (autorisation), Nouvelle version (partie W).
 1. Coller `Code.gs` 2.5.2 dans le script de la réa (et dans celui de Cap NCHUG), « Installer / réparer la base » (crée les colonnes `X (plan)` / `Y (plan)`), puis Nouvelle version du déploiement. Coller ensuite les 90 positions dans ces deux colonnes.
 2. Questions : déjà importées et corrigées dans la réa. Pour Cap NCHUG (Espace créateurs), importer les fichiers corrigés, puis relire et valider. Activer le jeu Parcours quand on le souhaite. Dans Cap NCHUG : recopier l'onglet « Plan – Services », entrer une fois dans « Modifier les contenus communs », puis choisir le code Infos générales.
 3. Vérifier que Cap NCHUG répond (Espace créateurs, code super-admin ; déploiement « Exécuter en tant que : moi », « Accès : tout le monde »).
